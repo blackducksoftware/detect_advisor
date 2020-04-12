@@ -87,6 +87,8 @@ def process_dir(path):
 
 def process_largefiledups():
 	import filecmp
+	total_dup_size = 0
+	count_dups = 0
 	for path, size in large_dict.items():
 		dup = False
 		for cpath, csize in large_dict.items():
@@ -103,10 +105,14 @@ def process_largefiledups():
 				if dup:
 					if filecmp.cmp(path, cpath, True):
 						dup_large_dict[path] = cpath
+						total_dup_size += size
+						count_dups += 1
 						print("Dup large file - {}, {}".format(path,cpath))
+	return(count_dups, total_dup_size)						
 
 def process_dirdups():
-	num_dupdirs = 0
+	count_dupdirs = 0
+	size_dupdirs = 0
 	for apath, adict in dir_dict.items():
 		if adict['num_files'] == 0:
 			continue
@@ -115,8 +121,9 @@ def process_dirdups():
 				if adict['num_files'] == cdict['num_files'] and adict['size'] == cdict['size'] and adict['filenamesstring'] == cdict['filenamesstring']:
 					print("Dup folder - {}, {}".format(apath,cpath))
 					dup_dir_dict[apath] = cpath
-					num_dupdirs += 1
-	return num_dupdirs	
+					count_dupdirs += 1
+					size_dupdirs += adict['size']
+	return(count_dupdirs, size_dupdirs)
 
 count_files = 0
 size_total = 0
@@ -138,5 +145,9 @@ print("Other files = {}\n".format(len(other_list)))
 print("Large files (>500KB) = {} (Total size {})".format(len(large_list), size_large))
 print("Huge files (>10MB) = {} (Total size {})\n".format(len(huge_list), size_huge))
 
-process_dirdups()
-process_largefiledups()
+num_dups, size_dups = process_largefiledups()
+if size_dups > 50000000:
+	print("RECOMMENDATION: Remove large duplicate files (save {}MB)".format(size_dups/1000000))
+num_dirdups, size_dirdups = process_dirdups()
+if size_dirdups > 50000000:
+	print("RECOMMENDATION: Remove duplicate folders or create .bdignore (save {}MB)".format(size_dirdups/1000000))
