@@ -86,7 +86,9 @@ def process_dir(path):
 	dir_dict[path]['filenamesstring'] = filenames_string
 
 def process_largefiledups():
+	import filecmp
 	for path, size in large_dict.items():
+		dup = False
 		for cpath, csize in large_dict.items():
 			if path == cpath:
 				continue
@@ -95,11 +97,13 @@ def process_largefiledups():
 				cdot = cpath.rfind(".")
 				if (dot > 1) and (cdot > 1):
 					if path[dot:] == cpath[cdot:]:
+						dup = True
+				elif (dot == 0) and (cdot == 0):
+					dup = True
+				if dup:
+					if filecmp.cmp(path, cpath, True):
 						dup_large_dict[path] = cpath
 						print("Dup large file - {}, {}".format(path,cpath))
-				elif (dot == 0) and (cdot == 0):
-					dup_large_dict[path] = cpath
-					print("Dup large file - {}, {}".format(path,cpath))
 
 def process_dirdups():
 	num_dupdirs = 0
@@ -132,7 +136,7 @@ print("Archive files = {}".format(len(arc_list)))
 print("Other files = {}\n".format(len(other_list)))
 
 print("Large files (>500KB) = {} (Total size {})".format(len(large_list), size_large))
-print("Large files (>10MB) = {} (Total size {})".format(len(huge_list), size_huge))
+print("Huge files (>10MB) = {} (Total size {})\n".format(len(huge_list), size_huge))
 
 process_dirdups()
 process_largefiledups()
