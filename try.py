@@ -14,7 +14,11 @@ arc_list = []
 jar_list = []
 other_list = []
 
+dup_dir_dict = {}
+dup_large_dict = {}
+
 dir_dict = {}
+large_dict = {}
 
 def process_zip(name,path):
 	with zipfile.ZipFile(path, 'r') as zf:
@@ -29,8 +33,8 @@ def checkfile(name, path, size):
 	count_files = count_files + 1
 	size_total += size
 	#print(path)
-	dot = name.find(".")
-	if (dot >= 0):
+	dot = name.rfind(".")
+	if (dot > 1):
 		if name[dot:] in srcext_list:
 			src_list.append(path)
 			#print("source")
@@ -54,10 +58,12 @@ def checkfile(name, path, size):
 	if size > 10000000:
 		huge_list.append(path)
 		size_huge += size
+		large_dict[path] = size
 		#print("huge")
 	elif size > 500000:
 		large_list.append(path)
 		size_large += size
+		large_dict[path] = size
 
 def process_dir(path):
 	global count_dirs
@@ -79,22 +85,34 @@ def process_dir(path):
 	dir_dict[path]['size'] = dir_size
 	dir_dict[path]['filenamesstring'] = filenames_string
 
-def process_filedups():
-	print
+def process_largefiledups():
+	for path, size in large_dict.items():
+		for cpath, csize in large_dict.items():
+			if path == cpath:
+				continue
+			if size == csize:
+				dot = path.rfind(".")
+				cdot = cpath.rfind(".")
+				if (dot > 1) and (cdot > 1):
+					if path[dot:] == cpath[cdot:]:
+						dup_large_dict[path] = cpath
+						print("Dup large file - {}, {}".format(path,cpath))
+				elif (dot == 0) and (cdot == 0):
+					dup_large_dict[path] = cpath
+					print("Dup large file - {}, {}".format(path,cpath))
 
 def process_dirdups():
 	num_dupdirs = 0
-	for thispath, thisdict in dir_dict.items():
-		if thisdict['num_files'] == 0:
+	for apath, adict in dir_dict.items():
+		if adict['num_files'] == 0:
 			continue
 		for cpath, cdict  in dir_dict.items():
-			if thispath != cpath:
-				if thisdict['num_files'] == cdict['num_files']:
-					if thisdict['size'] == cdict['size']:
-						if thisdict['filenamesstring'] == cdict['filenamesstring']:
-							print("Dup folder - {}, {}".format(thispath,thisdict))
-							num_dupdirs += 1
-	return num_dupdirs				
+			if apath != cpath:
+				if adict['num_files'] == cdict['num_files'] and adict['size'] == cdict['size'] and adict['filenamesstring'] == cdict['filenamesstring']:
+					print("Dup folder - {}, {}".format(apath,cpath))
+					dup_dir_dict[apath] = cpath
+					num_dupdirs += 1
+	return num_dupdirs	
 
 count_files = 0
 size_total = 0
@@ -111,9 +129,10 @@ print("Source files = {}".format(len(src_list)))
 print("Binary files = {}".format(len(bin_list)))
 print("Jar files = {}".format(len(jar_list)))
 print("Archive files = {}".format(len(arc_list)))
-print("Other files = {}".format(len(other_list)))
+print("Other files = {}\n".format(len(other_list)))
+
 print("Large files (>500KB) = {} (Total size {})".format(len(large_list), size_large))
 print("Large files (>10MB) = {} (Total size {})".format(len(huge_list), size_huge))
 
 process_dirdups()
-process_filedups()
+process_largefiledups()
