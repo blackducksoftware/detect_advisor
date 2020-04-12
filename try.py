@@ -1,5 +1,6 @@
 import os
 import zipfile
+from math import trunc
 
 srcext_list = ['.c', '.h', '.cpp', '.hpp', '.txt']
 binext_list = ['.dll', '.obj', '.o', '.a']
@@ -104,10 +105,11 @@ def process_largefiledups():
 					dup = True
 				if dup:
 					if filecmp.cmp(path, cpath, True):
-						dup_large_dict[path] = cpath
-						total_dup_size += size
-						count_dups += 1
-						print("Dup large file - {}, {}".format(path,cpath))
+						if dup_large_dict.get(cpath) == None:
+							dup_large_dict[path] = cpath
+							total_dup_size += size
+							count_dups += 1
+							print("Dup large file - {}, {} (size {}MB)".format(path,cpath,trunc(size/1000000)))
 	return(count_dups, total_dup_size)						
 
 def process_dirdups():
@@ -119,12 +121,15 @@ def process_dirdups():
 		for cpath, cdict  in dir_dict.items():
 			if apath != cpath:
 				if adict['num_files'] == cdict['num_files'] and adict['size'] == cdict['size'] and adict['filenamesstring'] == cdict['filenamesstring']:
-					print("Dup folder - {}, {}".format(apath,cpath))
-					dup_dir_dict[apath] = cpath
-					count_dupdirs += 1
-					size_dupdirs += adict['size']
+					if dup_dir_dict.get(cpath) == None:
+						print("Dup folder - {}, {} (size {}MB)".format(apath,cpath, trunc(dir_dict[apath]['size']/1000000)))
+						dup_dir_dict[apath] = cpath
+						count_dupdirs += 1
+						size_dupdirs += adict['size']
 	return(count_dupdirs, size_dupdirs)
 
+#def output_bdignore():
+	
 count_files = 0
 size_total = 0
 size_large = 0
@@ -134,7 +139,7 @@ count_dirs = 0
 process_dir(".")
 
 print("Total files processed = {}".format(count_files))
-print("Total file size = {}".format(size_total))
+print("Total file size = {:d}MB".format(trunc(size_total/1000000)))
 print("Folders = {}".format(count_dirs))
 print("Source files = {}".format(len(src_list)))
 print("Binary files = {}".format(len(bin_list)))
@@ -142,12 +147,14 @@ print("Jar files = {}".format(len(jar_list)))
 print("Archive files = {}".format(len(arc_list)))
 print("Other files = {}\n".format(len(other_list)))
 
-print("Large files (>500KB) = {} (Total size {})".format(len(large_list), size_large))
-print("Huge files (>10MB) = {} (Total size {})\n".format(len(huge_list), size_huge))
+print("Large files (>500KB) = {} (Total size {:d}MB)".format(len(large_list), trunc(size_large/1000000)))
+print("Huge files (>10MB) = {} (Total size {:d}MB)\n".format(len(huge_list), trunc(size_huge/1000000)))
 
 num_dups, size_dups = process_largefiledups()
-if size_dups > 50000000:
-	print("RECOMMENDATION: Remove large duplicate files (save {}MB)".format(size_dups/1000000))
+
 num_dirdups, size_dirdups = process_dirdups()
+if size_dups > 50000000:
+	print("RECOMMENDATION: Remove large duplicate files (save {:d}MB)".format(trunc(size_dups/1000000)))
 if size_dirdups > 50000000:
-	print("RECOMMENDATION: Remove duplicate folders or create .bdignore (save {}MB)".format(size_dirdups/1000000))
+	print("RECOMMENDATION: Remove duplicate folders or create .bdignore (save {}MB)".format(trunc(size_dirdups/1000000)))
+	
