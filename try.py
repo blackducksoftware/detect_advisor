@@ -74,17 +74,19 @@ def process_dir(path):
 	
 	dir_dict[path] = {}
 	for entry in os.scandir(path):
+		dir_files += 1
+		filenames_string += entry.name + ";"
 		if entry.is_dir(follow_symlinks=False):
 			count_dirs += 1
-			process_dir(entry.path)
+			dir_size += process_dir(entry.path)
 		else:
 			checkfile(entry.name, entry.path, entry.stat(follow_symlinks=False).st_size)
 			dir_size += entry.stat(follow_symlinks=False).st_size
-			dir_files += 1
-			filenames_string += entry.name + ";"
 	dir_dict[path]['num_files'] = dir_files
 	dir_dict[path]['size'] = dir_size
 	dir_dict[path]['filenamesstring'] = filenames_string
+	print(path, dir_dict[path])
+	return dir_size
 
 def process_largefiledups():
 	import filecmp
@@ -109,7 +111,7 @@ def process_largefiledups():
 							dup_large_dict[path] = cpath
 							total_dup_size += size
 							count_dups += 1
-							print("Dup large file - {}, {} (size {}MB)".format(path,cpath,trunc(size/1000000)))
+							print("- Dup large file - {}, {} (size {}MB)".format(path,cpath,trunc(size/1000000)))
 	return(count_dups, total_dup_size)						
 
 def process_dirdups():
@@ -122,14 +124,12 @@ def process_dirdups():
 			if apath != cpath:
 				if adict['num_files'] == cdict['num_files'] and adict['size'] == cdict['size'] and adict['filenamesstring'] == cdict['filenamesstring']:
 					if dup_dir_dict.get(cpath) == None:
-						print("Dup folder - {}, {} (size {}MB)".format(apath,cpath, trunc(dir_dict[apath]['size']/1000000)))
+						print("- Dup folder - {}, {} (size {}MB)".format(apath,cpath, trunc(dir_dict[apath]['size']/1000000)))
 						dup_dir_dict[apath] = cpath
 						count_dupdirs += 1
 						size_dupdirs += adict['size']
 	return(count_dupdirs, size_dupdirs)
 
-#def output_bdignore():
-	
 count_files = 0
 size_total = 0
 size_large = 0
@@ -138,23 +138,35 @@ count_dirs = 0
 
 process_dir(".")
 
-print("Total files processed = {}".format(count_files))
-print("Total file size = {:d}MB".format(trunc(size_total/1000000)))
-print("Folders = {}".format(count_dirs))
-print("Source files = {}".format(len(src_list)))
-print("Binary files = {}".format(len(bin_list)))
-print("Jar files = {}".format(len(jar_list)))
-print("Archive files = {}".format(len(arc_list)))
-print("Other files = {}\n".format(len(other_list)))
+print("INFO:")
+print("- Total files processed = {}".format(count_files))
+print("- Total file size = {}MB".format(trunc(size_total/1000000)))
+print("- Folders = {}".format(count_dirs))
+print("- Source files = {}".format(len(src_list)))
+print("- Binary files = {}".format(len(bin_list)))
+print("- Jar files = {}".format(len(jar_list)))
+print("- Archive files = {}".format(len(arc_list)))
+print("- Other files = {}".format(len(other_list)))
+print("- Large files (>500KB) = {} (Total size {}MB)".format(len(large_list), trunc(size_large/1000000)))
+print("- Huge files (>10MB) = {} (Total size {}MB)".format(len(huge_list), trunc(size_huge/1000000)))
 
-print("Large files (>500KB) = {} (Total size {:d}MB)".format(len(large_list), trunc(size_large/1000000)))
-print("Huge files (>10MB) = {} (Total size {:d}MB)\n".format(len(huge_list), trunc(size_huge/1000000)))
-
+print("\nDUPLICATES:")
 num_dups, size_dups = process_largefiledups()
-
 num_dirdups, size_dirdups = process_dirdups()
-if size_dups > 50000000:
-	print("RECOMMENDATION: Remove large duplicate files (save {:d}MB)".format(trunc(size_dups/1000000)))
-if size_dirdups > 50000000:
-	print("RECOMMENDATION: Remove duplicate folders or create .bdignore (save {}MB)".format(trunc(size_dirdups/1000000)))
+if (num_dups + num_dirdups == 0):
+	print("	None")
+
+# Process Recommendations
+print("\nRECOMMENDATIONS:")
+if size_dups > 20000000:
+	print("- Remove large duplicate files (save {}MB):".format(trunc(size_dups/1000000)))
+	for apath, bpath in dup_large_dict.items():
+		print("	{}".format(bpath))
+	print("")
+if size_dirdups > 20000000:
+	print("- Remove duplicate folders or create .bdignore (save {}MB)".format(trunc(size_dirdups/1000000)))
+	print("- Example .bdignore file:")
+	for apath, bpath in dup_dir_dict.items():
+		print("	{}".format(bpath))
+	print("")
 	
