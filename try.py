@@ -2,6 +2,7 @@ import os
 import zipfile
 from math import trunc
 import tempfile
+import io
 
 srcext_list = ['.c', '.h', '.cpp', '.hpp', '.txt', '.js']
 binext_list = ['.dll', '.obj', '.o', '.a']
@@ -24,21 +25,62 @@ dir_dict = {}
 large_dict = {}
 arc_files_dict = {}
 
-tempdir = tempfile.mkdtemp()
+#tempdir = tempfile.mkdtemp()
 
-def process_zip(name, path, depth):
+# EXAMPLE EXTRACT ZIP FROM ZIP
+# with zipfile.ZipFile('zip2.zip') as z:
+# 	with z.open('zip1.zip') as z2:
+# 		z2_filedata =  io.BytesIO(z2.read())
+# 		with zipfile.ZipFile(z2_filedata) as nested_zip:
+# 			print( nested_zip.open('try.py').read())
+
+def process_zip(name, path, depth, zipinfo):
+#
+# zipinfo is a zipinfo entry - if None then file should be processed otherwise process zipinfo
+	print("Processing {}".format(path))
 	depth += 1
-	with zipfile.ZipFile(path, 'r') as zf:
-		for zinfo in zf.infolist():
+	if zipinfo == None:
+		with zipfile.ZipFile(path, 'r') as zf:
+			for zinfo in zf.infolist():
+				fullpath = path + "##" + zinfo.filename
+				arc_files_dict[fullpath] = zinfo.CRC
+				dot = zinfo.filename.rfind(".")
+				if dot > 1:
+					if zinfo.filename[dot:] == ".zip":
+# 						zf.extract(zinfo, os.path.join(tempdir, newzpath))
+# 						print(os.path.join(tempdir, newzpath))
+# 						process_zip(zinfo.filename, fullpath, depth)
+						with zf.open(zinfo.filename) as z2:
+							z2_filedata =  io.BytesIO(z2.read())
+							try:
+								with zipfile.ZipFile(z2_filedata) as nested_zip:
+									print("Processing zip in zip {}".format(zinfo.filename))
+									process_zip(zinfo.filename, fullpath, depth, nested_zip)
+# 									print( nested_zip.open('try.py').read())
+							except:
+								print("ERROR: Can't open zip")
+								return
+	else:
+		for zinfo in zipinfo.infolist():
 			fullpath = path + "##" + zinfo.filename
 			arc_files_dict[fullpath] = zinfo.CRC
 			dot = zinfo.filename.rfind(".")
 			if dot > 1:
-				if zinfo.filename[dot:] == ".zip":	
-					zf.extract(zinfo, os.path.join(tempdir, newzpath))
-					print(os.path.join(tempdir, newzpath))
-					process_zip(zinfo.filename, fullpath, depth)
-		
+				if zinfo.filename[dot:] == ".zip":
+# 						zf.extract(zinfo, os.path.join(tempdir, newzpath))
+# 						print(os.path.join(tempdir, newzpath))
+# 						process_zip(zinfo.filename, fullpath, depth)
+					try:
+						with z.open(zinfo.filename) as z2:
+							z2_filedata =  io.BytesIO(z2.read())
+							with zipfile.ZipFile(z2_filedata) as nested_zip:
+								print("Processing zip in zip {}".format(zinfo.filename))
+								process_zip(zinfo.filename, fullpath, depth, nested_zip)
+# 								print( nested_zip.open('try.py').read())
+					except:
+						print("ERROR: Can't open zip")
+						return
+
 def checkfile(name, path, size, depth):
 	global size_total
 	global count_files
@@ -62,7 +104,7 @@ def checkfile(name, path, size, depth):
 			arc_list.append(path)
 			#print("archive")
 			if name[dot:] == '.zip':
-				process_zip(name, path, depth)
+				process_zip(name, path, depth, None)
 		else:
 			#print("other")
 			other_list.append(path)
@@ -84,7 +126,7 @@ def process_dir(path, depth):
 	dir_size = 0
 	dir_entries = 0
 	filenames_string = ""
-	
+
 	dir_dict[path] = {}
 	depth += 1
 	for entry in os.scandir(path):
@@ -126,26 +168,54 @@ def process_largefiledups():
 						total_dup_size += size
 						count_dups += 1
 						print("- Dup large file - {}, {} (size {}MB)".format(path,cpath,trunc(size/1000000)))
-	return(count_dups, total_dup_size)						
+	return(count_dups, total_dup_size)
 
 def process_dirdups():
 	count_dupdirs = 0
 	size_dupdirs = 0
+	count = 0
+	items = len(dir_dict)
+	print("Processing Folders .", end="", flush=True)
 	for apath, adict in dir_dict.items():
-		if adict['num_entries'] == 0:
+		count += 1
+		#print(count, count % (items//100) )
+		if count % (items//100) == 0:
+			print(".", end="", flush=True)
+		if adict['num_entries'] == 0 or adict['size'] == 0:
 			continue
-		for cpath, cdict  in dir_dict.items():
+		for cpath, cdict in dir_dict.items():
 			if apath != cpath:
 				if adict['num_entries'] == cdict['num_entries'] and adict['size'] == cdict['size'] and adict['filenamesstring'] == cdict['filenamesstring']:
 					if not (dup_dir_dict.get(apath) == cpath or dup_dir_dict.get(cpath) == apath):
+						#
+						# Need to check whether this dupdir exists or can replace existing entries (is higher up)
+						keydir = ""
+						valuedir = ""
 						if adict['depth'] <= cdict['depth']:
-							dup_dir_dict[apath] = cpath
-							print("- Dup folder - {}, {} (size {}MB)".format(apath,cpath, trunc(dir_dict[apath]['size']/1000000)))
+							keydir = apath
+							valuedir = cpath
+							#print("- Dup folder - {}, {} (size {}MB)".format(apath,cpath, trunc(dir_dict[apath]['size']/1000000)))
 						else:
-							dup_dir_dict[cpath] = apath
-							print("- Dup folder - {}, {} (size {}MB)".format(cpath,apath, trunc(dir_dict[apath]['size']/1000000)))
-						count_dupdirs += 1
-						size_dupdirs += adict['size']
+							keydir = cpath
+							valuedir = apath
+							#print("- Dup folder - {}, {} (size {}MB)".format(cpath,apath, trunc(dir_dict[apath]['size']/1000000)))
+						checkdir = valuedir
+						found = False
+						while checkdir != "":
+							checkdir = os.path.dirname(checkdir)
+							if checkdir in dup_dir_dict.keys() or checkdir in dup_dir_dict.values():
+								found = True
+								break
+
+						if found == False:
+							dup_dir_dict[keydir] = valuedir
+							count_dupdirs += 1
+							size_dupdirs += adict['size']
+	# work out hierarchy of dups
+	# /home/userb/myproj/src/component1 = /home/userb/myproj/src/component2/mycomp
+	# /home/userb/myproj/src/component1/code = /home/userb/myproj/src/component2/mycomp/code
+	# /home/userb/myproj/src/component1/target = /home/userb/myproj/src/component2/mycomp/target
+
 	return(count_dupdirs, size_dupdirs)
 
 def check_singlefiles():
