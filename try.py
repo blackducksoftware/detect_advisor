@@ -162,7 +162,14 @@ def process_largefiledups():
 				elif (dot == 0) and (cdot == 0):
 					dup = True
 				if dup:
-					test = filecmp.cmp(path, cpath, True)
+					if path.find("##") > 0:
+						if arc_files_dict.get(path) != None:
+							test = get_crc(cpath) and arc_files_dict[path]
+					elif cpath.find("##") > 0:
+						if arc_files_dict.get(cpath) != None:
+							test = get_crc(path) and arc_files_dict[cpath]						
+					else:
+						test = filecmp.cmp(path, cpath, True)
 					if test and dup_large_dict.get(cpath) == None and dup_dir_dict.get(os.path.dirname(path)) == None and dup_dir_dict.get(os.path.dirname(cpath)) == None:
 						dup_large_dict[path] = cpath
 						total_dup_size += size
@@ -179,7 +186,7 @@ def process_dirdups():
 	for apath, adict in dir_dict.items():
 		count += 1
 		#print(count, count % (items//100) )
-		if count % (items//100) == 0:
+		if count % ((items//50) + 1) == 0:
 			print(".", end="", flush=True)
 		if adict['num_entries'] == 0 or adict['size'] == 0:
 			continue
@@ -211,11 +218,8 @@ def process_dirdups():
 							dup_dir_dict[keydir] = valuedir
 							count_dupdirs += 1
 							size_dupdirs += adict['size']
-	# work out hierarchy of dups
-	# /home/userb/myproj/src/component1 = /home/userb/myproj/src/component2/mycomp
-	# /home/userb/myproj/src/component1/code = /home/userb/myproj/src/component2/mycomp/code
-	# /home/userb/myproj/src/component1/target = /home/userb/myproj/src/component2/mycomp/target
-
+	print(" OK\n- {} Duplicate folders identified".format(count_dupdirs))
+	
 	return(count_dupdirs, size_dupdirs)
 
 def check_singlefiles():
@@ -228,6 +232,8 @@ def check_singlefiles():
 			# get dir
 			# check for .js in filenamesstring
 			thisdir = dir_dict.get(os.path.dirname(thisfile))
+			if os.path.basename(os.path.dirname(thisfile)) == "node_modules":
+				continue
 			if thisdir != None:
 				all_js = True
 				for filename in thisdir['filenamesstring'].split(';'):
@@ -242,7 +248,7 @@ def check_singlefiles():
 	if sfmatch:
 		print("- Consider using Single file matching - singleton .js files found:")
 		for thisfile in sf_list:
-			print("	{}".format(thisfile))
+			print("    {}".format(thisfile))
 
 def get_crc(myfile):
 	import zlib
@@ -284,22 +290,24 @@ print("\nDUPLICATES:")
 num_dirdups, size_dirdups = process_dirdups()
 num_dups, size_dups = process_largefiledups()
 if (num_dups + num_dirdups == 0):
-	print("	None")
+	print("    None")
 
 # Produce Recommendations
 print("\nRECOMMENDATIONS:")
 if size_dirdups > 20000000:
 	print("- Remove duplicate folders or create .bdignore (save {}MB)".format(trunc(size_dirdups/1000000)))
-	print("	Example .bdignore file:")
+	print("    Example .bdignore file:")
 	for apath, bpath in dup_dir_dict.items():
-		print("	{}".format(bpath))
+		print("    {}".format(bpath))
 	print("")
 if size_dups > 20000000:
 	print("- Remove large duplicate files (save {}MB):".format(trunc(size_dups/1000000)))
 	for apath, bpath in dup_large_dict.items():
 		if dup_dir_dict.get(os.path.dirname(apath)) == None and dup_dir_dict.get(os.path.dirname(bpath)) == None:
-			print("	{}".format(bpath))
+			print("    {}".format(bpath))
 	print("")
 
 check_singlefiles()
 #check_binaryscan()
+
+print("")
