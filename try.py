@@ -43,6 +43,9 @@ def process_zip(name, path, depth, zipinfo):
 		with zipfile.ZipFile(path, 'r') as zf:
 			for zinfo in zf.infolist():
 				fullpath = path + "##" + zinfo.filename
+				print(fullpath)
+				if zinfo.is_dir():
+					print("dir")
 				arc_files_dict[fullpath] = zinfo.CRC
 				dot = zinfo.filename.rfind(".")
 				if dot > 1:
@@ -192,8 +195,10 @@ def process_dirdups():
 			continue
 		for cpath, cdict in dir_dict.items():
 			if apath != cpath:
+				print(apath, cpath)
 				if adict['num_entries'] == cdict['num_entries'] and adict['size'] == cdict['size'] and adict['filenamesstring'] == cdict['filenamesstring']:
 					if not (dup_dir_dict.get(apath) == cpath or dup_dir_dict.get(cpath) == apath):
+						print("dup")
 						#
 						# Need to check whether this dupdir exists or can replace existing entries (is higher up)
 						keydir = ""
