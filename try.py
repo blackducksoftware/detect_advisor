@@ -4,10 +4,48 @@ from math import trunc
 import tempfile
 import io
 
+#
+# Constants
 srcext_list = ['.c', '.h', '.cpp', '.hpp', '.txt', '.js']
-binext_list = ['.dll', '.obj', '.o', '.a']
+binext_list = ['.dll', '.obj', '.o', '.a', '.iso']
 arcext_list = ['.zip', '.gz', '.tar', '.Z']
 jarext_list = ['.jar', '.ear', '.war']
+
+largesize = 1000000
+hugesize = 20000000
+
+notinarc = 0
+inarc = 1
+inarcunc = 1
+inarccomp = 2
+
+#
+# Variables
+max_arc_depth = 0
+
+counts = {
+'file' : [0,0],
+'dir' : [0,0],
+'arc' : [0,0],
+'bin' : [0,0],
+'jar' : [0,0],
+'src' : [0,0],
+'large' : [0,0],
+'huge' : [0,0],
+'other' : [0,0]
+}
+
+sizes = {
+'file' : [0,0,0],
+'dir' : [0,0,0],
+'arc' : [0,0,0],
+'bin' : [0,0,0],
+'jar' : [0,0,0],
+'src' : [0,0,0],
+'large' : [0,0,0],
+'huge' : [0,0,0],
+'other' : [0,0,0]
+}
 
 src_list = []
 bin_list = []
@@ -27,105 +65,135 @@ arc_files_dict = {}
 
 #tempdir = tempfile.mkdtemp()
 
-# EXAMPLE EXTRACT ZIP FROM ZIP
-# with zipfile.ZipFile('zip2.zip') as z:
-# 	with z.open('zip1.zip') as z2:
-# 		z2_filedata =  io.BytesIO(z2.read())
-# 		with zipfile.ZipFile(z2_filedata) as nested_zip:
-# 			print( nested_zip.open('try.py').read())
-
-def process_zip(name, path, depth, zipinfo):
+def process_zip(name, path, zipdepth, zipinfo):
 #
 # zipinfo is a zipinfo entry - if None then file should be processed otherwise process zipinfo
-	print("Processing {}".format(path))
-	depth += 1
+#	print("Processing {}".format(path))
+	global max_arc_depth
+	
+	zipdepth += 1
+	if zipdepth > max_arc_depth:
+		max_arc_depth = zipdepth
 	if zipinfo == None:
 		with zipfile.ZipFile(path, 'r') as zf:
 			for zinfo in zf.infolist():
 				fullpath = path + "##" + zinfo.filename
-				print(fullpath)
 				if zinfo.is_dir():
-					print("dir")
+					continue
+				#
+				# Process folder containing file in zip
+				tdir = path + "##" + os.path.dirname(zinfo.filename)
+				if tdir not in dir_dict.keys():
+					counts['dir'][inarc] += 1
+					dir_dict[tdir] = {}
+					dir_dict[tdir]['num_entries'] = 1
+					dir_dict[tdir]['size'] = zinfo.file_size
+					dir_dict[tdir]['depth'] = 0
+					dir_dict[tdir]['filenamesstring'] = zinfo.filename + ";"
+				else:
+					dir_dict[tdir]['num_entries'] += 1
+					dir_dict[tdir]['size'] += zinfo.file_size
+					dir_dict[tdir]['depth'] = 0
+					dir_dict[tdir]['filenamesstring'] += zinfo.filename + ";"
+				
+				counts['file'][inarc] += 1
 				arc_files_dict[fullpath] = zinfo.CRC
+				checkfile(zinfo.filename, fullpath, zinfo.file_size, zinfo.compress_size)
 				dot = zinfo.filename.rfind(".")
 				if dot > 1:
 					if zinfo.filename[dot:] == ".zip":
-# 						zf.extract(zinfo, os.path.join(tempdir, newzpath))
-# 						print(os.path.join(tempdir, newzpath))
-# 						process_zip(zinfo.filename, fullpath, depth)
+						arc_list.append(fullpath)
 						with zf.open(zinfo.filename) as z2:
 							z2_filedata =  io.BytesIO(z2.read())
 							try:
 								with zipfile.ZipFile(z2_filedata) as nested_zip:
-									print("Processing zip in zip {}".format(zinfo.filename))
-									process_zip(zinfo.filename, fullpath, depth, nested_zip)
-# 									print( nested_zip.open('try.py').read())
+									#print("Processing zip in zip {}".format(zinfo.filename))
+									process_zip(zinfo.filename, fullpath, zipdepth, nested_zip)
 							except:
-								print("ERROR: Can't open zip")
-								return
+								print("WARNING: Can't open zip {} (Skipped)".format(fullpath))
+								continue
 	else:
 		for zinfo in zipinfo.infolist():
 			fullpath = path + "##" + zinfo.filename
+			if not zinfo.is_dir():
+				counts['dir'][inarc] += 1
+			else:
+				counts['file'][inarc] += 1
 			arc_files_dict[fullpath] = zinfo.CRC
+			checkfile(zinfo.filename, fullpath, zinfo.file_size, zinfo.compress_size)
 			dot = zinfo.filename.rfind(".")
 			if dot > 1:
 				if zinfo.filename[dot:] == ".zip":
-# 						zf.extract(zinfo, os.path.join(tempdir, newzpath))
-# 						print(os.path.join(tempdir, newzpath))
-# 						process_zip(zinfo.filename, fullpath, depth)
 					try:
 						with z.open(zinfo.filename) as z2:
 							z2_filedata =  io.BytesIO(z2.read())
 							with zipfile.ZipFile(z2_filedata) as nested_zip:
 								print("Processing zip in zip {}".format(zinfo.filename))
-								process_zip(zinfo.filename, fullpath, depth, nested_zip)
-# 								print( nested_zip.open('try.py').read())
+								process_zip(zinfo.filename, fullpath, zipdepth, nested_zip)
 					except:
-						print("ERROR: Can't open zip")
-						return
+						print("WARNING: Can't open zip {} (Skipped)".format(fullpath))
+						continue
 
-def checkfile(name, path, size, depth):
-	global size_total
-	global count_files
-	global size_large
-	global size_huge
-	count_files = count_files + 1
-	size_total += size
-	#print(path)
+def checkfile(name, path, size, size_comp):
+	if size_comp == 0:
+		counts['file'][notinarc] += 1
+		sizes['file'][notinarc] += size
+	else:
+		counts['file'][inarc] += 1
+		sizes['file'][inarcunc] += size
+		sizes['file'][inarccomp] += size_comp
 	dot = name.rfind(".")
 	if (dot > 1):
 		if name[dot:] in srcext_list:
 			src_list.append(path)
-			#print("source")
+			ftype = 'src'
 		elif name[dot:] in jarext_list:
 			jar_list.append(path)
-			#print("jar")
+			ftype = 'jar'
 		elif name[dot:] in binext_list:
 			bin_list.append(path)
-			#print("binary")
+			ftype = 'bin'
 		elif name[dot:] in arcext_list:
 			arc_list.append(path)
-			#print("archive")
-			if name[dot:] == '.zip':
-				process_zip(name, path, depth, None)
+			ftype = 'arc'
 		else:
 			#print("other")
 			other_list.append(path)
+			ftype = 'other'			
 	else:
-		#print("other")
+		ftype = 'other'
 		other_list.append(path)
-	if size > 10000000:
+
+	if size_comp == 0:
+		counts[ftype][notinarc] += 1
+		sizes[ftype][notinarc] += size
+	else:
+		counts[ftype][inarc] += 1
+		sizes[ftype][inarcunc] += size
+		sizes[ftype][inarccomp] += size_comp
+
+	if size > hugesize:
 		huge_list.append(path)
-		size_huge += size
 		large_dict[path] = size
-		#print("huge")
-	elif size > 500000:
+		if size_comp == 0:
+			counts['huge'][notinarc] += 1
+			sizes['huge'][notinarc] += size
+		else:
+			counts['huge'][inarc] += 1
+			sizes['huge'][inarcunc] += size
+			sizes['huge'][inarccomp] += size_comp
+	elif size > largesize:
 		large_list.append(path)
-		size_large += size
 		large_dict[path] = size
+		if size_comp == 0:
+			counts['large'][notinarc] += 1
+			sizes['large'][notinarc] += size
+		else:
+			counts['large'][inarc] += 1
+			sizes['large'][inarcunc] += size
+			sizes['large'][inarccomp] += size_comp
 
 def process_dir(path, depth):
-	global count_dirs
 	dir_size = 0
 	dir_entries = 0
 	filenames_string = ""
@@ -136,10 +204,14 @@ def process_dir(path, depth):
 		dir_entries += 1
 		filenames_string += entry.name + ";"
 		if entry.is_dir(follow_symlinks=False):
-			count_dirs += 1
+			counts['dir'][notinarc] += 1
 			dir_size += process_dir(entry.path, depth)
 		else:
-			checkfile(entry.name, entry.path, entry.stat(follow_symlinks=False).st_size, depth)
+			checkfile(entry.name, entry.path, entry.stat(follow_symlinks=False).st_size, 0)
+			dot = entry.name.rfind(".")
+			if entry.name[dot:] == '.zip':
+				process_zip(entry.name, entry.path, depth, None)
+
 			dir_size += entry.stat(follow_symlinks=False).st_size
 	dir_dict[path]['num_entries'] = dir_entries
 	dir_dict[path]['size'] = dir_size
@@ -149,56 +221,64 @@ def process_dir(path, depth):
 
 def process_largefiledups():
 	import filecmp
+	fcount = 0
 	total_dup_size = 0
 	count_dups = 0
-	for path, size in large_dict.items():
+	fitems = len(large_dict)
+	for apath, asize in large_dict.items():
+		fcount += 1
+		if fcount % ((fitems//5) + 1) == 0:
+			print(".", end="", flush=True)
 		dup = False
 		for cpath, csize in large_dict.items():
-			if path == cpath:
+			if apath == cpath:
 				continue
-			if size == csize:
-				dot = path.rfind(".")
+			if asize == csize:
+				adot = apath.rfind(".")
 				cdot = cpath.rfind(".")
-				if (dot > 1) and (cdot > 1):
-					if path[dot:] == cpath[cdot:]:
+				if (adot > 1) and (cdot > 1):
+					if apath[adot:] == cpath[cdot:]:
 						dup = True
-				elif (dot == 0) and (cdot == 0):
+				elif (adot == 0) and (cdot == 0):
 					dup = True
 				if dup:
-					if path.find("##") > 0:
-						if arc_files_dict.get(path) != None:
-							test = get_crc(cpath) and arc_files_dict[path]
-					elif cpath.find("##") > 0:
-						if arc_files_dict.get(cpath) != None:
-							test = get_crc(path) and arc_files_dict[cpath]						
+					if apath.find("##") > 0 or cpath.find("##") > 0:
+						if apath.find("##") > 0:
+							acrc = arc_files_dict[apath]
+						else:
+							acrc = get_crc(apath)
+						if cpath.find("##") > 0:
+							ccrc = arc_files_dict[cpath]
+						else:
+							ccrc = get_crc(cpath)
+						test = (acrc == ccrc)
 					else:
-						test = filecmp.cmp(path, cpath, True)
-					if test and dup_large_dict.get(cpath) == None and dup_dir_dict.get(os.path.dirname(path)) == None and dup_dir_dict.get(os.path.dirname(cpath)) == None:
-						dup_large_dict[path] = cpath
-						total_dup_size += size
+						test = filecmp.cmp(apath, cpath, True)
+
+					if test and dup_large_dict.get(cpath) == None and dup_dir_dict.get(os.path.dirname(apath)) == None and dup_dir_dict.get(os.path.dirname(cpath)) == None:
+						dup_large_dict[apath] = cpath
+						total_dup_size += asize
 						count_dups += 1
-						print("- Dup large file - {}, {} (size {}MB)".format(path,cpath,trunc(size/1000000)))
+						#print("- Dup large file - {}, {} (size {}MB)".format(apath,cpath,trunc(asize/1000000)))
 	return(count_dups, total_dup_size)
 
 def process_dirdups():
 	count_dupdirs = 0
 	size_dupdirs = 0
-	count = 0
-	items = len(dir_dict)
-	print("Processing Folders .", end="", flush=True)
+	dcount = 0
+	ditems = len(dir_dict)
 	for apath, adict in dir_dict.items():
-		count += 1
+		dcount += 1
 		#print(count, count % (items//100) )
-		if count % ((items//50) + 1) == 0:
+		if dcount % ((ditems//5) + 1) == 0:
 			print(".", end="", flush=True)
 		if adict['num_entries'] == 0 or adict['size'] == 0:
 			continue
 		for cpath, cdict in dir_dict.items():
 			if apath != cpath:
-				print(apath, cpath)
+#				print(apath, cpath)
 				if adict['num_entries'] == cdict['num_entries'] and adict['size'] == cdict['size'] and adict['filenamesstring'] == cdict['filenamesstring']:
 					if not (dup_dir_dict.get(apath) == cpath or dup_dir_dict.get(cpath) == apath):
-						print("dup")
 						#
 						# Need to check whether this dupdir exists or can replace existing entries (is higher up)
 						keydir = ""
@@ -223,8 +303,7 @@ def process_dirdups():
 							dup_dir_dict[keydir] = valuedir
 							count_dupdirs += 1
 							size_dupdirs += adict['size']
-	print(" OK\n- {} Duplicate folders identified".format(count_dupdirs))
-	
+
 	return(count_dupdirs, size_dupdirs)
 
 def check_singlefiles():
@@ -251,9 +330,9 @@ def check_singlefiles():
 					sfmatch = True
 					sf_list.append(thisfile)
 	if sfmatch:
-		print("- Consider using Single file matching - singleton .js files found:")
-		for thisfile in sf_list:
-			print("    {}".format(thisfile))
+		print("- Consider using Single file matching - {} singleton .js files found".format(len(sf_list)))
+# 		for thisfile in sf_list:
+# 			print("    {}".format(thisfile))
 
 def get_crc(myfile):
 	import zlib
@@ -269,48 +348,116 @@ def get_crc(myfile):
 
 #def check_binaryscan():
 
-count_files = 0
-size_total = 0
-size_large = 0
-size_huge = 0
-count_dirs = 0
+def print_summary():
+	print("\nSUMMARY INFO:            Num Outside     Size Outside      Num Inside     Size Inside     Size Inside")
+	print("                            Archives         Archives        Archives        Archives        Archives")
+	print("                                                                        (UNcompressed)    (compressed)")
+	
+	row = "{:25} {:>10,d}    {:>10,d} MB      {:>10,d}   {:>10,d} MB   {:>10,d} MB"
+	print("{:25} {:>10,d}    {:>10,d} MB             N/A             N/A             N/A   ".format("All Files", \
+	counts['file'][notinarc]+counts['arc'][notinarc], \
+	trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000)))
+	print("--------------------  --------------   --------------   -------------   -------------   -------------")
 
+	print(row.format("Files (exc. Archives)", \
+	counts['file'][notinarc], \
+	trunc(sizes['file'][notinarc]/1000000), \
+	counts['file'][1], \
+	trunc(sizes['file'][1]/1000000), \
+	trunc(sizes['file'][2]/1000000)))
+
+	print(row.format("Archives", \
+	counts['arc'][0], \
+	trunc(sizes['arc'][0]/1000000), \
+	counts['arc'][1], \
+	trunc(sizes['arc'][1]/1000000), \
+	trunc(sizes['arc'][2]/1000000)))
+	print("--------------------  --------------   --------------   -------------   -------------   -------------")
+	
+	print("{:25} {:>10,d}              N/A      {:>10,d}             N/A             N/A   ".format("Folders", \
+	counts['dir'][0], \
+	trunc(sizes['dir'][0]/1000000), \
+	counts['dir'][1], \
+	trunc(sizes['dir'][1]/1000000), \
+	trunc(sizes['dir'][2]/1000000)))
+	
+	print(row.format("Source Files", \
+	counts['src'][0], \
+	trunc(sizes['src'][0]/1000000), \
+	counts['src'][1], \
+	trunc(sizes['src'][1]/1000000), \
+	trunc(sizes['src'][2]/1000000)))
+
+	print(row.format("JAR Archives", \
+	counts['jar'][0], \
+	trunc(sizes['jar'][0]/1000000), \
+	counts['jar'][1], \
+	trunc(sizes['jar'][1]/1000000), \
+	trunc(sizes['jar'][2]/1000000)))
+
+	print(row.format("Binary Files", \
+	counts['bin'][0], \
+	trunc(sizes['bin'][0]/1000000), \
+	counts['bin'][1], \
+	trunc(sizes['bin'][1]/1000000), \
+	trunc(sizes['bin'][2]/1000000)))
+
+	print(row.format("Other Files", \
+	counts['other'][0], \
+	trunc(sizes['other'][0]/1000000), \
+	counts['other'][1], \
+	trunc(sizes['other'][1]/1000000), \
+	trunc(sizes['other'][2]/1000000)))
+
+	print(row.format("Large Files (>{:1d}MB)".format(trunc(largesize/1000000)), \
+	counts['large'][0], \
+	trunc(sizes['large'][0]/1000000), \
+	counts['large'][1], \
+	trunc(sizes['large'][1]/1000000), \
+	trunc(sizes['large'][2]/1000000)))
+
+	print(row.format("Huge Files (>{:2d}MB)".format(trunc(hugesize/1000000)), \
+	counts['huge'][0], \
+	trunc(sizes['huge'][0]/1000000), \
+	counts['huge'][1], \
+	trunc(sizes['huge'][1]/1000000), \
+	trunc(sizes['huge'][2]/1000000)))
+	print("--------------------  --------------   --------------   -------------   -------------   -------------")
+
+print("\nPROCESSING:")
+
+print("- Reading folders        .....", end="", flush=True)
 process_dir(".", 0)
-
-print("INFO:")
-print("- Total files processed = {}".format(count_files))
-print("- Total file size = {}MB".format(trunc(size_total/1000000)))
-print("- Folders = {}".format(count_dirs))
-print("- Source files = {}".format(len(src_list)))
-print("- Binary files = {}".format(len(bin_list)))
-print("- Jar files = {}".format(len(jar_list)))
-print("- Archive files = {}".format(len(arc_list)))
-print("- Other files = {}".format(len(other_list)))
-print("- Large files (>500KB) = {} (Total size {}MB)".format(len(large_list), trunc(size_large/1000000)))
-print("- Huge files (>10MB) = {} (Total size {}MB)".format(len(huge_list), trunc(size_huge/1000000)))
-
-print("\nDUPLICATES:")
+print(" Done")
 
 # Find duplicates without expanding archives - to avoid processing dups
+print("- Processing folders     ", end="", flush=True)
 num_dirdups, size_dirdups = process_dirdups()
+print(" Done")
+
+print("- Processing large files ", end="", flush=True)
 num_dups, size_dups = process_largefiledups()
+print(" Done")
+
 if (num_dups + num_dirdups == 0):
 	print("    None")
+
+print_summary()
 
 # Produce Recommendations
 print("\nRECOMMENDATIONS:")
 if size_dirdups > 20000000:
 	print("- Remove duplicate folders or create .bdignore (save {}MB)".format(trunc(size_dirdups/1000000)))
-	print("    Example .bdignore file:")
-	for apath, bpath in dup_dir_dict.items():
-		print("    {}".format(bpath))
-	print("")
+	#print("    Example .bdignore file:")
+	#for apath, bpath in dup_dir_dict.items():
+	#	print("    {}".format(bpath))
+	#print("")
 if size_dups > 20000000:
 	print("- Remove large duplicate files (save {}MB):".format(trunc(size_dups/1000000)))
-	for apath, bpath in dup_large_dict.items():
-		if dup_dir_dict.get(os.path.dirname(apath)) == None and dup_dir_dict.get(os.path.dirname(bpath)) == None:
-			print("    {}".format(bpath))
-	print("")
+	#for apath, bpath in dup_large_dict.items():
+	#	if dup_dir_dict.get(os.path.dirname(apath)) == None and dup_dir_dict.get(os.path.dirname(bpath)) == None:
+	#		print("    {}".format(bpath))
+	#print("")
 
 check_singlefiles()
 #check_binaryscan()
