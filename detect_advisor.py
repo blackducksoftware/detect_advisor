@@ -1,7 +1,7 @@
 import os
 import zipfile
 from math import trunc
-import tempfile
+#import tempfile
 import io
 import argparse
 
@@ -72,8 +72,6 @@ dir_dict = {}
 large_dict = {}
 arc_files_dict = {}
 
-#tempdir = tempfile.mkdtemp()
-
 def process_nested_zip(z, zippath, zipdepth):
 	global max_arc_depth
 
@@ -136,7 +134,6 @@ def process_zip(zippath, zipdepth):
 		print("WARNING: Can't open zip {} (Skipped)".format(zippath))
 
 def checkfile(name, path, size, size_comp, inarc):
-	#print(path)
 	ext = os.path.splitext(name)[1]
 	if ext != ".zip":
 		if not inarc:
@@ -214,10 +211,9 @@ def process_dir(path, depth):
 			dir_size += process_dir(entry.path, depth)
 		else:
 			checkfile(entry.name, entry.path, entry.stat(follow_symlinks=False).st_size, 0, False)
-			ext = os.path.splitext(entry.name)
+			ext = os.path.splitext(entry.name)[1]
 			if ext == '.zip':
 				process_zip(entry.path, depth)
-				#print("dir count inarc = {}".format(counts['dir'][inarc]))
 
 			dir_size += entry.stat(follow_symlinks=False).st_size
 	dir_dict[path]['num_entries'] = dir_entries
@@ -280,6 +276,8 @@ def process_dirdups(f):
 	size_dupdirs = 0
 	dcount = 0
 
+	tmp_dup_dir_dict = {}
+
 	if f:
 		f.write("\nDUPLICATE FOLDERS:\n")
 
@@ -291,44 +289,44 @@ def process_dirdups(f):
 			print(".", end="", flush=True)
 		if adict['num_entries'] == 0 or adict['size'] < 1000000:
 			continue
-		found = False
-		keydir = ""
-		valuedir = ""
+		dupmatch = False
 		for cpath, cdict in dir_dict.items():
 			if apath != cpath:
 				#print(apath, cpath)
 				if adict['num_entries'] == cdict['num_entries'] and adict['size'] == cdict['size'] \
 				and adict['filenamesstring'] == cdict['filenamesstring']:
-					if not (dup_dir_dict.get(apath) == cpath or dup_dir_dict.get(cpath) == apath):
-						#
-						# Need to check whether this dupdir is the child of an existing dupdir
+					if adict['depth'] <= cdict['depth']:
+						keypath = apath
+						valpath = cpath
+					else:
+						keypath = cpath
+						valpath = apath
 
-						if adict['depth'] <= cdict['depth']:
-							keydir = apath
-							valuedir = cpath
-						else:
-							keydir = cpath
-							valuedir = apath
-						checkdir = valuedir
-
-						odir = checkdir
-						checkdir = os.path.dirname(checkdir)
-						while checkdir != odir:
-							if checkdir in dup_dir_dict.keys() or checkdir in dup_dir_dict.values():
-								found = True
-								break
-							odir = checkdir
-							checkdir = os.path.dirname(checkdir)
-			if found == True:
-				break
-
-		if found == False:
+					newdup = False
+					if apath not in tmp_dup_dir_dict.keys():
+						newdup = True
+					elif tmp_dup_dir_dict[apath] != cpath:
+						newdup = True
+					if newdup:
+						tmp_dup_dir_dict[keypath] = valpath
+					break
+					
+	# Now remove dupdirs with matching parent folders
+	for xpath in tmp_dup_dir_dict.keys():
+		ypath = tmp_dup_dir_dict[xpath]
+		xdir = os.path.dirname(xpath)
+		ydir = os.path.dirname(ypath)
+		if xdir in tmp_dup_dir_dict.keys() and tmp_dup_dir_dict[xdir] == ydir:
+			# parents match - ignore
+			print(xdir)
+			pass
+		else:
+			dup_dir_dict[xpath] = ypath
+			count_dupdirs += 1
+			size_dupdirs += dir_dict[xpath]['size']
 			if f:
 				f.write("- Duplicate folder - {}, {} (size {}MB)\n".format(apath,cpath, \
-				trunc(dir_dict[apath]['size']/1000000)))
-			dup_dir_dict[keydir] = valuedir
-			count_dupdirs += 1
-			size_dupdirs += adict['size']
+				trunc(dir_dict[apath]['size']/1000000)))	
 
 	return(count_dupdirs, size_dupdirs)
 
