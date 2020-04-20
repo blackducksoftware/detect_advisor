@@ -3,12 +3,21 @@ import zipfile
 from math import trunc
 import tempfile
 import io
+import argparse
 
 #
 # Constants
-srcext_list = ['.c', '.h', '.cpp', '.hpp', '.txt', '.js']
-binext_list = ['.dll', '.obj', '.o', '.a', '.iso']
-arcext_list = ['.zip', '.gz', '.tar', '.Z']
+srcext_list = ['.R','.actionscript','.ada','.adb','.ads','.aidl','.as','.asm','.asp',\
+'.aspx','.awk','.bas','.bat','.bms','.c','.c++','.cbl','.cc','.cfc','.cfm','.cgi','.cls',\
+'.cpp','.cpy','.cs','.cxx','.el','.erl','.f','.f77','.f90','.for','.fpp','.frm','.fs',\
+'.g77','.g90','.go','.groovy','.h','.hh','.hpp','.hrl','.hxx','.idl','.java','.js','.jsp',\
+'.jws','.l','.lisp','.lsp','.lua','.m','.m4','.mm','.pas','.php','.php3','.php4','.pl',\
+'.pm','.py','.rb','.rc','.rexx','.s','.scala','.scm','.sh','.sqb','.sql','.tcl','.tk',\
+'.v','.vb','.vbs','.vhd','.vhdl','.y']
+binext_list = ['.dll', '.obj', '.o', '.a', '.lib', '.iso', '.qcow2', '.vmdk', '.vdi', \
+'.ova', '.nbi', '.vib', '.exe', '.img', '.bin', '.apk', '.aac', '.ipa', '.msi']
+arcext_list = ['.zip', '.gz', '.tar', '.xz', '.lz', '.bz2', '.7z', '.rar', '.rar', \
+'.cpio', '.Z', '.lz4', '.lha', '.arj']
 jarext_list = ['.jar', '.ear', '.war']
 
 largesize = 1000000
@@ -113,15 +122,18 @@ def process_zip(zippath, zipdepth):
 		max_arc_depth = zipdepth
 
 	#print("ZIP:{}:{}".format(zipdepth, zippath))
-	with zipfile.ZipFile(zippath) as z:
-		for zinfo in z.infolist():
-			if zinfo.is_dir():
-				continue
-			fullpath = zippath + "##" + zinfo.filename
-			process_zip_entry(zinfo, zippath)
-			if os.path.splitext(zinfo.filename)[1] == ".zip":
-				with z.open(zinfo.filename) as z2:
- 					process_nested_zip(z2, fullpath, zipdepth)
+	try:
+		with zipfile.ZipFile(zippath) as z:
+			for zinfo in z.infolist():
+				if zinfo.is_dir():
+					continue
+				fullpath = zippath + "##" + zinfo.filename
+				process_zip_entry(zinfo, zippath)
+				if os.path.splitext(zinfo.filename)[1] == ".zip":
+					with z.open(zinfo.filename) as z2:
+						process_nested_zip(z2, fullpath, zipdepth)
+	except:
+		print("WARNING: Can't open zip {} (Skipped)".format(zippath))
 
 def checkfile(name, path, size, size_comp, inarc):
 	#print(path)
@@ -202,8 +214,8 @@ def process_dir(path, depth):
 			dir_size += process_dir(entry.path, depth)
 		else:
 			checkfile(entry.name, entry.path, entry.stat(follow_symlinks=False).st_size, 0, False)
-			dot = entry.name.rfind(".")
-			if entry.name[dot:] == '.zip':
+			ext = os.path.splitext(entry.name)
+			if ext == '.zip':
 				process_zip(entry.path, depth)
 				#print("dir count inarc = {}".format(counts['dir'][inarc]))
 
@@ -214,27 +226,30 @@ def process_dir(path, depth):
 	dir_dict[path]['filenamesstring'] = filenames_string
 	return dir_size
 
-def process_largefiledups():
+def process_largefiledups(f):
 	import filecmp
+
+	if f:
+		f.write("\nDUPLICATE LARGE FILES:\n")
+
 	fcount = 0
 	total_dup_size = 0
 	count_dups = 0
 	fitems = len(large_dict)
 	for apath, asize in large_dict.items():
 		fcount += 1
-		if fcount % ((fitems//5) + 1) == 0:
+		if fcount % ((fitems//6) + 1) == 0:
 			print(".", end="", flush=True)
 		dup = False
 		for cpath, csize in large_dict.items():
 			if apath == cpath:
 				continue
 			if asize == csize:
-				adot = apath.rfind(".")
-				cdot = cpath.rfind(".")
-				if (adot > 1) and (cdot > 1):
-					if apath[adot:] == cpath[cdot:]:
-						dup = True
-				elif (adot == 0) and (cdot == 0):
+				aext = os.path.splitext(apath)[1]
+				cext = os.path.splitext(cpath)[1]
+				if aext == cext:
+					dup = True
+				elif aext == "" and cext == "":
 					dup = True
 				if dup:
 					if apath.find("##") > 0 or cpath.find("##") > 0:
@@ -250,84 +265,100 @@ def process_largefiledups():
 					else:
 						test = filecmp.cmp(apath, cpath, True)
 
-					if test and dup_large_dict.get(cpath) == None and dup_dir_dict.get(os.path.dirname(apath)) == None and dup_dir_dict.get(os.path.dirname(cpath)) == None:
+					if test and dup_large_dict.get(cpath) == None and \
+					dup_dir_dict.get(os.path.dirname(apath)) == None and \
+					dup_dir_dict.get(os.path.dirname(cpath)) == None:
 						dup_large_dict[apath] = cpath
 						total_dup_size += asize
 						count_dups += 1
-						#print("- Dup large file - {}, {} (size {}MB)".format(apath,cpath,trunc(asize/1000000)))
+						if f:
+							f.write("- Dup large file - {}, {} (size {}MB)\n".format(apath,cpath,trunc(asize/1000000)))
 	return(count_dups, total_dup_size)
 
-def process_dirdups():
+def process_dirdups(f):
 	count_dupdirs = 0
 	size_dupdirs = 0
 	dcount = 0
+
+	if f:
+		f.write("\nDUPLICATE FOLDERS:\n")
+
 	ditems = len(dir_dict)
 	for apath, adict in dir_dict.items():
 		dcount += 1
 		#print(count, count % (items//100) )
-		if dcount % ((ditems//5) + 1) == 0:
+		if dcount % ((ditems//6) + 1) == 0:
 			print(".", end="", flush=True)
-		if adict['num_entries'] == 0 or adict['size'] == 0:
+		if adict['num_entries'] == 0 or adict['size'] < 1000000:
 			continue
+		found = False
+		keydir = ""
+		valuedir = ""
 		for cpath, cdict in dir_dict.items():
 			if apath != cpath:
-#				print(apath, cpath)
-				if adict['num_entries'] == cdict['num_entries'] and adict['size'] == cdict['size'] and adict['filenamesstring'] == cdict['filenamesstring']:
+				#print(apath, cpath)
+				if adict['num_entries'] == cdict['num_entries'] and adict['size'] == cdict['size'] \
+				and adict['filenamesstring'] == cdict['filenamesstring']:
 					if not (dup_dir_dict.get(apath) == cpath or dup_dir_dict.get(cpath) == apath):
 						#
-						# Need to check whether this dupdir exists or can replace existing entries (is higher up)
-						keydir = ""
-						valuedir = ""
+						# Need to check whether this dupdir is the child of an existing dupdir
+
 						if adict['depth'] <= cdict['depth']:
 							keydir = apath
 							valuedir = cpath
-							#print("- Dup folder - {}, {} (size {}MB)".format(apath,cpath, trunc(dir_dict[apath]['size']/1000000)))
 						else:
 							keydir = cpath
 							valuedir = apath
-							#print("- Dup folder - {}, {} (size {}MB)".format(cpath,apath, trunc(dir_dict[apath]['size']/1000000)))
 						checkdir = valuedir
-						found = False
-						while checkdir != "":
-							checkdir = os.path.dirname(checkdir)
+
+						odir = checkdir
+						checkdir = os.path.dirname(checkdir)
+						while checkdir != odir:
 							if checkdir in dup_dir_dict.keys() or checkdir in dup_dir_dict.values():
 								found = True
 								break
+							odir = checkdir
+							checkdir = os.path.dirname(checkdir)
+			if found == True:
+				break
 
-						if found == False:
-							dup_dir_dict[keydir] = valuedir
-							count_dupdirs += 1
-							size_dupdirs += adict['size']
+		if found == False:
+			if f:
+				f.write("- Duplicate folder - {}, {} (size {}MB)\n".format(apath,cpath, \
+				trunc(dir_dict[apath]['size']/1000000)))
+			dup_dir_dict[keydir] = valuedir
+			count_dupdirs += 1
+			size_dupdirs += adict['size']
 
 	return(count_dupdirs, size_dupdirs)
 
-def check_singlefiles():
+def check_singlefiles(f):
 	# Check for singleton js & other single files
 	sfmatch = False
 	sf_list = []
 	for thisfile in src_list:
-		dot = thisfile.rfind(".")
-		if (dot > 1) and thisfile[dot:] == '.js':
+		ext = os.path.splitext(thisfile)[1]
+		if ext == '.js':
 			# get dir
 			# check for .js in filenamesstring
 			thisdir = dir_dict.get(os.path.dirname(thisfile))
-			if os.path.basename(os.path.dirname(thisfile)) == "node_modules":
+			if thisfile.find("node_modules") > 0:
 				continue
 			if thisdir != None:
 				all_js = True
 				for filename in thisdir['filenamesstring'].split(';'):
-					srcdot = filename.rfind('.')
-					if srcdot > 1 and filename[srcdot:] != '.js':
-						all_js = False
-					else:
+					srcext = os.path.splitext(filename)[1]
+					if srcext != '.js':
 						all_js = False
 				if not all_js:
 					sfmatch = True
 					sf_list.append(thisfile)
 	if sfmatch:
-		print("- INFORMATIONAL: Consider using Single file matching - {} singleton .js files found".format(len(sf_list)))
-# 		for thisfile in sf_list:
-# 			print("    {}".format(thisfile))
+		print("- INFORMATION: {} singleton .js files found\n	Impact: OSS components within JS files may not be detected\n	Action: Consider specifying Single file matching (--detect.blackduck.signature.scanner.individual.file.matching=SOURCE)".format(len(sf_list)))
+		if f:
+			f.write("\nSINGLE JS FILES:\n")
+			for thisfile in sf_list:
+				f.write("- {}\n".format(thisfile))
 
 def get_crc(myfile):
 	import zlib
@@ -417,57 +448,82 @@ def print_summary():
 	trunc((sizes['file'][inarcunc]+sizes['arc'][inarcunc])/1000000), \
 	trunc((sizes['file'][inarccomp]+sizes['arc'][inarccomp])/1000000)))
 
-print("\nPROCESSING:")
+def main_process(folder, repfile):
 
-print("- Reading folders        .....", end="", flush=True)
-process_dir(".", 0)
-print(" Done")
+	if repfile and os.path.exists(repfile):
+		print("Report file {} already exists\nExiting".format(repfile))
+		return
 
-# Find duplicates without expanding archives - to avoid processing dups
-print("- Processing folders     ", end="", flush=True)
-num_dirdups, size_dirdups = process_dirdups()
-print(" Done")
+	if repfile:
+		try:
+			f = open(repfile, "a")
+		except Exception as e:
+			print('ERROR: Unable to open output report file \n' + str(e))
+			return
+	else:
+		f = None
 
-print("- Processing large files ", end="", flush=True)
-num_dups, size_dups = process_largefiledups()
-print(" Done")
+	print("\nPROCESSING:")
 
-if (num_dups + num_dirdups == 0):
-	print("    None")
+	print("Working on folder {}".format(folder))
 
-print_summary()
+	print("- Reading hierarchy      .....", end="", flush=True)
+	process_dir(folder, 0)
+	print(" Done")
 
-# Produce Recommendations
-print("\nRECOMMENDATIONS:")
+	# Find duplicates without expanding archives - to avoid processing dups
+	print("- Processing folders     ", end="", flush=True)
+	num_dirdups, size_dirdups = process_dirdups(f)
+	print(" Done")
 
-if sizes['file'][notinarc]+sizes['arc'][notinarc] > 5000000000:
-	print("- CRITICAL: Overall scan size is too large ({:>,d} MB) - scan will fail".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000)))
-elif sizes['file'][notinarc]+sizes['arc'][notinarc] > 2000000000:
-	print("- IMPORTANT: Overall scan size is large ({:>,d} MB) - scan could be slow".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000)))
+	print("- Processing large files ", end="", flush=True)
+	num_dups, size_dups = process_largefiledups(f)
+	print(" Done")
 
-if counts['file'][notinarc]+counts['file'][inarc] > 2000000:
-	print("- IMPORTANT: Overall number of files ({:>,d}) is very large - scan time could be VERY long".format(trunc((counts['file'][notinarc]+sizes['file'][inarc]))))
-elif counts['file'][notinarc]+counts['file'][inarc] > 500000:
-	print("- INFORMATIONAL: Overall number of files ({:>,d}) is large - scan time could be long".format(trunc((counts['file'][notinarc]+sizes['file'][inarc]))))
+	if (num_dups + num_dirdups == 0):
+		print("    None")
+
+	print_summary()
+
+	# Produce Recommendations
+	print("\nRECOMMENDATIONS:")
+
+	if sizes['file'][notinarc]+sizes['arc'][notinarc] > 5000000000:
+		print("- CRITICAL: Overall scan size ({:>,d} MB) is too large\n	Impact: Scan will fail\n	Action: Ignore folders or remove large files".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000)))
+	elif sizes['file'][notinarc]+sizes['arc'][notinarc] > 2000000000:
+		print("- IMPORTANT: Overall scan size ({:>,d} MB) is large\n	Impact: Will impact Capacity license usage\n	Action: Ignore folders or remove large files".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000)))
+
+	if counts['file'][notinarc]+counts['file'][inarc] > 2000000:
+		print("- IMPORTANT: Overall number of files ({:>,d}) is very large\n	Impact: Scan time could be VERY long\n	Action: Ignore folders or split project (scan sub-projects)".format(trunc((counts['file'][notinarc]+sizes['file'][inarc]))))
+	elif counts['file'][notinarc]+counts['file'][inarc] > 500000:
+		print("- INFORMATION: Overall number of files ({:>,d}) is large\n	Impact: Scan time could be long\n	Action: Ignore folders or split project (scan sub-projects)".format(trunc((counts['file'][notinarc]+sizes['file'][inarc]))))
 
 
-if sizes['bin'][notinarc]+sizes['bin'][inarc] > 20000000:
-	print("- IMPORTANT: {:>,d} MB of binary files - remove or create .bdignore".format(trunc((sizes['bin'][notinarc]+sizes['bin'][inarc])/1000000)))
-	print("	- Also consider zipping binary files and using Binary scan")
+	if sizes['bin'][notinarc]+sizes['bin'][inarc] > 20000000:
+		print("- IMPORTANT: Large amount of data ({:>,d} MB) in {} binary files found\n	Impact: Binary files not analysed by standard scan, will impact Capacity license usage\n	Action: Remove files or ignore folders, also consider zipping binary files and using Binary scan".format(trunc((sizes['bin'][notinarc]+sizes['bin'][inarc])/1000000), len(bin_list)))
 
-if size_dirdups > 20000000:
-	print("- IMPORTANT: Remove duplicate folders or create .bdignore (save {:>,d} MB)".format(trunc(size_dirdups/1000000)))
-	#print("    Example .bdignore file:")
-	#for apath, bpath in dup_dir_dict.items():
-	#	print("    {}".format(bpath))
-	#print("")
-if size_dups > 20000000:
-	print("- IMPORTANT: Remove large duplicate files (save {:>,d} MB):".format(trunc(size_dups/1000000)))
-	#for apath, bpath in dup_large_dict.items():
-	#	if dup_dir_dict.get(os.path.dirname(apath)) == None and dup_dir_dict.get(os.path.dirname(bpath)) == None:
-	#		print("    {}".format(bpath))
-	#print("")
+	if size_dirdups > 20000000:
+		print("- IMPORTANT: Large amount of data ({:,d} MB) in {:,d} duplicate folders\n	Impact: Scan capacity potentially utilised without detecting additional components, will impact Capacity license usage\n	Action: Remove or ignore duplicate folders".format(trunc(size_dirdups/1000000), len(dup_dir_dict)))
+		#print("    Example .bdignore file:")
+		#for apath, bpath in dup_dir_dict.items():
+		#	print("    {}".format(bpath))
+		#print("")
+	if size_dups > 20000000:
+		print("- IMPORTANT: Large amount of data ({:,d} MB) in {:,d} duplicate files\n	Impact: Scan capacity potentially utilised without detecting additional components, will impact Capacity license usage\n	Action: Remove or ignore duplicate folders".format(trunc(size_dups/1000000), len(dup_large_dict)))
+		#for apath, bpath in dup_large_dict.items():
+		#	if dup_dir_dict.get(os.path.dirname(apath)) == None and dup_dir_dict.get(os.path.dirname(bpath)) == None:
+		#		print("    {}".format(bpath))
+		#print("")
 
-check_singlefiles()
+	check_singlefiles(f)
 
-print("")
+	print("")
+
+parser = argparse.ArgumentParser(description='Examine files/folders to determine scan recommendations', prog='detect_advisor')
+
+parser.add_argument("scanfolder", help="Project folder to analyse")
+parser.add_argument("-r", "--report", help="Output report file")
+
+args = parser.parse_args()
+
+main_process(os.path.abspath(args.scanfolder), args.report)
