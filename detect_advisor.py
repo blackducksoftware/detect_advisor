@@ -20,6 +20,35 @@ arcext_list = ['.zip', '.gz', '.tar', '.xz', '.lz', '.bz2', '.7z', '.rar', '.rar
 '.cpio', '.Z', '.lz4', '.lha', '.arj']
 jarext_list = ['.jar', '.ear', '.war']
 
+detectors_dict = {
+'Bitbake': {'exe': ['bitbake'], 'files':['build.env']},
+'Clang': {'exe': ['clang'], 'files':['compile_commands.json']},
+'Cocoapods': {'exe': [''], 'files':['Podfile.lock']},
+'Conda': {'exe': ['conda'], 'files':['environment.yml']},
+'Cpan': {'exe': ['cpan'], 'files':['Makefile.PL']},
+'Cran': {'exe': [''], 'files':['packrat.lock']},
+'Go Dep': {'exe': ['go'], 'files':['Gopkg.lock']},
+'Go Gradle': {'exe': ['go'], 'files':['gogradle.lock']},
+'Go Mod': {'exe': ['go'], 'files':['go.mod']},
+'Go Vendor': {'exe': ['go'], 'files':['vendor.json']},
+'Go Vndr': {'exe': ['go'], 'files':['vendor.conf']},
+'Gradle': {'exe': ['gradlew','gradle'], 'files':['build.gradle','build.gradle.kts']},
+'Hex': {'exe': ['rebar3'], 'files':['rebar.config']},
+'Maven': {'exe': ['mvnw','mvn'], 'files':['pom.xml','pom.groovy']},
+'Npm': {'exe': ['npm'], 'files':['node_modules','package.json','package-lock.json','npm-shrinkwrap.json']},
+'NuGet': {'exe': ['dotnet'], 'files':['*.csproj','*.fsproj','*.vbproj','*.asaproj','*.dcproj','*.shproj','*.ccproj','*.sfproj','*.njsproj','*.vcxproj','*.vcproj','*.xproj','*.pyproj','*.hiveproj','*.pigproj','*.jsproj','*.usqlproj','*.deployproj','*.msbuildproj','*.sqlproj','*.dbproj','*.rproj','*.sln']},
+'Packagist': {'exe': [''], 'files':['composer.lock','composer.json']},
+'Pear': {'exe': ['pear'], 'files':['package.xml']},
+'Pip Env': {'exe': ['python','python3','pipenv'], 'files':['Pipfile','Pipfile.lock']},
+'Pip': {'exe': ['python','python3','pip'], 'files':['setup.py','requirements.txt']},
+'RubyGems': {'exe': [''], 'files':['Gemfile.lock']},
+'SBT': {'exe': ['sbt'], 'files':['build.sbt']},
+'Swift': {'exe': ['swift'], 'files':['Package.swift']},
+'Yarn': {'exe': [''], 'files':['yarn.lock','package.json']}
+}
+detectors_file_list = []
+detectors_ext_list = []
+
 largesize = 1000000
 hugesize = 20000000
 
@@ -39,6 +68,7 @@ counts = {
 'bin' : [0,0],
 'jar' : [0,0],
 'src' : [0,0],
+'det' : [0,0],
 'large' : [0,0],
 'huge' : [0,0],
 'other' : [0,0]
@@ -51,6 +81,7 @@ sizes = {
 'bin' : [0,0,0],
 'jar' : [0,0,0],
 'src' : [0,0,0],
+'det' : [0,0,0],
 'large' : [0,0,0],
 'huge' : [0,0,0],
 'other' : [0,0,0]
@@ -63,6 +94,9 @@ huge_list = []
 arc_list = []
 jar_list = []
 other_list = []
+
+det_dict = {}
+
 crc_dict = {}
 
 dup_dir_dict = {}
@@ -72,7 +106,7 @@ dir_dict = {}
 large_dict = {}
 arc_files_dict = {}
 
-def process_nested_zip(z, zippath, zipdepth):
+def process_nested_zip(z, zippath, zipdepth, dirdepth):
 	global max_arc_depth
 
 	zipdepth += 1
@@ -84,35 +118,45 @@ def process_nested_zip(z, zippath, zipdepth):
 	try:
 		with zipfile.ZipFile(z2_filedata) as nz:
 			for zinfo in nz.infolist():
-				process_zip_entry(zinfo, zippath)
+				dirdepth = process_zip_entry(zinfo, zippath, dirdepth)
 				if os.path.splitext(zinfo.filename)[1] == ".zip":
 					with nz.open(zinfo.filename) as z2:
-						process_nested_zip(z2, zippath + "##" + zinfo.filename, zipdepth)
+						process_nested_zip(z2, zippath + "##" + zinfo.filename, zipdepth, dirdepth)
 	except:
-		print("WARNING: Can't open zip {} (Skipped)".format(zippath))
+		print("WARNING: Can't open nested zip {} (Skipped)".format(zippath))
 
 
-def process_zip_entry(zinfo, zippath):
+def process_zip_entry(zinfo, zippath, dirdepth):
 	#print("ENTRY:" + zippath + "##" + zinfo.filename)
 	fullpath = zippath + "##" + zinfo.filename
+	odir = zinfo.filename
+	dir = os.path.dirname(zinfo.filename)
+	depthinzip = 0
+	while dir != odir:
+		depthinzip += 1
+		odir = dir
+		dir = os.path.dirname(dir)
+
+	dirdepth = dirdepth + depthinzip
 	tdir = zippath + "##" + os.path.dirname(zinfo.filename)
 	if tdir not in dir_dict.keys():
 		counts['dir'][inarc] += 1
 		dir_dict[tdir] = {}
 		dir_dict[tdir]['num_entries'] = 1
 		dir_dict[tdir]['size'] = zinfo.file_size
-		dir_dict[tdir]['depth'] = 10
+		dir_dict[tdir]['depth'] = dirdepth
 		dir_dict[tdir]['filenamesstring'] = zinfo.filename + ";"
 	else:
 		dir_dict[tdir]['num_entries'] += 1
 		dir_dict[tdir]['size'] += zinfo.file_size
-		dir_dict[tdir]['depth'] = 10
+		dir_dict[tdir]['depth'] = dirdepth
 		dir_dict[tdir]['filenamesstring'] += zinfo.filename + ";"
 
 	arc_files_dict[fullpath] = zinfo.CRC
-	checkfile(zinfo.filename, fullpath, zinfo.file_size, zinfo.compress_size, True)
+	checkfile(zinfo.filename, fullpath, zinfo.file_size, zinfo.compress_size, dirdepth, True)
+	return dirdepth
 
-def process_zip(zippath, zipdepth):
+def process_zip(zippath, zipdepth, dirdepth):
 	global max_arc_depth
 
 	zipdepth += 1
@@ -126,14 +170,14 @@ def process_zip(zippath, zipdepth):
 				if zinfo.is_dir():
 					continue
 				fullpath = zippath + "##" + zinfo.filename
-				process_zip_entry(zinfo, zippath)
+				process_zip_entry(zinfo, zippath, dirdepth)
 				if os.path.splitext(zinfo.filename)[1] == ".zip":
 					with z.open(zinfo.filename) as z2:
-						process_nested_zip(z2, fullpath, zipdepth)
+						process_nested_zip(z2, fullpath, zipdepth, dirdepth)
 	except:
 		print("WARNING: Can't open zip {} (Skipped)".format(zippath))
 
-def checkfile(name, path, size, size_comp, inarc):
+def checkfile(name, path, size, size_comp, dirdepth, inarc):
 	ext = os.path.splitext(name)[1]
 	if ext != ".zip":
 		if not inarc:
@@ -164,7 +208,14 @@ def checkfile(name, path, size, size_comp, inarc):
 				sizes['large'][inarcunc] += size
 				sizes['large'][inarccomp] += size_comp
 
-	if (ext != ""):
+
+	if name in detectors_file_list:
+		det_dict[path] = dirdepth
+		ftype = 'det'
+	elif (ext != ""):
+		if ext in detectors_ext_list:
+			det_dict[path] = dirdepth
+			ftype = 'det'
 		if ext in srcext_list:
 			src_list.append(path)
 			ftype = 'src'
@@ -196,29 +247,29 @@ def checkfile(name, path, size, size_comp, inarc):
 			sizes[ftype][inarccomp] += size_comp
 
 
-def process_dir(path, depth):
+def process_dir(path, dirdepth):
 	dir_size = 0
 	dir_entries = 0
 	filenames_string = ""
 
 	dir_dict[path] = {}
-	depth += 1
+	dirdepth += 1
 	for entry in os.scandir(path):
 		dir_entries += 1
 		filenames_string += entry.name + ";"
 		if entry.is_dir(follow_symlinks=False):
 			counts['dir'][notinarc] += 1
-			dir_size += process_dir(entry.path, depth)
+			dir_size += process_dir(entry.path, dirdepth)
 		else:
-			checkfile(entry.name, entry.path, entry.stat(follow_symlinks=False).st_size, 0, False)
+			checkfile(entry.name, entry.path, entry.stat(follow_symlinks=False).st_size, 0, dirdepth, False)
 			ext = os.path.splitext(entry.name)[1]
 			if ext == '.zip':
-				process_zip(entry.path, depth)
+				process_zip(entry.path, 0, dirdepth)
 
 			dir_size += entry.stat(follow_symlinks=False).st_size
 	dir_dict[path]['num_entries'] = dir_entries
 	dir_dict[path]['size'] = dir_size
-	dir_dict[path]['depth'] = depth
+	dir_dict[path]['depth'] = dirdepth
 	dir_dict[path]['filenamesstring'] = filenames_string
 	return dir_size
 
@@ -312,15 +363,16 @@ def process_dirdups(f):
 	# Now remove dupdirs with matching parent folders
 	for xpath in tmp_dup_dir_dict.keys():
 		ypath = tmp_dup_dir_dict[xpath]
-		print("Processing folder:" + xpath + " dup " + ypath)
+		#print("Processing folder:" + xpath + " dup " + ypath)
 		xdir = os.path.dirname(xpath)
 		ydir = os.path.dirname(ypath)
 		if xdir in tmp_dup_dir_dict.keys() and tmp_dup_dir_dict[xdir] == ydir:
 			# parents match - ignore
-			print("Ignorning dup dir: " + xpath + " " + ypath)
+			#print("Ignorning dup dir: " + xpath + " " + ypath)
+			pass
 		else:
 			# Create dupdir entry
-			print("Adding dup dir: " + xpath + " " + ypath)
+			#print("Adding dup dir: " + xpath + " " + ypath)
 			dup_dir_dict[xpath] = ypath
 			count_dupdirs += 1
 			size_dupdirs += dir_dict[xpath]['size']
@@ -446,11 +498,7 @@ def print_summary():
 	trunc((sizes['file'][inarcunc]+sizes['arc'][inarcunc])/1000000), \
 	trunc((sizes['file'][inarccomp]+sizes['arc'][inarccomp])/1000000)))
 
-def main_process(folder, repfile):
-
-	if repfile and os.path.exists(repfile):
-		print("Report file {} already exists\nExiting".format(repfile))
-		return
+def signature_process(folder, repfile):
 
 	if repfile:
 		try:
@@ -515,13 +563,54 @@ def main_process(folder, repfile):
 
 	check_singlefiles(f)
 
+	if f:
+		f.close()
+
 	print("")
+
+def detector_process(folder, repfile):
+	if repfile:
+		try:
+			f = open(repfile, "a")
+		except Exception as e:
+			print('ERROR: Unable to open output report file \n' + str(e))
+			return
+	else:
+		f = None
+
+	if f:
+		f.close()
+
+	return
 
 parser = argparse.ArgumentParser(description='Examine files/folders to determine scan recommendations', prog='detect_advisor')
 
 parser.add_argument("scanfolder", help="Project folder to analyse")
 parser.add_argument("-r", "--report", help="Output report file")
+parser.add_argument("-d", "--detectors_only", help="Check for detector files and prerequisites only",default=False)
+parser.add_argument("-s", "--signature_only", help="Check for files and folders for signature scan only",default=False)
 
 args = parser.parse_args()
 
-main_process(os.path.abspath(args.scanfolder), args.report)
+if not os.path.isdir(args.scanfolder):
+	print("Scan location {} does not exist\nExiting".format(args.scanfolder))
+	exit(1)
+
+if args.report and os.path.exists(args.report):
+	print("Report file {} already exists\nExiting".format(args.report))
+	exit(2)
+
+for dict in detectors_dict.values():
+	for detfile in dict['files']:
+		if detfile[0] == "*":
+			detectors_ext_list.append(os.path.splitext(detfile)[1])
+		else:
+			detectors_file_list.append(detfile)
+
+if not args.signature_only:
+	#detector_process(os.path.abspath(args.scanfolder), args.report)
+	detector_process(args.scanfolder, args.report)
+
+if not args.detectors_only:
+	#signature_process(os.path.abspath(args.scanfolder), args.report)
+	signature_process(args.scanfolder, args.report)
