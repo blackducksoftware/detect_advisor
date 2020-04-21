@@ -284,7 +284,6 @@ def process_dirdups(f):
 	ditems = len(dir_dict)
 	for apath, adict in dir_dict.items():
 		dcount += 1
-		#print(count, count % (items//100) )
 		if dcount % ((ditems//6) + 1) == 0:
 			print(".", end="", flush=True)
 		if adict['num_entries'] == 0 or adict['size'] < 1000000:
@@ -292,7 +291,6 @@ def process_dirdups(f):
 		dupmatch = False
 		for cpath, cdict in dir_dict.items():
 			if apath != cpath:
-				#print(apath, cpath)
 				if adict['num_entries'] == cdict['num_entries'] and adict['size'] == cdict['size'] \
 				and adict['filenamesstring'] == cdict['filenamesstring']:
 					if adict['depth'] <= cdict['depth']:
@@ -303,30 +301,32 @@ def process_dirdups(f):
 						valpath = apath
 
 					newdup = False
-					if apath not in tmp_dup_dir_dict.keys():
+					if keypath not in tmp_dup_dir_dict.keys():
 						newdup = True
-					elif tmp_dup_dir_dict[apath] != cpath:
+					elif tmp_dup_dir_dict[keypath] != valpath:
 						newdup = True
 					if newdup:
 						tmp_dup_dir_dict[keypath] = valpath
 					break
-					
+
 	# Now remove dupdirs with matching parent folders
 	for xpath in tmp_dup_dir_dict.keys():
 		ypath = tmp_dup_dir_dict[xpath]
+		print("Processing folder:" + xpath + " dup " + ypath)
 		xdir = os.path.dirname(xpath)
 		ydir = os.path.dirname(ypath)
 		if xdir in tmp_dup_dir_dict.keys() and tmp_dup_dir_dict[xdir] == ydir:
 			# parents match - ignore
-			print(xdir)
-			pass
+			print("Ignorning dup dir: " + xpath + " " + ypath)
 		else:
+			# Create dupdir entry
+			print("Adding dup dir: " + xpath + " " + ypath)
 			dup_dir_dict[xpath] = ypath
 			count_dupdirs += 1
 			size_dupdirs += dir_dict[xpath]['size']
 			if f:
-				f.write("- Duplicate folder - {}, {} (size {}MB)\n".format(apath,cpath, \
-				trunc(dir_dict[apath]['size']/1000000)))	
+				f.write("- Duplicate folder - {}, {} (size {}MB)\n".format(xpath,ypath, \
+				trunc(dir_dict[xpath]['size']/1000000)))
 
 	return(count_dupdirs, size_dupdirs)
 
