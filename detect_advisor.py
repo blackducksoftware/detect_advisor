@@ -20,34 +20,92 @@ arcext_list = ['.zip', '.gz', '.tar', '.xz', '.lz', '.bz2', '.7z', '.rar', '.rar
 '.cpio', '.Z', '.lz4', '.lha', '.arj']
 jarext_list = ['.jar', '.ear', '.war']
 
-detectors_dict = {
-'Bitbake': {'exe': ['bitbake'], 'files':['build.env']},
-'Clang': {'exe': ['clang'], 'files':['compile_commands.json']},
-'Cocoapods': {'exe': [''], 'files':['Podfile.lock']},
-'Conda': {'exe': ['conda'], 'files':['environment.yml']},
-'Cpan': {'exe': ['cpan'], 'files':['Makefile.PL']},
-'Cran': {'exe': [''], 'files':['packrat.lock']},
-'Go Dep': {'exe': ['go'], 'files':['Gopkg.lock']},
-'Go Gradle': {'exe': ['go'], 'files':['gogradle.lock']},
-'Go Mod': {'exe': ['go'], 'files':['go.mod']},
-'Go Vendor': {'exe': ['go'], 'files':['vendor.json']},
-'Go Vndr': {'exe': ['go'], 'files':['vendor.conf']},
-'Gradle': {'exe': ['gradlew','gradle'], 'files':['build.gradle','build.gradle.kts']},
-'Hex': {'exe': ['rebar3'], 'files':['rebar.config']},
-'Maven': {'exe': ['mvnw','mvn'], 'files':['pom.xml','pom.groovy']},
-'Npm': {'exe': ['npm'], 'files':['node_modules','package.json','package-lock.json','npm-shrinkwrap.json']},
-'NuGet': {'exe': ['dotnet'], 'files':['*.csproj','*.fsproj','*.vbproj','*.asaproj','*.dcproj','*.shproj','*.ccproj','*.sfproj','*.njsproj','*.vcxproj','*.vcproj','*.xproj','*.pyproj','*.hiveproj','*.pigproj','*.jsproj','*.usqlproj','*.deployproj','*.msbuildproj','*.sqlproj','*.dbproj','*.rproj','*.sln']},
-'Packagist': {'exe': [''], 'files':['composer.lock','composer.json']},
-'Pear': {'exe': ['pear'], 'files':['package.xml']},
-'Pip Env': {'exe': ['python','python3','pipenv'], 'files':['Pipfile','Pipfile.lock']},
-'Pip': {'exe': ['python','python3','pip'], 'files':['setup.py','requirements.txt']},
-'RubyGems': {'exe': [''], 'files':['Gemfile.lock']},
-'SBT': {'exe': ['sbt'], 'files':['build.sbt']},
-'Swift': {'exe': ['swift'], 'files':['Package.swift']},
-'Yarn': {'exe': [''], 'files':['yarn.lock','package.json']}
+# detectors_dict = {
+# 'Bitbake': {'exe': ['bitbake'], 'files':['build.env']},
+# 'Clang': {'exe': ['clang'], 'files':['compile_commands.json']},
+# 'Cocoapods': {'exe': [''], 'files':['Podfile.lock']},
+# 'Conda': {'exe': ['conda'], 'files':['environment.yml']},
+# 'Cpan': {'exe': ['cpan'], 'files':['Makefile.PL']},
+# 'Cran': {'exe': ['rtools'], 'files':['packrat.lock']},
+# 'Go Dep': {'exe': ['go'], 'files':['Gopkg.lock']},
+# 'Go Gradle': {'exe': ['go'], 'files':['gogradle.lock']},
+# 'Go Mod': {'exe': ['go'], 'files':['go.mod']},
+# 'Go Vendor': {'exe': ['go'], 'files':['vendor.json']},
+# 'Go Vndr': {'exe': ['go'], 'files':['vendor.conf']},
+# 'Gradle': {'exe': ['gradlew','gradle'], 'files':['build.gradle','build.gradle.kts']},
+# 'Hex': {'exe': ['rebar3'], 'files':['rebar.config']},
+# 'Maven': {'exe': ['mvnw','mvn'], 'files':['pom.xml','pom.groovy']},
+# 'Npm': {'exe': ['npm'], 'files':['node_modules','package.json','package-lock.json','npm-shrinkwrap.json']},
+# 'NuGet': {'exe': ['dotnet'], 'files':['*.csproj','*.fsproj','*.vbproj','*.asaproj','*.dcproj','*.shproj','*.ccproj','*.sfproj','*.njsproj','*.vcxproj','*.vcproj','*.xproj','*.pyproj','*.hiveproj','*.pigproj','*.jsproj','*.usqlproj','*.deployproj','*.msbuildproj','*.sqlproj','*.dbproj','*.rproj','*.sln']},
+# 'Packagist': {'exe': [''], 'files':['composer.lock','composer.json']},
+# 'Pear': {'exe': ['pear'], 'files':['package.xml']},
+# 'Pip Env': {'exe': ['python','python3','pipenv'], 'files':['Pipfile','Pipfile.lock']},
+# 'Pip': {'exe': ['python','python3','pip'], 'files':['setup.py','requirements.txt']},
+# 'RubyGems': {'exe': [''], 'files':['Gemfile.lock']},
+# 'SBT': {'exe': ['sbt'], 'files':['build.sbt']},
+# 'Swift': {'exe': ['swift'], 'files':['Package.swift']},
+# 'Yarn': {'exe': [''], 'files':['yarn.lock','package.json']}
+# }
+
+detectors_file_dict = {
+'build.env': ['bitbake'],
+'compile_commands.json': ['clang'],
+'Podfile.lock': ['pod'],
+'environment.yml': ['conda'],
+'Makefile.PL': ['cpan'],
+'packrat.lock': ['rtools'],
+'Gopkg.lock': ['go'],
+'gogradle.lock': ['go'],
+'go.mod': ['go'],
+'vendor.json': ['go'],
+'vendor.conf': ['go'],
+'build.gradle': ['gradlew','gradle'],
+'build.gradle.kts': ['gradlew','gradle'],
+'rebar.config': ['rebar3'],
+'pom.xml': ['mvnw','mvn'],
+'pom.groovy': ['mvnw','mvn'],
+'node_modules': ['npm'],
+'package.json': ['npm'],
+'package-lock.json': ['npm'],
+'npm-shrinkwrap.json': ['npm'],
+'composer.lock': ['composer'],
+'composer.json': ['composer'],
+'package.xml': ['pear'],
+'pipfile': ['python','python3','pipenv'],
+'pipfile.lock': ['python','python3','pipenv'],
+'setup.py': ['python','python3','pip'],
+'requirements.txt': ['python','python3','pip'],
+'Gemfile.lock': ['gem'],
+'build.sbt': ['sbt'],
+'Package.swift': ['swift'],
+'yarn.lock': ['yarn']
 }
-detectors_file_list = []
-detectors_ext_list = []
+
+detectors_ext_dict = {
+'.csproj': ['dotnet'],
+'.fsproj': ['dotnet'],
+'.vbproj': ['dotnet'],
+'.asaproj': ['dotnet'],
+'.dcproj': ['dotnet'],
+'.shproj': ['dotnet'],
+'.ccproj': ['dotnet'],
+'.sfproj': ['dotnet'],
+'.njsproj': ['dotnet'],
+'.vcxproj': ['dotnet'],
+'.vcproj': ['dotnet'],
+'.xproj': ['dotnet'],
+'.pyproj': ['dotnet'],
+'.hiveproj': ['dotnet'],
+'.pigproj': ['dotnet'],
+'.jsproj': ['dotnet'],
+'.usqlproj': ['dotnet'],
+'.deployproj': ['dotnet'],
+'.msbuildproj': ['dotnet'],
+'.sqlproj': ['dotnet'],
+'.dbproj': ['dotnet'],
+'.rproj': ['dotnet'],
+'.sln': ['dotnet']
+}
 
 largesize = 1000000
 hugesize = 20000000
@@ -209,11 +267,11 @@ def checkfile(name, path, size, size_comp, dirdepth, inarc):
 				sizes['large'][inarccomp] += size_comp
 
 
-	if name in detectors_file_list:
+	if name in detectors_file_dict.keys():
 		det_dict[path] = dirdepth
 		ftype = 'det'
 	elif (ext != ""):
-		if ext in detectors_ext_list:
+		if ext in detectors_ext_dict.keys():
 			det_dict[path] = dirdepth
 			ftype = 'det'
 		if ext in srcext_list:
@@ -498,8 +556,10 @@ def print_summary():
 	trunc((sizes['file'][inarcunc]+sizes['arc'][inarcunc])/1000000), \
 	trunc((sizes['file'][inarccomp]+sizes['arc'][inarccomp])/1000000)))
 
-def signature_process(folder, repfile):
+	print("")
 
+def signature_process(folder, repfile):
+	print("SIGNATURE SCAN ANALYSIS:")
 	if repfile:
 		try:
 			f = open(repfile, "a")
@@ -508,14 +568,6 @@ def signature_process(folder, repfile):
 			return
 	else:
 		f = None
-
-	print("\nPROCESSING:")
-
-	print("Working on folder {}".format(folder))
-
-	print("- Reading hierarchy      .....", end="", flush=True)
-	process_dir(folder, 0)
-	print(" Done")
 
 	# Find duplicates without expanding archives - to avoid processing dups
 	print("- Processing folders     ", end="", flush=True)
@@ -526,36 +578,52 @@ def signature_process(folder, repfile):
 	num_dups, size_dups = process_largefiledups(f)
 	print(" Done")
 
-	if (num_dups + num_dirdups == 0):
-		print("    None")
-
-	print_summary()
-
 	# Produce Recommendations
-	print("\nRECOMMENDATIONS:")
+	print("\nSIGNATURE SCAN RECOMMENDATIONS:")
 
 	if sizes['file'][notinarc]+sizes['arc'][notinarc] > 5000000000:
-		print("- CRITICAL: Overall scan size ({:>,d} MB) is too large\n	Impact: Scan will fail\n	Action: Ignore folders or remove large files".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000)))
+		print("- CRITICAL: Overall scan size ({:>,d} MB) is too large\n" + \
+		"	Impact: Scan will fail\n" + \
+		"	Action: Ignore folders or remove large files".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000)))
 	elif sizes['file'][notinarc]+sizes['arc'][notinarc] > 2000000000:
-		print("- IMPORTANT: Overall scan size ({:>,d} MB) is large\n	Impact: Will impact Capacity license usage\n	Action: Ignore folders or remove large files".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000)))
+		print("- IMPORTANT: Overall scan size ({:>,d} MB) is large\n" + \
+		"	Impact: Will impact Capacity license usage\n" + \
+		"	Action: Ignore folders or remove large files".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000)))
 
 	if counts['file'][notinarc]+counts['file'][inarc] > 2000000:
-		print("- IMPORTANT: Overall number of files ({:>,d}) is very large\n	Impact: Scan time could be VERY long\n	Action: Ignore folders or split project (scan sub-projects)".format(trunc((counts['file'][notinarc]+sizes['file'][inarc]))))
+		print("- IMPORTANT: Overall number of files ({:>,d}) is very large\n" + \
+		"	Impact: Scan time could be VERY long\n" + \
+		"	Action: Ignore folders or split project (scan sub-projects)".format(trunc((counts['file'][notinarc]+sizes['file'][inarc]))))
 	elif counts['file'][notinarc]+counts['file'][inarc] > 500000:
-		print("- INFORMATION: Overall number of files ({:>,d}) is large\n	Impact: Scan time could be long\n	Action: Ignore folders or split project (scan sub-projects)".format(trunc((counts['file'][notinarc]+sizes['file'][inarc]))))
+		print("- INFORMATION: Overall number of files ({:>,d}) is large\n" + \
+		"	Impact: Scan time could be long\n" + \
+		"	Action: Ignore folders or split project (scan sub-projects)".format(trunc((counts['file'][notinarc]+sizes['file'][inarc]))))
 
-
+	#
+	# Need to add check for nothing to scan (no pm files and no supported scan files)
+	# Need to add check for pm scan only
+	
 	if sizes['bin'][notinarc]+sizes['bin'][inarc] > 20000000:
-		print("- IMPORTANT: Large amount of data ({:>,d} MB) in {} binary files found\n	Impact: Binary files not analysed by standard scan, will impact Capacity license usage\n	Action: Remove files or ignore folders, also consider zipping binary files and using Binary scan".format(trunc((sizes['bin'][notinarc]+sizes['bin'][inarc])/1000000), len(bin_list)))
+		print("- IMPORTANT: Large amount of data ({:>,d} MB) in {} binary files found\n" + \
+		"	Impact:	Binary files not analysed by standard scan,\n" + \
+		"		will impact Capacity license usage\n" + \
+		"	Action:	Remove files or ignore folders, also consider zipping\n" + \
+		"		binary files and using Binary scan".format(trunc((sizes['bin'][notinarc]+sizes['bin'][inarc])/1000000), len(bin_list)))
 
 	if size_dirdups > 20000000:
-		print("- IMPORTANT: Large amount of data ({:,d} MB) in {:,d} duplicate folders\n	Impact: Scan capacity potentially utilised without detecting additional components, will impact Capacity license usage\n	Action: Remove or ignore duplicate folders".format(trunc(size_dirdups/1000000), len(dup_dir_dict)))
+		print("- IMPORTANT: Large amount of data ({:,d} MB) in {:,d} duplicate folders\n" + \
+		"	Impact:	Scan capacity potentially utilised without detecting additional\n" + \
+		"		components, will impact Capacity license usage\n" + \
+		"	Action:	Remove or ignore duplicate folders".format(trunc(size_dirdups/1000000), len(dup_dir_dict)))
 		#print("    Example .bdignore file:")
 		#for apath, bpath in dup_dir_dict.items():
 		#	print("    {}".format(bpath))
 		#print("")
 	if size_dups > 20000000:
-		print("- IMPORTANT: Large amount of data ({:,d} MB) in {:,d} duplicate files\n	Impact: Scan capacity potentially utilised without detecting additional components, will impact Capacity license usage\n	Action: Remove or ignore duplicate folders".format(trunc(size_dups/1000000), len(dup_large_dict)))
+		print("- IMPORTANT: Large amount of data ({:,d} MB) in {:,d} duplicate files\n" + \
+		"	Impact:	Scan capacity potentially utilised without detecting additional\n" + \
+		"		components, will impact Capacity license usage\n" + \
+		"	Action: Remove or ignore duplicate folders".format(trunc(size_dups/1000000), len(dup_large_dict)))
 		#for apath, bpath in dup_large_dict.items():
 		#	if dup_dir_dict.get(os.path.dirname(apath)) == None and dup_dir_dict.get(os.path.dirname(bpath)) == None:
 		#		print("    {}".format(bpath))
@@ -569,6 +637,8 @@ def signature_process(folder, repfile):
 	print("")
 
 def detector_process(folder, repfile):
+	import shutil
+
 	if repfile:
 		try:
 			f = open(repfile, "a")
@@ -578,7 +648,81 @@ def detector_process(folder, repfile):
 	else:
 		f = None
 
+	print("PACKAGE MANAGER FILES:")
+	print("- Total discovered:	{}".format(len(det_dict)))
+	
 	if f:
+		f.write("PROJECT FILES FOUND:\n")
+
+	if len(det_dict) > 0:
+		det_depth1 = 0
+		det_other = 0
+		det_max_depth = 0
+		det_min_depth = 100
+		det_in_arc = 0
+		for det, depth in det_dict.items():
+			if det.find("##") > 0:
+				# in archive
+				det_in_arc += 1
+			else:
+				if depth == 1:
+					det_depth1 += 1
+				elif depth > 1:
+					det_other += 1
+				if depth > det_max_depth:
+					det_max_depth = depth
+				if depth < det_min_depth:
+					det_min_depth = depth
+				if f:
+					f.write("{}\n".format(det))
+
+		print("- In invocation folder:	{}".format(det_depth1))
+		print("- In sub-folders:	{}".format(det_other))
+		print("- Maximum folder depth:	{}".format(det_max_depth))
+		print("- In archives:	{}\n".format(det_in_arc))
+
+		for det, depth in det_dict.items():
+			if det.find("##") == -1:
+				#
+				# Check if det exe exists
+				fname = os.path.basename(det)
+				exes = ""
+				if fname in detectors_file_dict.keys():
+					exes = detectors_file_dict[fname]
+				elif os.path.splitext(fname)[1] in detectors_ext_dict.keys():
+					exes = detectors_ext_dict[os.path.splitext(fname)[1]]
+				command_exists = False
+				for exe in exes:
+					if shutil.which(exe) is not None:
+						command_exists = True
+			
+			if not command_exists:
+				print("Program {} not found for project file {}".format(exes, det))
+
+		if report_string:
+			print(report_string)
+			print("")
+
+		print("PACKAGE MANAGER SCAN RECOMMENDATIONS:")
+		if det_depth1 == 0:
+			print("- CRITICAL: No package manager files found in invocation folder\n" + \
+			"	Impact:	Dependency scan will not be run\n" + \
+			"	Action: Specify --detect.detector.depth={}".format(det_min_depth))
+
+		if report_string:
+			print("- CRITICAL: Package manager programs missing \n" + \
+			"	Impact:	Dependency \n" + \
+			"	Action: Consider specifying --detect.detector.depth={}".format(det_max_depth))
+					
+		if det_max_depth > det_min_depth :
+			print("- IMPORTANT: Package manager files found in sub-folders\n" + \
+			"	Impact:	Sub-project dependencies may be missed from scan\n" + \
+			"	Action: Consider specifying --detect.detector.depth={}".format(det_max_depth))
+
+		print("report_string)
+		
+	if f:
+		f.write("\n")
 		f.close()
 
 	return
@@ -600,12 +744,22 @@ if args.report and os.path.exists(args.report):
 	print("Report file {} already exists\nExiting".format(args.report))
 	exit(2)
 
-for dict in detectors_dict.values():
-	for detfile in dict['files']:
-		if detfile[0] == "*":
-			detectors_ext_list.append(os.path.splitext(detfile)[1])
-		else:
-			detectors_file_list.append(detfile)
+# for dict in detectors_dict.values():
+# 	for detfile in dict['files']:
+# 		if detfile[0] == "*":
+# 			detectors_ext_list.append(os.path.splitext(detfile)[1])
+# 		else:
+# 			detectors_file_list.append(detfile)
+
+print("\nPROCESSING:")
+
+print("Working on project folder {}".format(args.scanfolder))
+
+print("- Reading hierarchy      .....", end="", flush=True)
+process_dir(args.scanfolder, 0)
+print(" Done")
+
+print_summary()
 
 if not args.signature_only:
 	#detector_process(os.path.abspath(args.scanfolder), args.report)
