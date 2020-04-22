@@ -441,6 +441,8 @@ def process_dirdups(f):
 	return(count_dupdirs, size_dupdirs)
 
 def check_singlefiles(f):
+	global recs_other
+
 	# Check for singleton js & other single files
 	sfmatch = False
 	sf_list = []
@@ -462,7 +464,9 @@ def check_singlefiles(f):
 					sfmatch = True
 					sf_list.append(thisfile)
 	if sfmatch:
-		print("- INFORMATION: {} singleton .js files found\n	Impact: OSS components within JS files may not be detected\n	Action: Consider specifying Single file matching (--detect.blackduck.signature.scanner.individual.file.matching=SOURCE)".format(len(sf_list)))
+		recs_other += "- INFORMATION: {} singleton .js files found\n" + \
+		"	Impact: OSS components within JS files may not be detected\n" + \
+		"	Action: Consider specifying Single file matching (--detect.blackduck.signature.scanner.individual.file.matching=SOURCE)".format(len(sf_list))
 		if f:
 			f.write("\nSINGLE JS FILES:\n")
 			for thisfile in sf_list:
@@ -559,6 +563,10 @@ def print_summary():
 	print("")
 
 def signature_process(folder, repfile):
+	global recs_critical
+	global recs_important
+	global recs_other
+
 	print("SIGNATURE SCAN ANALYSIS:")
 	if repfile:
 		try:
@@ -579,51 +587,49 @@ def signature_process(folder, repfile):
 	print(" Done")
 
 	# Produce Recommendations
-	print("\nSIGNATURE SCAN RECOMMENDATIONS:")
-
 	if sizes['file'][notinarc]+sizes['arc'][notinarc] > 5000000000:
-		print("- CRITICAL: Overall scan size ({:>,d} MB) is too large\n" + \
+		recs_critical += "- CRITICAL: Overall scan size ({:>,d} MB) is too large\n" + \
 		"	Impact: Scan will fail\n" + \
-		"	Action: Ignore folders or remove large files".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000)))
+		"	Action: Ignore folders or remove large files\n".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000))
 	elif sizes['file'][notinarc]+sizes['arc'][notinarc] > 2000000000:
-		print("- IMPORTANT: Overall scan size ({:>,d} MB) is large\n" + \
+		recs_important += "- IMPORTANT: Overall scan size ({:>,d} MB) is large\n" + \
 		"	Impact: Will impact Capacity license usage\n" + \
-		"	Action: Ignore folders or remove large files".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000)))
+		"	Action: Ignore folders or remove large files\n".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000))
 
 	if counts['file'][notinarc]+counts['file'][inarc] > 2000000:
-		print("- IMPORTANT: Overall number of files ({:>,d}) is very large\n" + \
+		recs_important += "- IMPORTANT: Overall number of files ({:>,d}) is very large\n" + \
 		"	Impact: Scan time could be VERY long\n" + \
-		"	Action: Ignore folders or split project (scan sub-projects)".format(trunc((counts['file'][notinarc]+sizes['file'][inarc]))))
+		"	Action: Ignore folders or split project (scan sub-projects)\n".format(trunc((counts['file'][notinarc]+sizes['file'][inarc])))
 	elif counts['file'][notinarc]+counts['file'][inarc] > 500000:
-		print("- INFORMATION: Overall number of files ({:>,d}) is large\n" + \
+		recs_other += "- INFORMATION: Overall number of files ({:>,d}) is large\n" + \
 		"	Impact: Scan time could be long\n" + \
-		"	Action: Ignore folders or split project (scan sub-projects)".format(trunc((counts['file'][notinarc]+sizes['file'][inarc]))))
+		"	Action: Ignore folders or split project (scan sub-projects)\n".format(trunc((counts['file'][notinarc]+sizes['file'][inarc])))
 
 	#
 	# Need to add check for nothing to scan (no pm files and no supported scan files)
 	# Need to add check for pm scan only
-	
+
 	if sizes['bin'][notinarc]+sizes['bin'][inarc] > 20000000:
-		print("- IMPORTANT: Large amount of data ({:>,d} MB) in {} binary files found\n" + \
+		recs_important += "- IMPORTANT: Large amount of data ({:>,d} MB) in {} binary files found\n" + \
 		"	Impact:	Binary files not analysed by standard scan,\n" + \
 		"		will impact Capacity license usage\n" + \
 		"	Action:	Remove files or ignore folders, also consider zipping\n" + \
-		"		binary files and using Binary scan".format(trunc((sizes['bin'][notinarc]+sizes['bin'][inarc])/1000000), len(bin_list)))
+		"		binary files and using Binary scan\n".format(trunc((sizes['bin'][notinarc]+sizes['bin'][inarc])/1000000), len(bin_list))
 
 	if size_dirdups > 20000000:
-		print("- IMPORTANT: Large amount of data ({:,d} MB) in {:,d} duplicate folders\n" + \
+		recs_important += "- IMPORTANT: Large amount of data ({:,d} MB) in {:,d} duplicate folders\n" + \
 		"	Impact:	Scan capacity potentially utilised without detecting additional\n" + \
 		"		components, will impact Capacity license usage\n" + \
-		"	Action:	Remove or ignore duplicate folders".format(trunc(size_dirdups/1000000), len(dup_dir_dict)))
+		"	Action:	Remove or ignore duplicate folders\n".format(trunc(size_dirdups/1000000), len(dup_dir_dict))
 		#print("    Example .bdignore file:")
 		#for apath, bpath in dup_dir_dict.items():
 		#	print("    {}".format(bpath))
 		#print("")
 	if size_dups > 20000000:
-		print("- IMPORTANT: Large amount of data ({:,d} MB) in {:,d} duplicate files\n" + \
+		recs_important += "- IMPORTANT: Large amount of data ({:,d} MB) in {:,d} duplicate files\n" + \
 		"	Impact:	Scan capacity potentially utilised without detecting additional\n" + \
 		"		components, will impact Capacity license usage\n" + \
-		"	Action: Remove or ignore duplicate folders".format(trunc(size_dups/1000000), len(dup_large_dict)))
+		"	Action: Remove or ignore duplicate folders\n".format(trunc(size_dups/1000000), len(dup_large_dict))
 		#for apath, bpath in dup_large_dict.items():
 		#	if dup_dir_dict.get(os.path.dirname(apath)) == None and dup_dir_dict.get(os.path.dirname(bpath)) == None:
 		#		print("    {}".format(bpath))
@@ -639,6 +645,10 @@ def signature_process(folder, repfile):
 def detector_process(folder, repfile):
 	import shutil
 
+	global recs_critical
+	global recs_important
+	global recs_other
+
 	if repfile:
 		try:
 			f = open(repfile, "a")
@@ -650,7 +660,7 @@ def detector_process(folder, repfile):
 
 	print("PACKAGE MANAGER FILES:")
 	print("- Total discovered:	{}".format(len(det_dict)))
-	
+
 	if f:
 		f.write("PROJECT FILES FOUND:\n")
 
@@ -681,12 +691,13 @@ def detector_process(folder, repfile):
 		print("- Maximum folder depth:	{}".format(det_max_depth))
 		print("- In archives:	{}\n".format(det_in_arc))
 
+		det_exes1_missing_list = []
+		det_exes2_missing_list = []
 		for det, depth in det_dict.items():
 			if det.find("##") == -1:
 				#
 				# Check if det exe exists
 				fname = os.path.basename(det)
-				exes = ""
 				if fname in detectors_file_dict.keys():
 					exes = detectors_file_dict[fname]
 				elif os.path.splitext(fname)[1] in detectors_ext_dict.keys():
@@ -695,37 +706,53 @@ def detector_process(folder, repfile):
 				for exe in exes:
 					if shutil.which(exe) is not None:
 						command_exists = True
-			
+					if depth == 1:
+						if exe not in det_exes1_list:
+							det_exes1_list.append(exe)
+					else:
+						if exe not in det_exes1_list:
+							det_exes2_list.append(exe)
+
 			if not command_exists:
 				print("Program {} not found for project file {}".format(exes, det))
+				commands_missing = True
 
-		if report_string:
-			print(report_string)
-			print("")
-
-		print("PACKAGE MANAGER SCAN RECOMMENDATIONS:")
 		if det_depth1 == 0:
-			print("- CRITICAL: No package manager files found in invocation folder\n" + \
+			recs_critical += "- CRITICAL: No package manager files found in invocation folder\n" + \
 			"	Impact:	Dependency scan will not be run\n" + \
-			"	Action: Specify --detect.detector.depth={}".format(det_min_depth))
+			"	Action: Specify --detect.detector.depth={}\n".format(det_min_depth)
 
-		if report_string:
-			print("- CRITICAL: Package manager programs missing \n" + \
+		if commands_missing:
+			recs_critical += "- CRITICAL: Package manager programs missing \n" + \
 			"	Impact:	Dependency \n" + \
-			"	Action: Consider specifying --detect.detector.depth={}".format(det_max_depth))
-					
-		if det_max_depth > det_min_depth :
-			print("- IMPORTANT: Package manager files found in sub-folders\n" + \
-			"	Impact:	Sub-project dependencies may be missed from scan\n" + \
-			"	Action: Consider specifying --detect.detector.depth={}".format(det_max_depth))
+			"	Action: Consider specifying --detect.detector.depth={}\n".format(det_max_depth)
 
-		print("report_string)
-		
+		if det_max_depth > det_min_depth :
+			recs_important += "- IMPORTANT: Package manager files found in sub-folders\n" + \
+			"	Impact:	Sub-project dependencies may be missed from scan\n" + \
+			"	Action: Consider specifying --detect.detector.depth={}\n".format(det_max_depth)
+
 	if f:
 		f.write("\n")
 		f.close()
 
 	return
+
+def print_recs():
+	global recs_critical
+	global recs_important
+	global recs_other
+
+	print("RECOMMENDATIONS:")
+	if recs_critical:
+		print(recs_critical)
+
+	if recs_important:
+		print(recs_important)
+
+	if recs_other:
+		print(recs_other)
+
 
 parser = argparse.ArgumentParser(description='Examine files/folders to determine scan recommendations', prog='detect_advisor')
 
@@ -744,12 +771,9 @@ if args.report and os.path.exists(args.report):
 	print("Report file {} already exists\nExiting".format(args.report))
 	exit(2)
 
-# for dict in detectors_dict.values():
-# 	for detfile in dict['files']:
-# 		if detfile[0] == "*":
-# 			detectors_ext_list.append(os.path.splitext(detfile)[1])
-# 		else:
-# 			detectors_file_list.append(detfile)
+recs_critical = ""
+recs_important = ""
+recs_other = ""
 
 print("\nPROCESSING:")
 
@@ -768,3 +792,5 @@ if not args.signature_only:
 if not args.detectors_only:
 	#signature_process(os.path.abspath(args.scanfolder), args.report)
 	signature_process(args.scanfolder, args.report)
+
+print_recs()
