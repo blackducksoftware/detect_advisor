@@ -164,8 +164,11 @@ dir_dict = {}
 large_dict = {}
 arc_files_dict = {}
 
+messages = ""
+
 def process_nested_zip(z, zippath, zipdepth, dirdepth):
 	global max_arc_depth
+	global messages
 
 	zipdepth += 1
 	if zipdepth > max_arc_depth:
@@ -181,7 +184,7 @@ def process_nested_zip(z, zippath, zipdepth, dirdepth):
 					with nz.open(zinfo.filename) as z2:
 						process_nested_zip(z2, zippath + "##" + zinfo.filename, zipdepth, dirdepth)
 	except:
-		print("WARNING: Can't open nested zip {} (Skipped)".format(zippath))
+		messages += "WARNING: Can't open nested zip {} (Skipped)".format(zippath)
 
 
 def process_zip_entry(zinfo, zippath, dirdepth):
@@ -216,6 +219,7 @@ def process_zip_entry(zinfo, zippath, dirdepth):
 
 def process_zip(zippath, zipdepth, dirdepth):
 	global max_arc_depth
+	global messages
 
 	zipdepth += 1
 	if zipdepth > max_arc_depth:
@@ -233,7 +237,7 @@ def process_zip(zippath, zipdepth, dirdepth):
 					with z.open(zinfo.filename) as z2:
 						process_nested_zip(z2, fullpath, zipdepth, dirdepth)
 	except:
-		print("WARNING: Can't open zip {} (Skipped)".format(zippath))
+		messages += "WARNING: Can't open zip {} (Skipped)".format(zippath)
 
 def checkfile(name, path, size, size_comp, dirdepth, inarc):
 	ext = os.path.splitext(name)[1]
@@ -266,13 +270,14 @@ def checkfile(name, path, size, size_comp, dirdepth, inarc):
 				sizes['large'][inarcunc] += size
 				sizes['large'][inarccomp] += size_comp
 
-
-	if name in detectors_file_dict.keys():
-		det_dict[path] = dirdepth
+	if os.path.basename(name) in detectors_file_dict.keys():
+		if not inarc:
+			det_dict[path] = dirdepth
 		ftype = 'det'
 	elif (ext != ""):
 		if ext in detectors_ext_dict.keys():
-			det_dict[path] = dirdepth
+			if not inarc:
+				det_dict[path] = dirdepth
 			ftype = 'det'
 		if ext in srcext_list:
 			src_list.append(path)
@@ -309,22 +314,28 @@ def process_dir(path, dirdepth):
 	dir_size = 0
 	dir_entries = 0
 	filenames_string = ""
+	global messages
 
 	dir_dict[path] = {}
 	dirdepth += 1
-	for entry in os.scandir(path):
-		dir_entries += 1
-		filenames_string += entry.name + ";"
-		if entry.is_dir(follow_symlinks=False):
-			counts['dir'][notinarc] += 1
-			dir_size += process_dir(entry.path, dirdepth)
-		else:
-			checkfile(entry.name, entry.path, entry.stat(follow_symlinks=False).st_size, 0, dirdepth, False)
-			ext = os.path.splitext(entry.name)[1]
-			if ext == '.zip':
-				process_zip(entry.path, 0, dirdepth)
+	try:
+		for entry in os.scandir(path):
+			dir_entries += 1
+			filenames_string += entry.name + ";"
+			if entry.is_dir(follow_symlinks=False):
+				counts['dir'][notinarc] += 1
+				dir_size += process_dir(entry.path, dirdepth)
+			else:
+				checkfile(entry.name, entry.path, entry.stat(follow_symlinks=False).st_size, 0, dirdepth, False)
+				ext = os.path.splitext(entry.name)[1]
+				if ext == '.zip':
+					process_zip(entry.path, 0, dirdepth)
 
-			dir_size += entry.stat(follow_symlinks=False).st_size
+				dir_size += entry.stat(follow_symlinks=False).st_size
+	except OSError:
+		messages += "ERROR: Unable to open folder {}\n".format(path)
+		return 0
+
 	dir_dict[path]['num_entries'] = dir_entries
 	dir_dict[path]['size'] = dir_size
 	dir_dict[path]['depth'] = dirdepth
@@ -464,9 +475,10 @@ def check_singlefiles(f):
 					sfmatch = True
 					sf_list.append(thisfile)
 	if sfmatch:
-		recs_other += "- INFORMATION: {} singleton .js files found\n" + \
-		"	Impact: OSS components within JS files may not be detected\n" + \
-		"	Action: Consider specifying Single file matching (--detect.blackduck.signature.scanner.individual.file.matching=SOURCE)".format(len(sf_list))
+		recs_other += "- INFORMATION: {} singleton .js files found\n".format(len(sf_list)) + \
+		"	Impact:	OSS components within JS files may not be detected\n" + \
+		"	Action:	Consider specifying Single file matching\n" + \
+		"		(--detect.blackduck.signature.scanner.individual.file.matching=SOURCE)"
 		if f:
 			f.write("\nSINGLE JS FILES:\n")
 			for thisfile in sf_list:
@@ -477,105 +489,116 @@ def get_crc(myfile):
 	buffersize = 65536
 
 	crcvalue = 0
-	with open(myfile, 'rb') as afile:
-		buffr = afile.read(buffersize)
-		while len(buffr) > 0:
-			crcvalue = zlib.crc32(buffr, crcvalue)
+	try:
+		with open(myfile, 'rb') as afile:
 			buffr = afile.read(buffersize)
+			while len(buffr) > 0:
+				crcvalue = zlib.crc32(buffr, crcvalue)
+				buffr = afile.read(buffersize)
+	except:
+		messages += "ERROR: Unable to open file {} to calculate CRC\n".format(myfile)
+		return(0)
 	return(crcvalue)
 
-def print_summary():
-	print("\nSUMMARY INFO:            Num Outside     Size Outside      Num Inside     Size Inside     Size Inside")
-	print("                            Archives         Archives        Archives        Archives        Archives")
-	print("                                                                        (UNcompressed)    (compressed)")
+def print_summary(f):
+	global rep
 
-	row = "{:25} {:>10,d}    {:>10,d} MB      {:>10,d}   {:>10,d} MB   {:>10,d} MB"
-	print("--------------------  --------------   --------------   -------------   -------------   -------------")
+	summary = "\nSUMMARY INFO:            Num Outside     Size Outside      Num Inside     Size Inside     Size Inside\n" + \
+	"                            Archives         Archives        Archives        Archives        Archives\n" + \
+	"                                                                        (UNcompressed)    (compressed)\n" + \
+	"--------------------  --------------   --------------   -------------   -------------   -------------\n"
 
-	print(row.format("Files (exc. Archives)", \
+	row = "{:25} {:>10,d}    {:>10,d} MB      {:>10,d}   {:>10,d} MB   {:>10,d} MB\n"
+
+	summary += row.format("Files (exc. Archives)", \
 	counts['file'][notinarc], \
 	trunc(sizes['file'][notinarc]/1000000), \
 	counts['file'][inarc], \
 	trunc(sizes['file'][inarcunc]/1000000), \
-	trunc(sizes['file'][inarccomp]/1000000)))
+	trunc(sizes['file'][inarccomp]/1000000))
 
-	print(row.format("Archives", \
+	summary += row.format("Archives", \
 	counts['arc'][notinarc], \
 	trunc(sizes['arc'][notinarc]/1000000), \
 	counts['arc'][inarc], \
 	trunc(sizes['arc'][inarcunc]/1000000), \
-	trunc(sizes['arc'][inarccomp]/1000000)))
-	print("--------------------  --------------   --------------   -------------   -------------   -------------")
+	trunc(sizes['arc'][inarccomp]/1000000))
 
-	print("{:25} {:>10,d}              N/A      {:>10,d}             N/A             N/A   ".format("Folders", \
+	summary += "--------------------  --------------   --------------   -------------   -------------   -------------\n"
+
+	summary += "{:25} {:>10,d}              N/A      {:>10,d}             N/A             N/A   \n".format("Folders", \
 	counts['dir'][notinarc], \
-	counts['dir'][inarc]))
+	counts['dir'][inarc])
 
-	print(row.format("Source Files", \
+	summary += row.format("Source Files", \
 	counts['src'][notinarc], \
 	trunc(sizes['src'][notinarc]/1000000), \
 	counts['src'][inarc], \
 	trunc(sizes['src'][inarcunc]/1000000), \
-	trunc(sizes['src'][inarccomp]/1000000)))
+	trunc(sizes['src'][inarccomp]/1000000))
 
-	print(row.format("JAR Archives", \
+	summary += row.format("JAR Archives", \
 	counts['jar'][notinarc], \
 	trunc(sizes['jar'][notinarc]/1000000), \
 	counts['jar'][inarc], \
 	trunc(sizes['jar'][inarcunc]/1000000), \
-	trunc(sizes['jar'][inarccomp]/1000000)))
+	trunc(sizes['jar'][inarccomp]/1000000))
 
-	print(row.format("Binary Files", \
+	summary += row.format("Binary Files", \
 	counts['bin'][notinarc], \
 	trunc(sizes['bin'][notinarc]/1000000), \
 	counts['bin'][inarc], \
 	trunc(sizes['bin'][inarcunc]/1000000), \
-	trunc(sizes['bin'][inarccomp]/1000000)))
+	trunc(sizes['bin'][inarccomp]/1000000))
 
-	print(row.format("Other Files", \
+	summary += row.format("Other Files", \
 	counts['other'][notinarc], \
 	trunc(sizes['other'][notinarc]/1000000), \
 	counts['other'][inarc], \
 	trunc(sizes['other'][inarcunc]/1000000), \
-	trunc(sizes['other'][inarccomp]/1000000)))
+	trunc(sizes['other'][inarccomp]/1000000))
 
-	print(row.format("Large Files (>{:1d}MB)".format(trunc(largesize/1000000)), \
+	summary += row.format("Package Mgr Files", \
+	counts['det'][notinarc], \
+	trunc(sizes['det'][notinarc]/1000000), \
+	counts['det'][inarc], \
+	trunc(sizes['det'][inarcunc]/1000000), \
+	trunc(sizes['det'][inarccomp]/1000000))
+
+	summary += row.format("Large Files (>{:1d}MB)".format(trunc(largesize/1000000)), \
 	counts['large'][notinarc], \
 	trunc(sizes['large'][notinarc]/1000000), \
 	counts['large'][inarc], \
 	trunc(sizes['large'][inarcunc]/1000000), \
-	trunc(sizes['large'][inarccomp]/1000000)))
+	trunc(sizes['large'][inarccomp]/1000000))
 
-	print(row.format("Huge Files (>{:2d}MB)".format(trunc(hugesize/1000000)), \
+	summary += row.format("Huge Files (>{:2d}MB)".format(trunc(hugesize/1000000)), \
 	counts['huge'][notinarc], \
 	trunc(sizes['huge'][notinarc]/1000000), \
 	counts['huge'][inarc], \
 	trunc(sizes['huge'][inarcunc]/1000000), \
-	trunc(sizes['huge'][inarccomp]/1000000)))
-	print("--------------------  --------------   --------------   -------------   -------------   -------------")
+	trunc(sizes['huge'][inarccomp]/1000000))
 
-	print(row.format("All Files (Scan size)", counts['file'][notinarc]+counts['arc'][notinarc], \
+	summary += "--------------------  --------------   --------------   -------------   -------------   -------------\n"
+
+	summary += row.format("All Files (Scan size)", counts['file'][notinarc]+counts['arc'][notinarc], \
 	trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000), \
 	counts['file'][inarc]+counts['arc'][inarc], \
 	trunc((sizes['file'][inarcunc]+sizes['arc'][inarcunc])/1000000), \
-	trunc((sizes['file'][inarccomp]+sizes['arc'][inarccomp])/1000000)))
+	trunc((sizes['file'][inarccomp]+sizes['arc'][inarccomp])/1000000))
 
-	print("")
+	summary += rep + "\n\n"
 
-def signature_process(folder, repfile):
+	print(summary)
+	if f:
+		f.write(summary)
+
+def signature_process(folder, f):
 	global recs_critical
 	global recs_important
 	global recs_other
 
-	print("SIGNATURE SCAN ANALYSIS:")
-	if repfile:
-		try:
-			f = open(repfile, "a")
-		except Exception as e:
-			print('ERROR: Unable to open output report file \n' + str(e))
-			return
-	else:
-		f = None
+	#print("SIGNATURE SCAN ANALYSIS:")
 
 	# Find duplicates without expanding archives - to avoid processing dups
 	print("- Processing folders     ", end="", flush=True)
@@ -588,48 +611,51 @@ def signature_process(folder, repfile):
 
 	# Produce Recommendations
 	if sizes['file'][notinarc]+sizes['arc'][notinarc] > 5000000000:
-		recs_critical += "- CRITICAL: Overall scan size ({:>,d} MB) is too large\n" + \
-		"	Impact: Scan will fail\n" + \
-		"	Action: Ignore folders or remove large files\n".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000))
+		recs_critical += "- CRITICAL: Overall scan size ({:>,d} MB) is too large\n".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000)) + \
+		"	Impact:	Scan will fail\n" + \
+		"	Action:	Ignore folders or remove large files\n"
 	elif sizes['file'][notinarc]+sizes['arc'][notinarc] > 2000000000:
-		recs_important += "- IMPORTANT: Overall scan size ({:>,d} MB) is large\n" + \
-		"	Impact: Will impact Capacity license usage\n" + \
-		"	Action: Ignore folders or remove large files\n".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000))
+		recs_important += "- IMPORTANT: Overall scan size ({:>,d} MB) is large\n".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000)) + \
+		"	Impact:	Will impact Capacity license usage\n" + \
+		"	Action:	Ignore folders or remove large files\n"
 
 	if counts['file'][notinarc]+counts['file'][inarc] > 2000000:
-		recs_important += "- IMPORTANT: Overall number of files ({:>,d}) is very large\n" + \
-		"	Impact: Scan time could be VERY long\n" + \
-		"	Action: Ignore folders or split project (scan sub-projects)\n".format(trunc((counts['file'][notinarc]+sizes['file'][inarc])))
+		recs_important += "- IMPORTANT: Overall number of files ({:>,d}) is very large\n".format(trunc((counts['file'][notinarc]+sizes['file'][inarc]))) + \
+		"	Impact:	Scan time could be VERY long\n" + \
+		"	Action:	Ignore folders or split project (scan sub-projects)\n"
 	elif counts['file'][notinarc]+counts['file'][inarc] > 500000:
-		recs_other += "- INFORMATION: Overall number of files ({:>,d}) is large\n" + \
-		"	Impact: Scan time could be long\n" + \
-		"	Action: Ignore folders or split project (scan sub-projects)\n".format(trunc((counts['file'][notinarc]+sizes['file'][inarc])))
+		recs_other += "- INFORMATION: Overall number of files ({:>,d}) is large\n".format(trunc((counts['file'][notinarc]+sizes['file'][inarc])) + \
+		"	Impact:	Scan time could be long\n" + \
+		"	Action:	Ignore folders or split project (scan sub-projects)\n")
 
 	#
-	# Need to add check for nothing to scan (no pm files and no supported scan files)
-	# Need to add check for pm scan only
+	# Need to add check for nothing to scan (no supported scan files)
+	if counts['src'][notinarc]+counts['src'][inarc]+counts['jar'][notinarc]+counts['jar'][inarc]+counts['other'][notinarc]+counts['other'][inarc] == 0:
+		recs_other += "- INFORMATION: No source, jar or other files found\n".format(trunc((counts['file'][notinarc]+sizes['file'][inarc]))) + \
+		"	Impact:	Scan may not detect any OSS from files (dependencies only)\n" + \
+		"	Action:	Check scan location is correct\n"
 
 	if sizes['bin'][notinarc]+sizes['bin'][inarc] > 20000000:
-		recs_important += "- IMPORTANT: Large amount of data ({:>,d} MB) in {} binary files found\n" + \
+		recs_important += "- IMPORTANT: Large amount of data ({:>,d} MB) in {} binary files found\n".format(trunc((sizes['bin'][notinarc]+sizes['bin'][inarc])/1000000), len(bin_list)) + \
 		"	Impact:	Binary files not analysed by standard scan,\n" + \
 		"		will impact Capacity license usage\n" + \
 		"	Action:	Remove files or ignore folders, also consider zipping\n" + \
-		"		binary files and using Binary scan\n".format(trunc((sizes['bin'][notinarc]+sizes['bin'][inarc])/1000000), len(bin_list))
+		"		binary files and using Binary scan\n"
 
 	if size_dirdups > 20000000:
-		recs_important += "- IMPORTANT: Large amount of data ({:,d} MB) in {:,d} duplicate folders\n" + \
+		recs_important += "- IMPORTANT: Large amount of data ({:,d} MB) in {:,d} duplicate folders\n".format(trunc(size_dirdups/1000000), len(dup_dir_dict)) + \
 		"	Impact:	Scan capacity potentially utilised without detecting additional\n" + \
 		"		components, will impact Capacity license usage\n" + \
-		"	Action:	Remove or ignore duplicate folders\n".format(trunc(size_dirdups/1000000), len(dup_dir_dict))
+		"	Action:	Remove or ignore duplicate folders\n"
 		#print("    Example .bdignore file:")
 		#for apath, bpath in dup_dir_dict.items():
 		#	print("    {}".format(bpath))
 		#print("")
 	if size_dups > 20000000:
-		recs_important += "- IMPORTANT: Large amount of data ({:,d} MB) in {:,d} duplicate files\n" + \
+		recs_important += "- IMPORTANT: Large amount of data ({:,d} MB) in {:,d} duplicate files\n".format(trunc(size_dups/1000000), len(dup_large_dict)) + \
 		"	Impact:	Scan capacity potentially utilised without detecting additional\n" + \
 		"		components, will impact Capacity license usage\n" + \
-		"	Action: Remove or ignore duplicate folders\n".format(trunc(size_dups/1000000), len(dup_large_dict))
+		"	Action:	Remove or ignore duplicate folders\n"
 		#for apath, bpath in dup_large_dict.items():
 		#	if dup_dir_dict.get(os.path.dirname(apath)) == None and dup_dir_dict.get(os.path.dirname(bpath)) == None:
 		#		print("    {}".format(bpath))
@@ -637,40 +663,33 @@ def signature_process(folder, repfile):
 
 	check_singlefiles(f)
 
-	if f:
-		f.close()
-
 	print("")
 
-def detector_process(folder, repfile):
+def detector_process(folder, f):
 	import shutil
 
 	global recs_critical
 	global recs_important
 	global recs_other
+	global rep
 
-	if repfile:
-		try:
-			f = open(repfile, "a")
-		except Exception as e:
-			print('ERROR: Unable to open output report file \n' + str(e))
-			return
-	else:
-		f = None
-
-	print("PACKAGE MANAGER FILES:")
-	print("- Total discovered:	{}".format(len(det_dict)))
+	rep = "\nPACKAGE MANAGER FILES:\n" + \
+	"- Total discovered:	{}\n".format(len(det_dict))
 
 	if f:
 		f.write("PROJECT FILES FOUND:\n")
 
+	det_depth1 = 0
+	det_other = 0
+	cmds_missing1 = ""
+	cmds_missingother = ""
+	cmds_missing_list = []
+	det_max_depth = 0
+	det_min_depth = 100
+	det_in_arc = 0
 	if len(det_dict) > 0:
-		det_depth1 = 0
-		det_other = 0
-		det_max_depth = 0
-		det_min_depth = 100
-		det_in_arc = 0
 		for detpath, depth in det_dict.items():
+			command_exists = False
 			if detpath.find("##") > 0:
 				# in archive
 				det_in_arc += 1
@@ -689,67 +708,138 @@ def detector_process(folder, repfile):
 					exes = detectors_file_dict[fname]
 				elif os.path.splitext(fname)[1] in detectors_ext_dict.keys():
 					exes = detectors_ext_dict[os.path.splitext(fname)[1]]
-				command_exists = False
+				missing_cmds = ""
 				for exe in exes:
 					if shutil.which(exe) is not None:
 						command_exists = True
-				if not command_exists:
-					
+					else:
+						if exe not in cmds_missing_list:
+							cmds_missing_list.append(exe)
+							if missing_cmds:
+								missing_cmds += " OR " + exe
+							else:
+								missing_cmds = exe
 				if f:
-					f.write("{}\n".format(det))
+					f.write("{}\n".format(detpath))
 
-		print("- In invocation folder:	{}".format(det_depth1))
-		print("- In sub-folders:	{}".format(det_other))
-		print("- Maximum folder depth:	{}".format(det_max_depth))
-		print("- In archives:	{}\n".format(det_in_arc))
+				if not command_exists and missing_cmds:
+					if depth == 1:
+						if cmds_missing1:
+							cmds_missing1 += " AND " + missing_cmds
+						else:
+							cmds_missing1 = missing_cmds
+					else:
+						if cmds_missingother:
+							cmds_missingother += " AND " + missing_cmds
+						else:
+							cmds_missingother = missing_cmds
 
-			if not command_exists:
-				print("Program {} not found for project file {}".format(exes, det))
-				commands_missing = True
+		rep += "- In invocation folder:	{}\n".format(det_depth1)
+		rep += "- In sub-folders:	{}\n".format(det_other)
+		rep += "- Maximum folder depth:	{}\n".format(det_max_depth)
+		rep += "- In archives:	{}\n".format(det_in_arc)
 
-		if det_depth1 == 0:
-			recs_critical += "- CRITICAL: No package manager files found in invocation folder\n" + \
-			"	Impact:	Dependency scan will not be run\n" + \
-			"	Action: Specify --detect.detector.depth={}\n".format(det_min_depth)
+	if det_depth1 == 0 and det_other > 0:
+		recs_important += "- IMPORTANT: No package manager files found in invocation folder but do exist in sub-folders\n" + \
+		"	Impact:	Dependency scan will not be run\n" + \
+		"	Action:	Specify --detect.detector.depth={}\n".format(det_min_depth)
 
-		if commands_missing:
-			recs_critical += "- CRITICAL: Package manager programs missing \n" + \
-			"	Impact:	Dependency \n" + \
-			"	Action: Consider specifying --detect.detector.depth={}\n".format(det_max_depth)
+	if det_depth1 == 0 and det_other == 0:
+		recs_other += "- INFORMATION: No package manager files found in project at all\n" + \
+		"	Impact:	No dependency scan will be performed\n" + \
+		"	Action:	This may be expected, but ensure you are scanning the correct location\n"
 
-		if det_max_depth > det_min_depth :
-			recs_important += "- IMPORTANT: Package manager files found in sub-folders\n" + \
-			"	Impact:	Sub-project dependencies may be missed from scan\n" + \
-			"	Action: Consider specifying --detect.detector.depth={}\n".format(det_max_depth)
+	if cmds_missing1:
+		recs_critical += "- CRITICAL: Package manager programs ({}) missing for package files in invocation folder\n".format(cmds_missing1) + \
+		"	Impact:	Scan will fail\n" + \
+		"	Action:	Either install package manager programs or\n" + \
+		"		consider specifying --detect.detector.buildless=true\n"
 
-	if f:
-		f.write("\n")
-		f.close()
+	if cmds_missingother:
+		recs_important += "- IMPORTANT: Package manager programs ({}) missing for package files in sub-folders\n".format(cmds_missingother) + \
+		"	Impact:	Dependency \n" + \
+		"	Action:	Either install package manager programs or\n" + \
+		"		consider specifying --detect.detector.buildless=true\n"
+
+	if counts['det'][inarc] > 0:
+		recs_important += "- IMPORTANT: Package manager files found in archives\n" + \
+		"	Impact:	Dependency scan not performed for projects in archives\n" + \
+		"	Action:	Extract zip archives and rescan\n"
 
 	return
 
-def print_recs():
+def print_recs(critical_only, f):
 	global recs_critical
 	global recs_important
 	global recs_other
+	global messages
+
+	if f:
+		f.write(messages + "\n")
 
 	print("RECOMMENDATIONS:")
+	if f:
+		f.write("\nRECOMMENDATIONS:\n")
+
 	if recs_critical:
 		print(recs_critical)
+		if f:
+			f.write(recs_critical)
 
-	if recs_important:
+	if recs_important and not critical_only:
 		print(recs_important)
+		if f:
+			f.write(recs_important)
 
-	if recs_other:
+	if recs_other and not critical_only:
 		print(recs_other)
+		if f:
+			f.write(recs_other)
 
+	if (not recs_critical and not recs_important and not recs_other) or (critical_only and not recs_critical):
+		print("- None")
+		if f:
+			f.write("None\n")
+
+	if f:
+		print("Further information in output report file")
+	else:
+		print("Use '-r repfile' to produce report file with more information")
+
+
+
+def check_prereqs():
+	import subprocess
+	import re
+	import shutil
+
+	global recs_critical
+	global recs_important
+	global recs_other
+	global messages
+
+	# Check java
+	if shutil.which("java") is None:
+		recs_critical += "- CRITICAL: Java is not installed or on the PATH\n" + \
+		"	Impact:	Detect program will fail\n" + \
+		"	Action:	Install Java 1.8 or 1.11\n"
+	else:
+		javaversion = subprocess.check_output(['java', '-version'], stderr=subprocess.STDOUT)
+		if javaversion:
+			version_number = javaversion.decode("utf-8").splitlines()[0].split()[-1].strip('"')
+			major, minor, _ = version_number.split('.')
+			if major != "1" or (major == "1" and (minor != "8" and minor != "11")):
+				recs_critical += "- CRITICAL: Java version {} is not supported by Detect\n".format(version_number) + \
+				"	Impact:	Scan will fail\n" + \
+				"	Action:	Install Java or OpenJDK version 1.8 or 1.11\n"
 
 parser = argparse.ArgumentParser(description='Examine files/folders to determine scan recommendations', prog='detect_advisor')
 
 parser.add_argument("scanfolder", help="Project folder to analyse")
 parser.add_argument("-r", "--report", help="Output report file")
-parser.add_argument("-d", "--detectors_only", help="Check for detector files and prerequisites only",default=False)
-parser.add_argument("-s", "--signature_only", help="Check for files and folders for signature scan only",default=False)
+parser.add_argument("-d", "--detectors_only", help="Check for detector files and prerequisites only",action='store_true')
+parser.add_argument("-s", "--signature_only", help="Check for files and folders for signature scan only",action='store_true')
+parser.add_argument("-c", "--critical_only", help="Only show critical issues which will causes detect to fail",action='store_true')
 
 args = parser.parse_args()
 
@@ -764,6 +854,7 @@ if args.report and os.path.exists(args.report):
 recs_critical = ""
 recs_important = ""
 recs_other = ""
+rep = ""
 
 print("\nPROCESSING:")
 
@@ -773,14 +864,30 @@ print("- Reading hierarchy      .....", end="", flush=True)
 process_dir(args.scanfolder, 0)
 print(" Done")
 
-print_summary()
+if args.report:
+	try:
+		f = open(args.report, "a")
+	except Exception as e:
+		print('ERROR: Unable to open output report file \n' + str(e))
+		exit(3)
+else:
+	f = None
 
 if not args.signature_only:
 	#detector_process(os.path.abspath(args.scanfolder), args.report)
-	detector_process(args.scanfolder, args.report)
+	detector_process(args.scanfolder, f)
 
 if not args.detectors_only:
 	#signature_process(os.path.abspath(args.scanfolder), args.report)
-	signature_process(args.scanfolder, args.report)
+	signature_process(args.scanfolder, f)
 
-print_recs()
+if not args.critical_only:
+	print_summary(f)
+
+check_prereqs()
+
+print_recs(args.critical_only, f)
+
+if f:
+	f.write("\n")
+	f.close()
