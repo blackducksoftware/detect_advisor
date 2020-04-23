@@ -670,8 +670,8 @@ def detector_process(folder, repfile):
 		det_max_depth = 0
 		det_min_depth = 100
 		det_in_arc = 0
-		for det, depth in det_dict.items():
-			if det.find("##") > 0:
+		for detpath, depth in det_dict.items():
+			if detpath.find("##") > 0:
 				# in archive
 				det_in_arc += 1
 			else:
@@ -683,21 +683,8 @@ def detector_process(folder, repfile):
 					det_max_depth = depth
 				if depth < det_min_depth:
 					det_min_depth = depth
-				if f:
-					f.write("{}\n".format(det))
-
-		print("- In invocation folder:	{}".format(det_depth1))
-		print("- In sub-folders:	{}".format(det_other))
-		print("- Maximum folder depth:	{}".format(det_max_depth))
-		print("- In archives:	{}\n".format(det_in_arc))
-
-		det_exes1_missing_list = []
-		det_exes2_missing_list = []
-		for det, depth in det_dict.items():
-			if det.find("##") == -1:
-				#
-				# Check if det exe exists
-				fname = os.path.basename(det)
+				fname = os.path.basename(detpath)
+				exes = ""
 				if fname in detectors_file_dict.keys():
 					exes = detectors_file_dict[fname]
 				elif os.path.splitext(fname)[1] in detectors_ext_dict.keys():
@@ -706,12 +693,15 @@ def detector_process(folder, repfile):
 				for exe in exes:
 					if shutil.which(exe) is not None:
 						command_exists = True
-					if depth == 1:
-						if exe not in det_exes1_list:
-							det_exes1_list.append(exe)
-					else:
-						if exe not in det_exes1_list:
-							det_exes2_list.append(exe)
+				if not command_exists:
+					
+				if f:
+					f.write("{}\n".format(det))
+
+		print("- In invocation folder:	{}".format(det_depth1))
+		print("- In sub-folders:	{}".format(det_other))
+		print("- Maximum folder depth:	{}".format(det_max_depth))
+		print("- In archives:	{}\n".format(det_in_arc))
 
 			if not command_exists:
 				print("Program {} not found for project file {}".format(exes, det))
