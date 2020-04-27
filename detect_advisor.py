@@ -19,35 +19,9 @@ binext_list = ['.dll', '.obj', '.o', '.a', '.lib', '.iso', '.qcow2', '.vmdk', '.
 arcext_list = ['.zip', '.gz', '.tar', '.xz', '.lz', '.bz2', '.7z', '.rar', '.rar', \
 '.cpio', '.Z', '.lz4', '.lha', '.arj']
 jarext_list = ['.jar', '.ear', '.war']
+lic_list = ['LICENSE', 'LICENSE.txt', 'notice.txt', 'license.txt', 'license.html', 'NOTICE', 'NOTICE.txt']
 supported_zipext_list = jarext_list
 supported_zipext_list.append('.zip')
-
-# detectors_dict = {
-# 'Bitbake': {'exe': ['bitbake'], 'files':['build.env']},
-# 'Clang': {'exe': ['clang'], 'files':['compile_commands.json']},
-# 'Cocoapods': {'exe': [''], 'files':['Podfile.lock']},
-# 'Conda': {'exe': ['conda'], 'files':['environment.yml']},
-# 'Cpan': {'exe': ['cpan'], 'files':['Makefile.PL']},
-# 'Cran': {'exe': ['rtools'], 'files':['packrat.lock']},
-# 'Go Dep': {'exe': ['go'], 'files':['Gopkg.lock']},
-# 'Go Gradle': {'exe': ['go'], 'files':['gogradle.lock']},
-# 'Go Mod': {'exe': ['go'], 'files':['go.mod']},
-# 'Go Vendor': {'exe': ['go'], 'files':['vendor.json']},
-# 'Go Vndr': {'exe': ['go'], 'files':['vendor.conf']},
-# 'Gradle': {'exe': ['gradlew','gradle'], 'files':['build.gradle','build.gradle.kts']},
-# 'Hex': {'exe': ['rebar3'], 'files':['rebar.config']},
-# 'Maven': {'exe': ['mvnw','mvn'], 'files':['pom.xml','pom.groovy']},
-# 'Npm': {'exe': ['npm'], 'files':['node_modules','package.json','package-lock.json','npm-shrinkwrap.json']},
-# 'NuGet': {'exe': ['dotnet'], 'files':['*.csproj','*.fsproj','*.vbproj','*.asaproj','*.dcproj','*.shproj','*.ccproj','*.sfproj','*.njsproj','*.vcxproj','*.vcproj','*.xproj','*.pyproj','*.hiveproj','*.pigproj','*.jsproj','*.usqlproj','*.deployproj','*.msbuildproj','*.sqlproj','*.dbproj','*.rproj','*.sln']},
-# 'Packagist': {'exe': [''], 'files':['composer.lock','composer.json']},
-# 'Pear': {'exe': ['pear'], 'files':['package.xml']},
-# 'Pip Env': {'exe': ['python','python3','pipenv'], 'files':['Pipfile','Pipfile.lock']},
-# 'Pip': {'exe': ['python','python3','pip'], 'files':['setup.py','requirements.txt']},
-# 'RubyGems': {'exe': [''], 'files':['Gemfile.lock']},
-# 'SBT': {'exe': ['sbt'], 'files':['build.sbt']},
-# 'Swift': {'exe': ['swift'], 'files':['Package.swift']},
-# 'Yarn': {'exe': [''], 'files':['yarn.lock','package.json']}
-# }
 
 detectors_file_dict = {
 'build.env': ['bitbake'],
@@ -109,7 +83,7 @@ detectors_ext_dict = {
 '.sln': ['dotnet']
 }
 
-largesize = 1000000
+largesize = 5000000
 hugesize = 20000000
 
 notinarc = 0
@@ -131,7 +105,8 @@ counts = {
 'det' : [0,0],
 'large' : [0,0],
 'huge' : [0,0],
-'other' : [0,0]
+'other' : [0,0],
+'lic' : [0,0]
 }
 
 sizes = {
@@ -149,11 +124,14 @@ sizes = {
 
 src_list = []
 bin_list = []
+bin_large_list = []
 large_list = []
 huge_list = []
 arc_list = []
 jar_list = []
 other_list = []
+
+bdignore_list = []
 
 det_dict = {}
 
@@ -272,10 +250,14 @@ def checkfile(name, path, size, size_comp, dirdepth, inarc):
 				sizes['large'][inarcunc] += size
 				sizes['large'][inarccomp] += size_comp
 
-	if os.path.basename(name) in detectors_file_dict.keys():
+	if os.path.basename(name) in detectors_file_dict.keys() and not path.find("node_modules"):
 		if not inarc:
 			det_dict[path] = dirdepth
 		ftype = 'det'
+	elif os.path.basename(name) in lic_list:
+		other_list.append(path)
+		ftype = 'other'
+		counts['lic'][notinarc] += 1
 	elif (ext != ""):
 		if ext in detectors_ext_dict.keys():
 			if not inarc:
@@ -289,6 +271,8 @@ def checkfile(name, path, size, size_comp, dirdepth, inarc):
 			ftype = 'jar'
 		elif ext in binext_list:
 			bin_list.append(path)
+			if size > largesize:
+				bin_large_list.append(path)
 			ftype = 'bin'
 		elif ext in arcext_list:
 			arc_list.append(path)
@@ -310,16 +294,19 @@ def checkfile(name, path, size, size_comp, dirdepth, inarc):
 			sizes[ftype][inarccomp] += size
 		else:
 			sizes[ftype][inarccomp] += size_comp
-
+	return(ftype)
 
 def process_dir(path, dirdepth):
 	dir_size = 0
 	dir_entries = 0
 	filenames_string = ""
 	global messages
+	global bdignore
 
 	dir_dict[path] = {}
 	dirdepth += 1
+
+	all_bin = False
 	try:
 		for entry in os.scandir(path):
 			dir_entries += 1
@@ -328,7 +315,12 @@ def process_dir(path, dirdepth):
 				counts['dir'][notinarc] += 1
 				dir_size += process_dir(entry.path, dirdepth)
 			else:
-				checkfile(entry.name, entry.path, entry.stat(follow_symlinks=False).st_size, 0, dirdepth, False)
+				ftype = checkfile(entry.name, entry.path, entry.stat(follow_symlinks=False).st_size, 0, dirdepth, False)
+				if ftype == 'bin':
+					if dir_entries == 1:
+						all_bin = True
+				else:
+					all_bin = False
 				ext = os.path.splitext(entry.name)[1]
 				if ext in supported_zipext_list:
 					process_zip(entry.path, 0, dirdepth)
@@ -342,13 +334,15 @@ def process_dir(path, dirdepth):
 	dir_dict[path]['size'] = dir_size
 	dir_dict[path]['depth'] = dirdepth
 	dir_dict[path]['filenamesstring'] = filenames_string
+	if all_bin:
+		bdignore += path + "\n"
 	return dir_size
 
 def process_largefiledups(f):
 	import filecmp
 
 	if f:
-		f.write("\nDUPLICATE LARGE FILES:\n")
+		f.write("\nLARGE DUPLICATE FILES:\n")
 
 	fcount = 0
 	total_dup_size = 0
@@ -390,7 +384,7 @@ def process_largefiledups(f):
 						total_dup_size += asize
 						count_dups += 1
 						if f:
-							f.write("- Dup large file - {}, {} (size {}MB)\n".format(apath,cpath,trunc(asize/1000000)))
+							f.write("- Large Duplicate file - {}, {} (size {}MB)\n".format(apath,cpath,trunc(asize/1000000)))
 	return(count_dups, total_dup_size)
 
 def process_dirdups(f):
@@ -401,14 +395,14 @@ def process_dirdups(f):
 	tmp_dup_dir_dict = {}
 
 	if f:
-		f.write("\nDUPLICATE FOLDERS:\n")
+		f.write("\nLARGE DUPLICATE FOLDERS:\n")
 
 	ditems = len(dir_dict)
 	for apath, adict in dir_dict.items():
 		dcount += 1
 		if dcount % ((ditems//6) + 1) == 0:
 			print(".", end="", flush=True)
-		if adict['num_entries'] == 0 or adict['size'] < 1000000:
+		if adict['num_entries'] == 0 or adict['size'] < hugesize:
 			continue
 		dupmatch = False
 		for cpath, cdict in dir_dict.items():
@@ -447,14 +441,15 @@ def process_dirdups(f):
 			dup_dir_dict[xpath] = ypath
 			count_dupdirs += 1
 			size_dupdirs += dir_dict[xpath]['size']
-			if f:
-				f.write("- Duplicate folder - {}, {} (size {}MB)\n".format(xpath,ypath, \
+			if f and dir_dict[xpath]['size'] > hugesize:
+				f.write("- Large Duplicate folder - {}, {} (size {}MB)\n".format(xpath,ypath, \
 				trunc(dir_dict[xpath]['size']/1000000)))
 
 	return(count_dupdirs, size_dupdirs)
 
 def check_singlefiles(f):
-	global recs_other
+	global recs_critical, recs_important, recs_other
+	global cli_critical, cli_important, cli_other
 
 	# Check for singleton js & other single files
 	sfmatch = False
@@ -481,10 +476,12 @@ def check_singlefiles(f):
 		"    Impact:  OSS components within JS files may not be detected\n" + \
 		"    Action:  Consider specifying Single file matching\n" + \
 		"             (--detect.blackduck.signature.scanner.individual.file.matching=SOURCE)"
-		if f:
-			f.write("\nSINGLE JS FILES:\n")
-			for thisfile in sf_list:
-				f.write("- {}\n".format(thisfile))
+		if cli_other.find("upload.source.mode") < 0:
+			cli_other += "--detect.blackduck.signature.scanner.upload.source.mode=true "
+		#if f:
+		#	f.write("\nSINGLE JS FILES:\n")
+		#	for thisfile in sf_list:
+		#		f.write("- {}\n".format(thisfile))
 
 def get_crc(myfile):
 	import zlib
@@ -498,7 +495,7 @@ def get_crc(myfile):
 				crcvalue = zlib.crc32(buffr, crcvalue)
 				buffr = afile.read(buffersize)
 	except:
-		messages += "ERROR: Unable to open file {} to calculate CRC\n".format(myfile)
+		messages += "WARNING: Unable to open file {} to calculate CRC\n".format(myfile)
 		return(0)
 	return(crcvalue)
 
@@ -597,9 +594,9 @@ def print_summary(f, critical_only):
 		f.write(summary)
 
 def signature_process(folder, f):
-	global recs_critical
-	global recs_important
-	global recs_other
+	global recs_critical, recs_important, recs_other
+	global cli_critical, cli_important, cli_other
+	global bdignore
 
 	#print("SIGNATURE SCAN ANALYSIS:")
 
@@ -622,14 +619,14 @@ def signature_process(folder, f):
 		"    Impact:  Will impact Capacity license usage\n" + \
 		"    Action:  Ignore folders or remove large files\n"
 
-	if counts['file'][notinarc]+counts['file'][inarc] > 2000000:
+	if counts['file'][notinarc]+counts['file'][inarc] > 1000000:
 		recs_important += "- IMPORTANT: Overall number of files ({:>,d}) is very large\n".format(trunc((counts['file'][notinarc]+sizes['file'][inarc]))) + \
 		"    Impact:  Scan time could be VERY long\n" + \
 		"    Action:  Ignore folders or split project (scan sub-projects)\n"
-	elif counts['file'][notinarc]+counts['file'][inarc] > 500000:
-		recs_other += "- INFORMATION: Overall number of files ({:>,d}) is large\n".format(trunc((counts['file'][notinarc]+sizes['file'][inarc])) + \
+	elif counts['file'][notinarc]+counts['file'][inarc] > 200000:
+		recs_other += "- INFORMATION: Overall number of files ({:>,d}) is large\n".format(trunc((counts['file'][notinarc]+sizes['file'][inarc]))) + \
 		"    Impact:  Scan time could be long\n" + \
-		"    Action:  Ignore folders or split project (scan sub-projects)\n")
+		"    Action:  Ignore folders or split project (scan sub-projects)\n"
 
 	#
 	# Need to add check for nothing to scan (no supported scan files)
@@ -640,28 +637,49 @@ def signature_process(folder, f):
 
 	if sizes['bin'][notinarc]+sizes['bin'][inarc] > 20000000:
 		recs_important += "- IMPORTANT: Large amount of data ({:>,d} MB) in {} binary files found\n".format(trunc((sizes['bin'][notinarc]+sizes['bin'][inarc])/1000000), len(bin_list)) + \
-		"    Impact:  Binary files not analysed by standard scan,will impact Capacity license usage\n" + \
+		"    Impact:  Binary files not analysed by standard scan, will impact Capacity license usage\n" + \
 		"    Action:  Remove files or ignore folders, also consider zipping\n" + \
 		"             binary files and using Binary scan\n"
+		if f:
+			f.write("\nLARGE BINARY FILES:\n")
+			for bin in bin_large_list:
+				f.write("    {}\n".format(bin))
+			f.write("\n")
 
 	if size_dirdups > 20000000:
 		recs_important += "- IMPORTANT: Large amount of data ({:,d} MB) in {:,d} duplicate folders\n".format(trunc(size_dirdups/1000000), len(dup_dir_dict)) + \
 		"    Impact:  Scan capacity potentially utilised without detecting additional\n" + \
 		"             components, will impact Capacity license usage\n" + \
 		"    Action:  Remove or ignore duplicate folders\n"
-		#print("    Example .bdignore file:")
-		#for apath, bpath in dup_dir_dict.items():
-		#	print("    {}".format(bpath))
-		#print("")
+		for apath, bpath in dup_dir_dict.items():
+			bdignore += bpath + "\n"
+
 	if size_dups > 20000000:
 		recs_important += "- IMPORTANT: Large amount of data ({:,d} MB) in {:,d} duplicate files\n".format(trunc(size_dups/1000000), len(dup_large_dict)) + \
 		"    Impact:  Scan capacity potentially utilised without detecting additional\n" + \
 		"             components, will impact Capacity license usage\n" + \
-		"    Action:  Remove or ignore duplicate folders\n"
+		"    Action:  Remove duplicate files or ignore folders\n"
 		#for apath, bpath in dup_large_dict.items():
 		#	if dup_dir_dict.get(os.path.dirname(apath)) == None and dup_dir_dict.get(os.path.dirname(bpath)) == None:
 		#		print("    {}".format(bpath))
 		#print("")
+
+	if counts['lic'][notinarc] > 10:
+		recs_other += "- INFORMATION: License or notices files found\n" + \
+		"    Impact:  Local license text may need to be scanned\n" + \
+		"    Action:  Add options --detect.blackduck.signature.scanner.license.search=true\n" + \
+		"             and optionally --detect.blackduck.signature.scanner.upload.source.mode=true\n"
+		cli_other += "--detect.blackduck.signature.scanner.license.search=true "
+		if cli_other.find("upload.source.mode") < 0:
+			cli_other += "--detect.blackduck.signature.scanner.upload.source.mode=true "
+
+	if counts['src'][notinarc]+counts['src'][inarc] > 10:
+		recs_other += "- INFORMATION: Source files found for which Snippet analysis supported\n" + \
+		"    Impact:  Snippet analysis can discover copied OSS source files and functions\n" + \
+		"    Action:  Add options --detect.blackduck.signature.scanner.snippet.matching=SNIPPET_MATCHING\n"
+		cli_other += "--detect.blackduck.signature.scanner.snippet.matching=SNIPPET_MATCHING "
+		if cli_other.find("upload.source.mode") < 0:
+			cli_other += "--detect.blackduck.signature.scanner.upload.source.mode=true XXXX"
 
 	check_singlefiles(f)
 
@@ -670,10 +688,9 @@ def signature_process(folder, f):
 def detector_process(folder, f):
 	import shutil
 
-	global recs_critical
-	global recs_important
-	global recs_other
+	global recs_critical, recs_important, recs_other
 	global rep
+	global cli_critical, cli_important, cli_other
 
 	if f:
 		f.write("PROJECT FILES FOUND:\n")
@@ -746,6 +763,8 @@ def detector_process(folder, f):
 		recs_important += "- IMPORTANT: No package manager files found in invocation folder but do exist in sub-folders\n" + \
 		"    Impact:  Dependency scan will not be run\n" + \
 		"    Action:  Specify --detect.detector.depth={}\n".format(det_min_depth)
+		if cli_important.find("detector.depth") < 0:
+			cli_important += "--detect.detector.depth={} ".format(det_min_depth)
 
 	if det_depth1 == 0 and det_other == 0:
 		recs_other += "- INFORMATION: No package manager files found in project at all\n" + \
@@ -757,12 +776,15 @@ def detector_process(folder, f):
 		"    Impact:  Scan will fail\n" + \
 		"    Action:  Either install package manager programs or\n" + \
 		"             consider specifying --detect.detector.buildless=true\n"
+		cli_critical += "--detect.detector.buildless=true (OR install package managers '{}') ".format(cmds_missing1)
 
 	if cmds_missingother:
 		recs_important += "- IMPORTANT: Package manager programs ({}) missing for package files in sub-folders\n".format(cmds_missingother) + \
 		"    Impact:  The scan will fail if the scan depth is modified from the default\n" + \
 		"    Action:  Either install package manager programs or\n" + \
 		"             consider specifying --detect.detector.buildless=true\n"
+		if cli_important.find("detector.buildless") < 0:
+			cli_important += "--detect.detector.buildless=true (OR install package managers '{}') ".format(cmds_missingother)
 
 	if counts['det'][inarc] > 0:
 		recs_important += "- IMPORTANT: Package manager files found in archives\n" + \
@@ -772,9 +794,8 @@ def detector_process(folder, f):
 	return
 
 def output_recs(critical_only, f):
-	global recs_critical
-	global recs_important
-	global recs_other
+	global recs_critical, recs_important, recs_other
+	global cli_critical, cli_important, cli_other
 	global messages
 
 	if f:
@@ -787,17 +808,17 @@ def output_recs(critical_only, f):
 	if recs_critical:
 		print(recs_critical)
 	if f:
-		f.write(recs_critical)
+		f.write(recs_critical + "\n")
 
 	if recs_important and not critical_only:
 		print(recs_important)
 	if f:
-		f.write(recs_important)
+		f.write(recs_important + "\n")
 
 	if recs_other and not critical_only:
 		print(recs_other)
 	if f:
-		f.write(recs_other)
+		f.write(recs_other + "\n")
 
 	if (not recs_critical and not recs_important and not recs_other) or (critical_only and not recs_critical):
 		print("- None")
@@ -814,9 +835,10 @@ def check_prereqs():
 	import re
 	import shutil
 
-	global recs_critical
-	global recs_important
-	global recs_other
+	global recs_critical, recs_important, recs_other
+	global rep
+	global cli_critical, cli_important, cli_other
+
 	global messages
 
 	# Check java
@@ -834,6 +856,25 @@ def check_prereqs():
 				"    Impact:  Scan will fail\n" + \
 				"    Action:  Install Java or OpenJDK version 1.8 or 1.11\n"
 
+def output_cli(critical_only, f):
+	global cli_critical, cli_important, cli_other
+
+	output = "\nDETECT CLI\n" + \
+	"    MINIMUM REQUIRED OPTIONS:\n" + \
+	"        " + cli_critical + "\n"
+	print(output)
+	if f:
+		f.write(output)
+
+	output = "    OTHER IMPORTANT OPTIONS:\n" + \
+	"        " + cli_important + "\n\n" + \
+	"    OTHER POTENTIAL OPTIONS:\n" + \
+	"        " + cli_other + "\n\n"
+	if not critical_only:
+		print(output)
+	if f:
+		f.write(output)
+
 parser = argparse.ArgumentParser(description='Examine files/folders to determine scan recommendations', prog='detect_advisor')
 
 parser.add_argument("scanfolder", help="Project folder to analyse")
@@ -841,6 +882,7 @@ parser.add_argument("-r", "--report", help="Output report file")
 parser.add_argument("-d", "--detectors_only", help="Check for detector files and prerequisites only",action='store_true')
 parser.add_argument("-s", "--signature_only", help="Check for files and folders for signature scan only",action='store_true')
 parser.add_argument("-c", "--critical_only", help="Only show critical issues which will causes detect to fail",action='store_true')
+parser.add_argument("-f", "--full", help="Output full information to report file if specified",action='store_true')
 
 args = parser.parse_args()
 
@@ -856,6 +898,10 @@ recs_critical = ""
 recs_important = ""
 recs_other = ""
 rep = ""
+bdignore = ""
+cli_critical = "--blackduck.url=XXX --blackduck.api.token=YYY "
+cli_important = ""
+cli_other = ""
 
 print("\nPROCESSING:")
 
@@ -875,19 +921,24 @@ else:
 	f = None
 
 if not args.signature_only:
-	#detector_process(os.path.abspath(args.scanfolder), args.report)
-	detector_process(args.scanfolder, f)
+	if args.full:
+		detector_process(args.scanfolder, f)
+	else:
+		detector_process(args.scanfolder, None)
 
 if not args.detectors_only:
-	#signature_process(os.path.abspath(args.scanfolder), args.report)
-	signature_process(args.scanfolder, f)
-
+	if args.full:
+		signature_process(args.scanfolder, f)
+	else:
+		signature_process(args.scanfolder, None)
 
 print_summary(f, args.critical_only)
 
 check_prereqs()
 
 output_recs(args.critical_only, f)
+
+output_cli(args.critical_only, f)
 
 if f:
 	f.write("\n")
