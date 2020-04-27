@@ -49,7 +49,7 @@ The `-d` and `-s` options specify that only Dependency (Detector) or Signature s
 
 The default output contains the following sections:
 
-#SUMMARY INFO
+# SUMMARY INFO
 
 This section includes counts and size analysis for the files and folders.
 
@@ -80,7 +80,7 @@ This section includes counts and size analysis for the files and folders.
     ---------------------------------
     - Total discovered:       3329
 
-#RECOMMENDATIONS
+# RECOMMENDATIONS
 
 This section includes a list of findings
 
@@ -124,7 +124,7 @@ This section includes a list of findings
         Action:  Consider specifying Single file matching
                  (--detect.blackduck.signature.scanner.individual.file.matching=SOURCE)
 
-#DETECT CLI
+# DETECT CLI
 
 This section includes recommended CLI options for Synopsys Detect. Note that a .bdignore file may also be recommended which will be listed in the optional report file (-r repfile).
 
@@ -143,6 +143,6 @@ This section includes recommended CLI options for Synopsys Detect. Note that a .
 
     Further information in output report file 'repfile.txt'
 
-#REPORT FILE
+# REPORT FILE
 
 An optional report file can be specified (`-r repfile` or `--report repfile`). If the `-f` or `--full` option is also specified then full information will be written to the report file including lists of duplicate large files, duplicate large folders, binary files etc.
