@@ -19,6 +19,8 @@ binext_list = ['.dll', '.obj', '.o', '.a', '.lib', '.iso', '.qcow2', '.vmdk', '.
 arcext_list = ['.zip', '.gz', '.tar', '.xz', '.lz', '.bz2', '.7z', '.rar', '.rar', \
 '.cpio', '.Z', '.lz4', '.lha', '.arj']
 jarext_list = ['.jar', '.ear', '.war']
+supported_zipext_list = jarext_list
+supported_zipext_list.append('.zip')
 
 # detectors_dict = {
 # 'Bitbake': {'exe': ['bitbake'], 'files':['build.env']},
@@ -180,7 +182,7 @@ def process_nested_zip(z, zippath, zipdepth, dirdepth):
 		with zipfile.ZipFile(z2_filedata) as nz:
 			for zinfo in nz.infolist():
 				dirdepth = process_zip_entry(zinfo, zippath, dirdepth)
-				if os.path.splitext(zinfo.filename)[1] == ".zip":
+				if os.path.splitext(zinfo.filename)[1] in supported_zipext_list:
 					with nz.open(zinfo.filename) as z2:
 						process_nested_zip(z2, zippath + "##" + zinfo.filename, zipdepth, dirdepth)
 	except:
@@ -233,7 +235,7 @@ def process_zip(zippath, zipdepth, dirdepth):
 					continue
 				fullpath = zippath + "##" + zinfo.filename
 				process_zip_entry(zinfo, zippath, dirdepth)
-				if os.path.splitext(zinfo.filename)[1] == ".zip":
+				if os.path.splitext(zinfo.filename)[1] in supported_zipext_list:
 					with z.open(zinfo.filename) as z2:
 						process_nested_zip(z2, fullpath, zipdepth, dirdepth)
 	except:
@@ -328,7 +330,7 @@ def process_dir(path, dirdepth):
 			else:
 				checkfile(entry.name, entry.path, entry.stat(follow_symlinks=False).st_size, 0, dirdepth, False)
 				ext = os.path.splitext(entry.name)[1]
-				if ext == '.zip':
+				if ext in supported_zipext_list:
 					process_zip(entry.path, 0, dirdepth)
 
 				dir_size += entry.stat(follow_symlinks=False).st_size
@@ -476,9 +478,9 @@ def check_singlefiles(f):
 					sf_list.append(thisfile)
 	if sfmatch:
 		recs_other += "- INFORMATION: {} singleton .js files found\n".format(len(sf_list)) + \
-		"	Impact:	OSS components within JS files may not be detected\n" + \
-		"	Action:	Consider specifying Single file matching\n" + \
-		"		(--detect.blackduck.signature.scanner.individual.file.matching=SOURCE)"
+		"    Impact:  OSS components within JS files may not be detected\n" + \
+		"    Action:  Consider specifying Single file matching\n" + \
+		"             (--detect.blackduck.signature.scanner.individual.file.matching=SOURCE)"
 		if f:
 			f.write("\nSINGLE JS FILES:\n")
 			for thisfile in sf_list:
@@ -500,7 +502,7 @@ def get_crc(myfile):
 		return(0)
 	return(crcvalue)
 
-def print_summary(f):
+def print_summary(f, critical_only):
 	global rep
 
 	summary = "\nSUMMARY INFO:            Num Outside     Size Outside      Num Inside     Size Inside     Size Inside\n" + \
@@ -517,7 +519,7 @@ def print_summary(f):
 	trunc(sizes['file'][inarcunc]/1000000), \
 	trunc(sizes['file'][inarccomp]/1000000))
 
-	summary += row.format("Archives", \
+	summary += row.format("Archives (exc. Jars)", \
 	counts['arc'][notinarc], \
 	trunc(sizes['arc'][notinarc]/1000000), \
 	counts['arc'][inarc], \
@@ -587,9 +589,10 @@ def print_summary(f):
 	trunc((sizes['file'][inarcunc]+sizes['arc'][inarcunc])/1000000), \
 	trunc((sizes['file'][inarccomp]+sizes['arc'][inarccomp])/1000000))
 
-	summary += rep + "\n\n"
+	summary += rep + "\n"
 
-	print(summary)
+	if not critical_only:
+		print(summary)
 	if f:
 		f.write(summary)
 
@@ -612,50 +615,49 @@ def signature_process(folder, f):
 	# Produce Recommendations
 	if sizes['file'][notinarc]+sizes['arc'][notinarc] > 5000000000:
 		recs_critical += "- CRITICAL: Overall scan size ({:>,d} MB) is too large\n".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000)) + \
-		"	Impact:	Scan will fail\n" + \
-		"	Action:	Ignore folders or remove large files\n"
+		"    Impact:  Scan will fail\n" + \
+		"    Action:  Ignore folders or remove large files\n"
 	elif sizes['file'][notinarc]+sizes['arc'][notinarc] > 2000000000:
 		recs_important += "- IMPORTANT: Overall scan size ({:>,d} MB) is large\n".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000)) + \
-		"	Impact:	Will impact Capacity license usage\n" + \
-		"	Action:	Ignore folders or remove large files\n"
+		"    Impact:  Will impact Capacity license usage\n" + \
+		"    Action:  Ignore folders or remove large files\n"
 
 	if counts['file'][notinarc]+counts['file'][inarc] > 2000000:
 		recs_important += "- IMPORTANT: Overall number of files ({:>,d}) is very large\n".format(trunc((counts['file'][notinarc]+sizes['file'][inarc]))) + \
-		"	Impact:	Scan time could be VERY long\n" + \
-		"	Action:	Ignore folders or split project (scan sub-projects)\n"
+		"    Impact:  Scan time could be VERY long\n" + \
+		"    Action:  Ignore folders or split project (scan sub-projects)\n"
 	elif counts['file'][notinarc]+counts['file'][inarc] > 500000:
 		recs_other += "- INFORMATION: Overall number of files ({:>,d}) is large\n".format(trunc((counts['file'][notinarc]+sizes['file'][inarc])) + \
-		"	Impact:	Scan time could be long\n" + \
-		"	Action:	Ignore folders or split project (scan sub-projects)\n")
+		"    Impact:  Scan time could be long\n" + \
+		"    Action:  Ignore folders or split project (scan sub-projects)\n")
 
 	#
 	# Need to add check for nothing to scan (no supported scan files)
 	if counts['src'][notinarc]+counts['src'][inarc]+counts['jar'][notinarc]+counts['jar'][inarc]+counts['other'][notinarc]+counts['other'][inarc] == 0:
 		recs_other += "- INFORMATION: No source, jar or other files found\n".format(trunc((counts['file'][notinarc]+sizes['file'][inarc]))) + \
-		"	Impact:	Scan may not detect any OSS from files (dependencies only)\n" + \
-		"	Action:	Check scan location is correct\n"
+		"    Impact:  Scan may not detect any OSS from files (dependencies only)\n" + \
+		"    Action:  Check scan location is correct\n"
 
 	if sizes['bin'][notinarc]+sizes['bin'][inarc] > 20000000:
 		recs_important += "- IMPORTANT: Large amount of data ({:>,d} MB) in {} binary files found\n".format(trunc((sizes['bin'][notinarc]+sizes['bin'][inarc])/1000000), len(bin_list)) + \
-		"	Impact:	Binary files not analysed by standard scan,\n" + \
-		"		will impact Capacity license usage\n" + \
-		"	Action:	Remove files or ignore folders, also consider zipping\n" + \
-		"		binary files and using Binary scan\n"
+		"    Impact:  Binary files not analysed by standard scan,will impact Capacity license usage\n" + \
+		"    Action:  Remove files or ignore folders, also consider zipping\n" + \
+		"             binary files and using Binary scan\n"
 
 	if size_dirdups > 20000000:
 		recs_important += "- IMPORTANT: Large amount of data ({:,d} MB) in {:,d} duplicate folders\n".format(trunc(size_dirdups/1000000), len(dup_dir_dict)) + \
-		"	Impact:	Scan capacity potentially utilised without detecting additional\n" + \
-		"		components, will impact Capacity license usage\n" + \
-		"	Action:	Remove or ignore duplicate folders\n"
+		"    Impact:  Scan capacity potentially utilised without detecting additional\n" + \
+		"             components, will impact Capacity license usage\n" + \
+		"    Action:  Remove or ignore duplicate folders\n"
 		#print("    Example .bdignore file:")
 		#for apath, bpath in dup_dir_dict.items():
 		#	print("    {}".format(bpath))
 		#print("")
 	if size_dups > 20000000:
 		recs_important += "- IMPORTANT: Large amount of data ({:,d} MB) in {:,d} duplicate files\n".format(trunc(size_dups/1000000), len(dup_large_dict)) + \
-		"	Impact:	Scan capacity potentially utilised without detecting additional\n" + \
-		"		components, will impact Capacity license usage\n" + \
-		"	Action:	Remove or ignore duplicate folders\n"
+		"    Impact:  Scan capacity potentially utilised without detecting additional\n" + \
+		"             components, will impact Capacity license usage\n" + \
+		"    Action:  Remove or ignore duplicate folders\n"
 		#for apath, bpath in dup_large_dict.items():
 		#	if dup_dir_dict.get(os.path.dirname(apath)) == None and dup_dir_dict.get(os.path.dirname(bpath)) == None:
 		#		print("    {}".format(bpath))
@@ -672,9 +674,6 @@ def detector_process(folder, f):
 	global recs_important
 	global recs_other
 	global rep
-
-	rep = "\nPACKAGE MANAGER FILES:\n" + \
-	"- Total discovered:	{}\n".format(len(det_dict))
 
 	if f:
 		f.write("PROJECT FILES FOUND:\n")
@@ -734,41 +733,45 @@ def detector_process(folder, f):
 						else:
 							cmds_missingother = missing_cmds
 
-		rep += "- In invocation folder:	{}\n".format(det_depth1)
-		rep += "- In sub-folders:	{}\n".format(det_other)
-		rep += "- Maximum folder depth:	{}\n".format(det_max_depth)
-		rep += "- In archives:	{}\n".format(det_in_arc)
+		rep = "\nPACKAGE MANAGER FILES:\n" + \
+		"- In invocation folder:   {}\n".format(det_depth1) + \
+		"- In sub-folders:         {}\n".format(det_other) + \
+		"- In archives:            {}\n".format(det_in_arc) + \
+		"- Minimum folder depth:   {}\n".format(det_min_depth) + \
+		"- Maximum folder depth:   {}\n".format(det_max_depth) + \
+		"---------------------------------\n" + \
+		"- Total discovered:       {}\n".format(len(det_dict))
 
 	if det_depth1 == 0 and det_other > 0:
 		recs_important += "- IMPORTANT: No package manager files found in invocation folder but do exist in sub-folders\n" + \
-		"	Impact:	Dependency scan will not be run\n" + \
-		"	Action:	Specify --detect.detector.depth={}\n".format(det_min_depth)
+		"    Impact:  Dependency scan will not be run\n" + \
+		"    Action:  Specify --detect.detector.depth={}\n".format(det_min_depth)
 
 	if det_depth1 == 0 and det_other == 0:
 		recs_other += "- INFORMATION: No package manager files found in project at all\n" + \
-		"	Impact:	No dependency scan will be performed\n" + \
-		"	Action:	This may be expected, but ensure you are scanning the correct location\n"
+		"    Impact:  No dependency scan will be performed\n" + \
+		"    Action:  This may be expected, but ensure you are scanning the correct location\n"
 
 	if cmds_missing1:
 		recs_critical += "- CRITICAL: Package manager programs ({}) missing for package files in invocation folder\n".format(cmds_missing1) + \
-		"	Impact:	Scan will fail\n" + \
-		"	Action:	Either install package manager programs or\n" + \
-		"		consider specifying --detect.detector.buildless=true\n"
+		"    Impact:  Scan will fail\n" + \
+		"    Action:  Either install package manager programs or\n" + \
+		"             consider specifying --detect.detector.buildless=true\n"
 
 	if cmds_missingother:
 		recs_important += "- IMPORTANT: Package manager programs ({}) missing for package files in sub-folders\n".format(cmds_missingother) + \
-		"	Impact:	Dependency \n" + \
-		"	Action:	Either install package manager programs or\n" + \
-		"		consider specifying --detect.detector.buildless=true\n"
+		"    Impact:  The scan will fail if the scan depth is modified from the default\n" + \
+		"    Action:  Either install package manager programs or\n" + \
+		"             consider specifying --detect.detector.buildless=true\n"
 
 	if counts['det'][inarc] > 0:
 		recs_important += "- IMPORTANT: Package manager files found in archives\n" + \
-		"	Impact:	Dependency scan not performed for projects in archives\n" + \
-		"	Action:	Extract zip archives and rescan\n"
+		"    Impact:  Dependency scan not performed for projects in archives\n" + \
+		"    Action:  Extract zip archives and rescan\n"
 
 	return
 
-def print_recs(critical_only, f):
+def output_recs(critical_only, f):
 	global recs_critical
 	global recs_important
 	global recs_other
@@ -783,18 +786,18 @@ def print_recs(critical_only, f):
 
 	if recs_critical:
 		print(recs_critical)
-		if f:
-			f.write(recs_critical)
+	if f:
+		f.write(recs_critical)
 
 	if recs_important and not critical_only:
 		print(recs_important)
-		if f:
-			f.write(recs_important)
+	if f:
+		f.write(recs_important)
 
 	if recs_other and not critical_only:
 		print(recs_other)
-		if f:
-			f.write(recs_other)
+	if f:
+		f.write(recs_other)
 
 	if (not recs_critical and not recs_important and not recs_other) or (critical_only and not recs_critical):
 		print("- None")
@@ -805,8 +808,6 @@ def print_recs(critical_only, f):
 		print("Further information in output report file")
 	else:
 		print("Use '-r repfile' to produce report file with more information")
-
-
 
 def check_prereqs():
 	import subprocess
@@ -821,8 +822,8 @@ def check_prereqs():
 	# Check java
 	if shutil.which("java") is None:
 		recs_critical += "- CRITICAL: Java is not installed or on the PATH\n" + \
-		"	Impact:	Detect program will fail\n" + \
-		"	Action:	Install Java 1.8 or 1.11\n"
+		"    Impact:  Detect program will fail\n" + \
+		"    Action:  Install Java 1.8 or 1.11\n"
 	else:
 		javaversion = subprocess.check_output(['java', '-version'], stderr=subprocess.STDOUT)
 		if javaversion:
@@ -830,8 +831,8 @@ def check_prereqs():
 			major, minor, _ = version_number.split('.')
 			if major != "1" or (major == "1" and (minor != "8" and minor != "11")):
 				recs_critical += "- CRITICAL: Java version {} is not supported by Detect\n".format(version_number) + \
-				"	Impact:	Scan will fail\n" + \
-				"	Action:	Install Java or OpenJDK version 1.8 or 1.11\n"
+				"    Impact:  Scan will fail\n" + \
+				"    Action:  Install Java or OpenJDK version 1.8 or 1.11\n"
 
 parser = argparse.ArgumentParser(description='Examine files/folders to determine scan recommendations', prog='detect_advisor')
 
@@ -881,12 +882,12 @@ if not args.detectors_only:
 	#signature_process(os.path.abspath(args.scanfolder), args.report)
 	signature_process(args.scanfolder, f)
 
-if not args.critical_only:
-	print_summary(f)
+
+print_summary(f, args.critical_only)
 
 check_prereqs()
 
-print_recs(args.critical_only, f)
+output_recs(args.critical_only, f)
 
 if f:
 	f.write("\n")
