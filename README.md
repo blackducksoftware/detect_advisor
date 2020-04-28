@@ -101,7 +101,7 @@ This section includes counts and size analysis for the files and folders.
 
 # RECOMMENDATIONS
 
-This section includes a list of findings
+This section includes a list of findings categorised into CRITICAL (will cause Detect to fail), IMPORTANT (may impact the scope and type of scan) and INFORMATION (potential additional options subject to requirements but which will not impact scope of the standard scan) sections:
 
     RECOMMENDATIONS:
     - CRITICAL: Overall scan size (6,520 MB) is too large
@@ -165,3 +165,7 @@ This section includes recommended CLI options for Synopsys Detect. Note that a `
 # REPORT FILE
 
 An optional report file can be specified (`-r repfile` or `--report repfile`). If the `-f` or `--full` option is also specified then full information will be written to the report file including lists of duplicate large files, duplicate large folders, binary files etc.
+
+If large duplicate files or folders are identified (or folders containing only binary files), then a recommended `.bdignore` with list of folders to ignore is also produced in the report file.
+
+A list of large binary files is also produced in the report file, and you should consider sending them to Binary scan (note this a separate licensed product to standard Black Duck) by zipping into an archive, and using the Detect `--detect.binary.scan.file.path=XXX.zip` option.
