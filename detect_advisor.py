@@ -986,18 +986,20 @@ else:
 	f = None
 
 if not args.signature_only:
-	cli_required += "        --detect.tools=SIGNATURE_SCAN\n"
 	if args.full:
 		detector_process(args.scanfolder, f)
 	else:
 		detector_process(args.scanfolder, None)
+else:
+	cli_required += "        --detect.tools=SIGNATURE_SCAN\n"
 
 if not args.detectors_only:
-	cli_required += "        --detect.tools=DETECTOR\n"
 	if args.full:
 		signature_process(args.scanfolder, f)
 	else:
 		signature_process(args.scanfolder, None)
+else:
+	cli_required += "        --detect.tools=DETECTOR\n"
 
 print_summary(args.critical_only, f)
 
