@@ -449,7 +449,7 @@ def process_dirdups(f):
 
 def check_singlefiles(f):
 	global recs_critical, recs_important, recs_other
-	global cli_critical, cli_important, cli_other
+	global cli_required, cli_optional, cli_other
 
 	# Check for singleton js & other single files
 	sfmatch = False
@@ -477,9 +477,9 @@ def check_singlefiles(f):
 		"    Action:  Consider specifying Single file matching\n" + \
 		"             (--detect.blackduck.signature.scanner.individual.file.matching=SOURCE)\n\n"
 		if cli_other.find("individual.file.matching") < 0:
-			cli_other == "        --detect.blackduck.signature.scanner.individual.file.matching=SOURCE\n"
+			cli_other += "        --detect.blackduck.signature.scanner.individual.file.matching=SOURCE\n"
 		if cli_other.find("upload.source.mode") < 0:
-			cli_other += "        --detect.blackduck.signature.scanner.upload.source.mode=true (CAUTION - will upload source files)\n"
+			cli_other += "        --detect.blackduck.signature.scanner.upload.source.mode=true\n            (CAUTION - will upload source files)\n"
 		#if f:
 		#	f.write("\nSINGLE JS FILES:\n")
 		#	for thisfile in sf_list:
@@ -504,7 +504,8 @@ def get_crc(myfile):
 def print_summary(critical_only, f):
 	global rep
 
-	summary = "\nSUMMARY INFO:            Num Outside     Size Outside      Num Inside     Size Inside     Size Inside\n" + \
+	summary = "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\n" + \
+	"SUMMARY INFO:            Num Outside     Size Outside      Num Inside     Size Inside     Size Inside\n" + \
 	"                            Archives         Archives        Archives        Archives        Archives\n" + \
 	"                                                                        (UNcompressed)    (compressed)\n" + \
 	"--------------------  --------------   --------------   -------------   -------------   -------------\n"
@@ -597,7 +598,7 @@ def print_summary(critical_only, f):
 
 def signature_process(folder, f):
 	global recs_critical, recs_important, recs_other
-	global cli_critical, cli_important, cli_other
+	global cli_required, cli_optional, cli_other
 	global bdignore
 
 	#print("SIGNATURE SCAN ANALYSIS:")
@@ -644,10 +645,10 @@ def signature_process(folder, f):
 		"    Impact:  Binary files not analysed by standard scan, will impact Capacity license usage\n" + \
 		"    Action:  Remove files or ignore folders (using .bdignore), also consider zipping\n" + \
 		"             files and using Binary scan (Specify -f option to add list of large binary\n" + \
-		"             files to the report file, and use the --detect.binary.scan.file.path=XXX.zip option)\n\n"
-		cli_other += "        --detect.binary.scan.file.path=XXX.zip (subject to Binary scan license - zip binary files first - see list of binary files in report file)\n"
+		"             files to the report file, and use the --detect.binary.scan.file.path=binary_files.zip option)\n\n"
+		cli_other += "        --detect.binary.scan.file.path=binary_files.zip\n            (subject to Binary scan license - zip binary files first - see list of binary files in report file)\n"
 		if f:
-			f.write("\nLARGE BINARY FILES:\n(Consider zipping these files and then running Detect with --detect.binary.scan.file.path=XXX.zip option - subject to license available)\n")
+			f.write("\nLARGE BINARY FILES:\n(Consider zipping these files and then running Detect with --detect.binary.scan.file.path=binary_files.zip option - subject to license available)\n")
 			for bin in bin_large_list:
 				f.write("    {}\n".format(bin))
 			f.write("\n")
@@ -678,7 +679,7 @@ def signature_process(folder, f):
 		"             and optionally --detect.blackduck.signature.scanner.upload.source.mode=true\n\n"
 		cli_other += "        --detect.blackduck.signature.scanner.license.search=true\n"
 		if cli_other.find("upload.source.mode") < 0:
-			cli_other += "        --detect.blackduck.signature.scanner.upload.source.mode=true (CAUTION - will upload local source files)\n"
+			cli_other += "        --detect.blackduck.signature.scanner.upload.source.mode=true\n            (CAUTION - will upload local source files)\n"
 
 	if counts['src'][notinarc]+counts['src'][inarc] > 10:
 		recs_other += "- INFORMATION: Source files found for which Snippet analysis supported\n" + \
@@ -697,7 +698,7 @@ def detector_process(folder, f):
 
 	global recs_critical, recs_important, recs_other
 	global rep
-	global cli_critical, cli_important, cli_other
+	global cli_required, cli_optional, cli_other
 
 	print("- Processing Dependency Scan .....", end="", flush=True)
 
@@ -772,8 +773,8 @@ def detector_process(folder, f):
 		recs_important += "- IMPORTANT: No package manager files found in invocation folder but do exist in sub-folders\n" + \
 		"    Impact:  Dependency scan will not be run\n" + \
 		"    Action:  Specify --detect.detector.depth={}\n\n".format(det_min_depth)
-		if cli_important.find("detector.depth") < 0:
-			cli_important += "        --detect.detector.depth={}\n".format(det_min_depth)
+		if cli_optional.find("detector.depth") < 0:
+			cli_optional += "        --detect.detector.depth={}\n".format(det_min_depth)
 
 	if det_depth1 == 0 and det_other == 0:
 		recs_other += "- INFORMATION: No package manager files found in project at all\n" + \
@@ -785,15 +786,15 @@ def detector_process(folder, f):
 		"    Impact:  Scan will fail\n" + \
 		"    Action:  Either install package manager programs or\n" + \
 		"             consider specifying --detect.detector.buildless=true\n\n"
-		cli_critical += "        --detect.detector.buildless=true (OR install package managers '{}')\n".format(cmds_missing1)
+		cli_required += "        --detect.detector.buildless=true\n            (OR install package managers '{}')\n".format(cmds_missing1)
 
 	if cmds_missingother:
 		recs_important += "- IMPORTANT: Package manager programs ({}) missing for package files in sub-folders\n".format(cmds_missingother) + \
 		"    Impact:  The scan will fail if the scan depth is modified from the default\n" + \
 		"    Action:  Either install package manager programs or\n" + \
 		"             consider specifying --detect.detector.buildless=true\n\n"
-		if cli_important.find("detector.buildless") < 0:
-			cli_important += "        --detect.detector.buildless=true (OR install package managers '{}')\n".format(cmds_missingother)
+		if cli_optional.find("detector.buildless") < 0:
+			cli_optional += "        --detect.detector.buildless=true\n            (OR install package managers '{}')\n".format(cmds_missingother)
 
 	if counts['det'][inarc] > 0:
 		recs_important += "- IMPORTANT: Package manager files found in archives\n" + \
@@ -806,35 +807,37 @@ def detector_process(folder, f):
 
 def output_recs(critical_only, f):
 	global recs_critical, recs_important, recs_other
-	global cli_critical, cli_important, cli_other
+	global cli_required, cli_optional, cli_other
 	global messages
 	global bdignore
 
 	if f:
 		f.write(messages + "\n")
 
-	print("RECOMMENDATIONS:")
+	print("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\nRECOMMENDATIONS:\n")
 	if f:
 		f.write("\nRECOMMENDATIONS:\n")
 
 	if recs_critical:
 		print(recs_critical)
-		print("------------------------------------------------------------------------")
-	if f:
-		f.write(recs_critical + "\n")
-		f.write("------------------------------------------------------------------------\n")
+		print("----------------------------------------------------------------------------------")
+		if f:
+			f.write(recs_critical + "\n")
+			f.write("----------------------------------------------------------------------------------\n")
 
-	if recs_important and not critical_only:
-		print(recs_important)
-		print("------------------------------------------------------------------------")
-	if f:
-		f.write(recs_important + "\n")
-		f.write("------------------------------------------------------------------------\n")
+	if recs_important:
+		if not critical_only:
+			print(recs_important)
+			print("----------------------------------------------------------------------------------")
+		if f:
+			f.write(recs_important + "\n")
+			f.write("----------------------------------------------------------------------------------\n")
 
-	if recs_other and not critical_only:
-		print(recs_other)
-	if f:
-		f.write(recs_other + "\n")
+	if recs_other:
+		if not critical_only:
+			print(recs_other)
+		if f:
+			f.write(recs_other + "\n")
 
 	if (not recs_critical and not recs_important and not recs_other) or (critical_only and not recs_critical):
 		print("- None")
@@ -852,7 +855,7 @@ def check_prereqs():
 
 	global recs_critical, recs_important, recs_other
 	global rep
-	global cli_critical, cli_important, cli_other
+	global cli_required, cli_optional, cli_other
 
 	global messages
 
@@ -902,42 +905,40 @@ def check_prereqs():
 		"    Action:  Install Java 1.8 or 1.11\n\n"
 
 def output_cli(critical_only, report, f):
-	global cli_critical, cli_important, cli_other
+	global cli_required, cli_optional, cli_other
 	global bdignore
 
-	output = "\nDETECT CLI EXAMPLES\n"
+	output = "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\nDETECT CLI EXAMPLES\n\n"
 	if recs_critical:
 		output += "Note that scan will probably fail - see CRITICAL recommendations above\n\n"
 
 	output += "    MINIMUM REQUIRED OPTIONS:\n" + \
-	"        " + cli_critical + "\n"
+	"        " + cli_required
 	print(output)
 	if bdignore:
 		if report:
-			print("        (Note that a .bdignore exclude file is recommended - see the report file '{}')".format(report))
+			print("        (Note that a .bdignore exclude file is recommended - see the report file '{}')\n".format(report))
 		else:
-			print("        (Note that a .bdignore exclude file is recommended - specify a report file using '-r repfile')")
+			print("        (Note that a .bdignore exclude file is recommended - specify a report file using '-r repfile')\n")
 	if f:
-		f.write(output)
+		f.write(output + "\n")
 
 	output = ""
-	if cli_important:
-		output = "\n    OTHER IMPORTANT OPTIONS:\n" + \
-		cli_important + "\n\n"
+	if cli_optional:
+		output = "\n    OTHER IMPORTANT OPTIONS:\n" + cli_optional + "\n"
 
 	if cli_other:
-		output += "    OTHER POTENTIAL OPTIONS:\n" + \
-		cli_other + "\n\n"
+		output += "    OTHER OPTIONS TO CONSIDER:\n" + cli_other + "\n"
 
 	if not critical_only:
 		print(output)
 	if f:
-		f.write(output)
+		f.write(output + "\n")
 
 	if f:
-		print("Further information in output report file '{}'".format(report))
+		print("Further information in output report file '{}'\n".format(report))
 	else:
-		print("Use '-r repfile' to produce report file with more information")
+		print("Use '-r repfile' to produce report file with more information\n")
 
 parser = argparse.ArgumentParser(description='Examine files/folders to determine scan recommendations', prog='detect_advisor')
 
@@ -963,13 +964,13 @@ recs_important = ""
 recs_other = ""
 rep = ""
 bdignore = ""
-cli_critical = "--blackduck.url=XXX --blackduck.api.token=YYY --detect.source.path='{}' ".format(os.path.abspath(args.scanfolder))
-cli_important = ""
+cli_required = "--blackduck.url=https://YOURSERVER --blackduck.api.token=YOURTOKEN\n        --detect.source.path='{}'\n".format(os.path.abspath(args.scanfolder))
+cli_optional = ""
 cli_other = ""
 
 print("\nPROCESSING:")
 
-print("Working on project folder {}".format(args.scanfolder))
+print("Working on project folder {} (Absolute path {})\n".format(args.scanfolder, os.path.abspath(args.scanfolder)))
 
 print("- Reading hierarchy          .....", end="", flush=True)
 process_dir(args.scanfolder, 0)
@@ -985,12 +986,14 @@ else:
 	f = None
 
 if not args.signature_only:
+	cli_required += "        --detect.tools=SIGNATURE_SCAN\n"
 	if args.full:
 		detector_process(args.scanfolder, f)
 	else:
 		detector_process(args.scanfolder, None)
 
 if not args.detectors_only:
+	cli_required += "        --detect.tools=DETECTOR\n"
 	if args.full:
 		signature_process(args.scanfolder, f)
 	else:
