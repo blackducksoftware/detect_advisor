@@ -1,16 +1,16 @@
 # Synopsys Detect Advisor Script - detect_advisor.py
 # OVERVIEW
-This script is provided under an OSS license to assist users when scanning projects using the Synopsys Detect program to scan projects.
+This script is provided under an OSS license (specified in the LICENSE file) to assist users when scanning projects using the Synopsys Detect program to scan projects.
 
 It does not represent any extension of licensed functionality of Synopsys software itself and is provided as-is, without warranty or liability.
 
 # DESCRIPTION
 
-The `detect_advisor.py` script processes a specified folder (and sub-folders) to provide recommendations on how to run Synopsys Detect to scan optimally.
+The `detect_advisor.py` script processes the specified folder (and sub-folders) to provide recommendations on how to run Synopsys Detect to scan optimally.
 
-It will check the prerequisites to run Detect (including the correct version of Java) and scan the project location for files and archives, calculate the total scan size, and will also detect large duplicate files and folders.
+It will check the prerequisites to run Detect (including the correct version of Java) and scan the project location for files and archives, calculate the total scan size, check for project files and package managers and will also detect large duplicate files and folders.
 
-It will expand .zip and .jar files automatically, processing recursive files (zips within zips etc.). Other archive types are not expanded currently.
+It will expand .zip and .jar files automatically, processing recursive files (zips within zips etc.). Other archive types (.gz, .tar, .Z etc.) are not currently expanded.
 
 It will produce a set of categorized recommendations and Detect command line options to support different types of scans and other operations.
 
@@ -35,21 +35,40 @@ The `detect_advisor.py` script can be invoked as follows:
                             Output report file
       -d, --detectors_only  Check for detector files and prerequisites only
       -s, --signature_only  Check for files and folders for signature scan only
-      -c, --critical_only   Only show critical issues which will causes detect to
-                            fail
+      -c, --critical_only   Only show critical issues which will cause Detect to fail
       -f, --full            Output full information to report file if specified
 
-The `scanfolder` is required can be a relative or absolute path.
+The `scanfolder` is required and can be a relative or absolute path.
 
-The `-r` or `--report` option allows a report file to be specified which will contain the console output, but when the `-f` or `--full` option is specified, lists of found files and other information will be added.
+The `-r` or `--report` option allows a report file to be specified which will contain the console output and additional information; when the `-f` or `--full` option is also specified, lists of found files and other information will be added.
 
-The `-c` or `--critical_only` option will limit the console output to critical issues only and skip the summary info and other information, although these sections will be written to the report file if specified with `-r repfile`.
+The `-c` or `--critical_only` option will limit the console output to critical issues only and skip the summary section and other information, although these sections will be written to the report file if specified with `-r repfile`.
 
-The `-d` and `-s` options specify that only Dependency (Detector) or Signature scan checking should be performed.
+The `-d` and `-s` options specify that only Dependency (Detector) or Signature scan checking should be performed respectively.
 
-The default output contains the following sections:
+# EXAMPLE USAGE
 
-#SUMMARY INFO
+The following command will run the script on the `myproject` sub-folder, producing standard console output only:
+
+    python3 detect_advisor.py myproject
+    
+The following command will run the script on the `myproject` sub-folder, producing standard console output and outputting additional information to the `myreport.txt` file (which must not already exist):
+
+    python3 detect_advisor.py -r myreport.txt myproject
+
+The following command will scan the absolute path `/users/matthew/myproject`; the `-c` option will reduce the console output to only include critical issues while writing full output in the `myreport.txt` file.
+
+    python3 detect_advisor.py -c -r myreport.txt /users/matthew/myproject
+    
+The following command will scan the absolute path `/users/matthew/myproject`; the `-f` option will add lists of large and duplicate files/folders discovered to the `myreport.txt` file:
+
+    python3 detect_advisor.py -f -r myreport.txt /users/matthew/myproject
+
+The following command will scan the absolute path `/users/matthew/myproject`; the `-s` option will cause only Singature scan checking to be performed:
+
+    python3 detect_advisor.py -s -r myreport.txt /users/matthew/myproject
+
+# SUMMARY INFO
 
 This section includes counts and size analysis for the files and folders.
 
@@ -80,9 +99,9 @@ This section includes counts and size analysis for the files and folders.
     ---------------------------------
     - Total discovered:       3329
 
-#RECOMMENDATIONS
+# RECOMMENDATIONS
 
-This section includes a list of findings
+This section includes a list of findings categorised into CRITICAL (will cause Detect to fail), IMPORTANT (may impact the scope and type of scan) and INFORMATION (potential additional options subject to requirements but which will not impact scope of the standard scan) sections:
 
     RECOMMENDATIONS:
     - CRITICAL: Overall scan size (6,520 MB) is too large
@@ -124,9 +143,9 @@ This section includes a list of findings
         Action:  Consider specifying Single file matching
                  (--detect.blackduck.signature.scanner.individual.file.matching=SOURCE)
 
-#DETECT CLI
+# DETECT CLI
 
-This section includes recommended CLI options for Synopsys Detect. Note that a .bdignore file may also be recommended which will be listed in the optional report file (-r repfile).
+This section includes recommended CLI options for Synopsys Detect. Note that a `.bdignore` file may also be recommended which will be listed in the optional report file (`-r repfile`) if specified.
 
     DETECT CLI
         MINIMUM REQUIRED OPTIONS:
@@ -143,6 +162,10 @@ This section includes recommended CLI options for Synopsys Detect. Note that a .
 
     Further information in output report file 'repfile.txt'
 
-#REPORT FILE
+# REPORT FILE
 
 An optional report file can be specified (`-r repfile` or `--report repfile`). If the `-f` or `--full` option is also specified then full information will be written to the report file including lists of duplicate large files, duplicate large folders, binary files etc.
+
+If large duplicate files or folders are identified (or folders containing only binary files), then a recommended `.bdignore` with list of folders to ignore is also produced in the report file.
+
+A list of large binary files is also produced in the report file, and you should consider sending them to Binary scan (note this a separate licensed product to standard Black Duck) by zipping into an archive, and using the Detect `--detect.binary.scan.file.path=XXX.zip` option.
