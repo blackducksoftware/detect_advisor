@@ -4,9 +4,12 @@ from math import trunc
 #import tempfile
 import io
 import argparse
+import platform
 
 #
 # Constants
+advisor_version = "0.2 Beta"
+detect_version = "6.2.1"
 srcext_list = ['.R','.actionscript','.ada','.adb','.ads','.aidl','.as','.asm','.asp',\
 '.aspx','.awk','.bas','.bat','.bms','.c','.c++','.cbl','.cc','.cfc','.cfm','.cgi','.cls',\
 '.cpp','.cpy','.cs','.cxx','.el','.erl','.f','.f77','.f90','.for','.fpp','.frm','.fs',\
@@ -90,88 +93,88 @@ detectors_ext_dict = {
 }
 
 detector_cli_options_dict = {
-'bazel': "        --detect.bazel.cquery.options='OPTION1,OPTION2'\n" + \
-"            (OPTIONAL List of additional options to pass to the bazel cquery command.)\n" + \
-"        --detect.bazel.dependency.type=MAVEN_JAR/MAVEN_INSTALL/UNSPECIFIED\n" + \
-"            (OPTIONAL Bazel workspace external dependency rule: The Bazel workspace rule used to pull in external dependencies.\n" + \
-"            If not set, Detect will attempt to determine the rule from the contents of the WORKSPACE file (default: UNSPECIFIED).)\n",
-'bitbake': "        --detect.bitbake.package.names='PACKAGE1,PACKAGE2'\n" + \
-"            (OPTIONAL List of package names from which dependencies are extracted.)\n" + \
-"        --detect.bitbake.search.depth=X\n" + \
-"            (OPTIONAL The depth at which Detect will search for the recipe-depends.dot or package-depends.dot files (default: 1).)\n" + \
-"        --detect.bitbake.source.arguments='ARG1,ARG2,ARG3'\n" + \
-"            (OPTIONAL List of arguments to supply when sourcing the build environment init script)\n",
-'conda': "        --detect.conda.environment.name=NAME\n" + \
-"            (OPTIONAL The name of the anaconda environment used by your project)\n",
-'dotnet': "        --detect.nuget.config.path=PATH\n" + \
-"            (OPTIONAL The path to the Nuget.Config file to supply to the nuget exe)\n" + \
-"        --detect.nuget.packages.repo.url=URL\n" + \
-"            (OPTIONAL Nuget Packages Repository URL (default: https://api.nuget.org/v3/index.json).)\n" + \
-"        --detect.nuget.excluded.modules=PROJECT\n" + \
-"            (OPTIONAL Nuget Projects Excluded: The names of the projects in a solution to exclude.)\n" + \
-"        --detect.nuget.ignore.failure=true\n" + \
-"            (OPTIONAL Ignore Nuget Failures: If true errors will be logged and then ignored.)\n" + \
-"        --detect.nuget.included.modules=PROJECT\n" + \
-"            (OPTIONAL Nuget Modules Included: The names of the projects in a solution to include (overrides exclude).)\n",
-'gradle': "        --detect.gradle.build.command='ARGUMENT1 ARGUMENT2'\n" + \
-"            (OPTIONAL Gradle Build Command: Gradle command line arguments to add to the mvn/mvnw command line.)\n" + \
-"        --detect.gradle.excluded.configurations='CONFIG1,CONFIG2'\n" + \
-"            (OPTIONAL Gradle Exclude Configurations: List of Gradle configurations to exclude.)\n" + \
-"        --detect.gradle.excluded.projects='PROJECT1,PROJECT2'\n" + \
-"            (OPTIONAL Gradle Exclude Projects: List of Gradle sub-projects to exclude.)\n" + \
-"        --detect.gradle.included.configurations='CONFIG1,CONFIG2'\n" + \
-"            (OPTIONAL Gradle Include Configurations: List of Gradle configurations to include.)\n" + \
-"        --detect.gradle.included.projects='PROJECT1,PROJECT2'\n" + \
-"            (OPTIONAL Gradle Include Projects: List of Gradle sub-projects to include.)\n",
-'maven': "        --detect.maven.build.command='ARGUMENT1 ARGUMENT2'\n" + \
-"            (OPTIONAL Maven Build Command: Maven command line arguments to add to the mvn/mvnw command line.)\n" + \
-"        --detect.maven.excluded.scopes='SCOPE1,SCOPE2'\n" + \
-"            (OPTIONAL Dependency Scope Excluded: List of Maven scopes. Output will be limited to dependencies outside these scopes (overrides include).)\n" + \
-"        --detect.maven.included.scopes='SCOPE1,SCOPE2'\n" + \
-"            (OPTIONAL Dependency Scope Included: List of Maven scopes. Output will be limited to dependencies within these scopes (overridden by exclude).)\n" + \
-"        --detect.maven.excluded.modules='MODULE1,MODULE2'\n" + \
-"            (OPTIONAL Maven Modules Excluded: List of Maven modules (sub-projects) to exclude.)\n" + \
-"        --detect.maven.included.modules='MODULE1,MODULE2'\n" + \
-"            (OPTIONAL Maven Modules Included: List of Maven modules (sub-projects) to include.)\n" + \
-"        --detect.maven.include.plugins=true\n" + \
-"            (OPTIONAL Maven Include Plugins: Whether or not detect will include the plugins section when parsing a pom.xml.)\n",
-'npm': "        --detect.npm.arguments='ARG1 ARG2'\n" + \
-"            (OPTIONAL Additional arguments to add to the npm command line when running Detect against an NPM project.)\n" + \
-"        --detect.npm.include.dev.dependencies=false\n" + \
-"            (OPTIONAL Include NPM Development Dependencies: Set this value to false if you would like to exclude your dev dependencies.)\n",
-'packagist': "        --detect.packagist.include.dev.dependencies=false\n" + \
-"            (OPTIONAL Include Packagist Development Dependencies: Set this value to false if you would like to exclude your dev requires dependencies.)\n",
-'pear': "        --detect.pear.only.required.deps=true\n" + \
-"            (OPTIONAL Include Only Required Pear Dependencies: Set to true if you would like to include only required packages.)\n",
-'pip': "        --detect.pip.only.project.tree=true\n" + \
-"            (OPTIONAL PIP Include Only Project Tree: By default, pipenv includes all dependencies found in the graph. Set to true to only\n" + \
-"            include dependencies found underneath the dependency that matches the provided pip project and version name.)\n" + \
-"        --detect.pip.project.name=NAME\n" + \
-"            (OPTIONAL PIP Project Name: The name of your PIP project, to be used if your project's name cannot be correctly inferred from its setup.py file.)\n" + \
-"        --detect.pip.project.version.name=VERSION\n" + \
-"            (OPTIONAL PIP Project Version Name: The version of your PIP project, to be used if your project's version name\n" + \
-"            cannot be correctly inferred from its setup.py file.)\n" + \
-"        --detect.pip.requirements.path='PATH1,PATH2'\n" + \
-"            (OPTIONAL PIP Requirements Path: List of paths to requirements.txt files.)\n",
-'ruby': "        --detect.ruby.include.dev.dependencies=true\n" + \
-"            (OPTIONAL Ruby Development Dependencies: If set to true, development dependencies will be included when parsing *.gemspec files.)\n" + \
-"        --detect.ruby.include.runtime.dependencies=false\n" + \
-"            (OPTIONAL Ruby Runtime Dependencies: If set to false, runtime dependencies will not be included when parsing *.gemspec files.)\n",
-'sbt': "        --detect.sbt.report.search.depth\n" + \
-"            (OPTIONAL SBT Report Search Depth: Depth the sbt detector will use to search for report files (default 3))\n" + \
-"        --detect.sbt.excluded.configurations='CONFIG'\n" + \
-"            (OPTIONAL SBT Configurations Excluded: The names of the sbt configurations to exclude.)\n" + \
-"        --detect.sbt.included.configurations='CONFIG'\n" + \
-"            (OPTIONAL SBT Configurations Included: The names of the sbt configurations to include.)\n",
-'yarn': "        --detect.yarn.prod.only=true\n" + \
-"            (OPTIONAL Include Yarn Production Dependencies Only: Set this to true to only scan production dependencies.)\n"
+'bazel': "XXCLIOPTSXX        --detect.bazel.cquery.options='OPTION1,OPTION2'\n" + \
+"XXCLIOPTSXX            (OPTIONAL List of additional options to pass to the bazel cquery command.)\n" + \
+"XXCLIOPTSXX        --detect.bazel.dependency.type=MAVEN_JAR/MAVEN_INSTALL/UNSPECIFIED\n" + \
+"XXCLIOPTSXX            (OPTIONAL Bazel workspace external dependency rule: The Bazel workspace rule used to pull in external dependencies.\n" + \
+"XXCLIOPTSXX            If not set, Detect will attempt to determine the rule from the contents of the WORKSPACE file (default: UNSPECIFIED).)\n",
+'bitbake': "XXCLIOPTSXX        --detect.bitbake.package.names='PACKAGE1,PACKAGE2'\n" + \
+"XXCLIOPTSXX            (OPTIONAL List of package names from which dependencies are extracted.)\n" + \
+"XXCLIOPTSXX        --detect.bitbake.search.depth=X\n" + \
+"XXCLIOPTSXX            (OPTIONAL The depth at which Detect will search for the recipe-depends.dot or package-depends.dot files (default: 1).)\n" + \
+"XXCLIOPTSXX        --detect.bitbake.source.arguments='ARG1,ARG2,ARG3'\n" + \
+"XXCLIOPTSXX            (OPTIONAL List of arguments to supply when sourcing the build environment init script)\n",
+'conda': "XXCLIOPTSXX        --detect.conda.environment.name=NAME\n" + \
+"XXCLIOPTSXX            (OPTIONAL The name of the anaconda environment used by your project)\n",
+'dotnet': "XXCLIOPTSXX        --detect.nuget.config.path=PATH\n" + \
+"XXCLIOPTSXX            (OPTIONAL The path to the Nuget.Config file to supply to the nuget exe)\n" + \
+"XXCLIOPTSXX        --detect.nuget.packages.repo.url=URL\n" + \
+"XXCLIOPTSXX            (OPTIONAL Nuget Packages Repository URL (default: https://api.nuget.org/v3/index.json).)\n" + \
+"XXCLIOPTSXX        --detect.nuget.excluded.modules=PROJECT\n" + \
+"XXCLIOPTSXX            (OPTIONAL Nuget Projects Excluded: The names of the projects in a solution to exclude.)\n" + \
+"XXCLIOPTSXX        --detect.nuget.ignore.failure=true\n" + \
+"XXCLIOPTSXX            (OPTIONAL Ignore Nuget Failures: If true errors will be logged and then ignored.)\n" + \
+"XXCLIOPTSXX        --detect.nuget.included.modules=PROJECT\n" + \
+"XXCLIOPTSXX            (OPTIONAL Nuget Modules Included: The names of the projects in a solution to include (overrides exclude).)\n",
+'gradle': "XXCLIOPTSXX        --detect.gradle.build.command='ARGUMENT1 ARGUMENT2'\n" + \
+"XXCLIOPTSXX            (OPTIONAL Gradle Build Command: Gradle command line arguments to add to the mvn/mvnw command line.)\n" + \
+"XXCLIOPTSXX        --detect.gradle.excluded.configurations='CONFIG1,CONFIG2'\n" + \
+"XXCLIOPTSXX            (OPTIONAL Gradle Exclude Configurations: List of Gradle configurations to exclude.)\n" + \
+"XXCLIOPTSXX        --detect.gradle.excluded.projects='PROJECT1,PROJECT2'\n" + \
+"XXCLIOPTSXX            (OPTIONAL Gradle Exclude Projects: List of Gradle sub-projects to exclude.)\n" + \
+"XXCLIOPTSXX        --detect.gradle.included.configurations='CONFIG1,CONFIG2'\n" + \
+"XXCLIOPTSXX            (OPTIONAL Gradle Include Configurations: List of Gradle configurations to include.)\n" + \
+"XXCLIOPTSXX        --detect.gradle.included.projects='PROJECT1,PROJECT2'\n" + \
+"XXCLIOPTSXX            (OPTIONAL Gradle Include Projects: List of Gradle sub-projects to include.)\n",
+'maven': "XXCLIOPTSXX        --detect.maven.build.command='ARGUMENT1 ARGUMENT2'\n" + \
+"XXCLIOPTSXX            (OPTIONAL Maven Build Command: Maven command line arguments to add to the mvn/mvnw command line.)\n" + \
+"XXCLIOPTSXX        --detect.maven.excluded.scopes='SCOPE1,SCOPE2'\n" + \
+"XXCLIOPTSXX            (OPTIONAL Dependency Scope Excluded: List of Maven scopes. Output will be limited to dependencies outside these scopes (overrides include).)\n" + \
+"XXCLIOPTSXX        --detect.maven.included.scopes='SCOPE1,SCOPE2'\n" + \
+"XXCLIOPTSXX            (OPTIONAL Dependency Scope Included: List of Maven scopes. Output will be limited to dependencies within these scopes (overridden by exclude).)\n" + \
+"XXCLIOPTSXX        --detect.maven.excluded.modules='MODULE1,MODULE2'\n" + \
+"XXCLIOPTSXX            (OPTIONAL Maven Modules Excluded: List of Maven modules (sub-projects) to exclude.)\n" + \
+"XXCLIOPTSXX        --detect.maven.included.modules='MODULE1,MODULE2'\n" + \
+"XXCLIOPTSXX            (OPTIONAL Maven Modules Included: List of Maven modules (sub-projects) to include.)\n" + \
+"XXCLIOPTSXX        --detect.maven.include.plugins=true\n" + \
+"XXCLIOPTSXX            (OPTIONAL Maven Include Plugins: Whether or not detect will include the plugins section when parsing a pom.xml.)\n",
+'npm': "XXCLIOPTSXX        --detect.npm.arguments='ARG1 ARG2'\n" + \
+"XXCLIOPTSXX            (OPTIONAL Additional arguments to add to the npm command line when running Detect against an NPM project.)\n" + \
+"XXCLIOPTSXX        --detect.npm.include.dev.dependencies=false\n" + \
+"XXCLIOPTSXX            (OPTIONAL Include NPM Development Dependencies: Set this value to false if you would like to exclude your dev dependencies.)\n",
+'packagist': "XXCLIOPTSXX        --detect.packagist.include.dev.dependencies=false\n" + \
+"XXCLIOPTSXX            (OPTIONAL Include Packagist Development Dependencies: Set this value to false if you would like to exclude your dev requires dependencies.)\n",
+'pear': "XXCLIOPTSXX        --detect.pear.only.required.deps=true\n" + \
+"XXCLIOPTSXX            (OPTIONAL Include Only Required Pear Dependencies: Set to true if you would like to include only required packages.)\n",
+'pip': "XXCLIOPTSXX        --detect.pip.only.project.tree=true\n" + \
+"XXCLIOPTSXX            (OPTIONAL PIP Include Only Project Tree: By default, pipenv includes all dependencies found in the graph. Set to true to only\n" + \
+"XXCLIOPTSXX            include dependencies found underneath the dependency that matches the provided pip project and version name.)\n" + \
+"XXCLIOPTSXX        --detect.pip.project.name=NAME\n" + \
+"XXCLIOPTSXX            (OPTIONAL PIP Project Name: The name of your PIP project, to be used if your project's name cannot be correctly inferred from its setup.py file.)\n" + \
+"XXCLIOPTSXX        --detect.pip.project.version.name=VERSION\n" + \
+"XXCLIOPTSXX            (OPTIONAL PIP Project Version Name: The version of your PIP project, to be used if your project's version name\n" + \
+"XXCLIOPTSXX            cannot be correctly inferred from its setup.py file.)\n" + \
+"XXCLIOPTSXX        --detect.pip.requirements.path='PATH1,PATH2'\n" + \
+"XXCLIOPTSXX            (OPTIONAL PIP Requirements Path: List of paths to requirements.txt files.)\n",
+'ruby': "XXCLIOPTSXX        --detect.ruby.include.dev.dependencies=true\n" + \
+"XXCLIOPTSXX            (OPTIONAL Ruby Development Dependencies: If set to true, development dependencies will be included when parsing *.gemspec files.)\n" + \
+"XXCLIOPTSXX        --detect.ruby.include.runtime.dependencies=false\n" + \
+"XXCLIOPTSXX            (OPTIONAL Ruby Runtime Dependencies: If set to false, runtime dependencies will not be included when parsing *.gemspec files.)\n",
+'sbt': "XXCLIOPTSXX        --detect.sbt.report.search.depth\n" + \
+"XXCLIOPTSXX            (OPTIONAL SBT Report Search Depth: Depth the sbt detector will use to search for report files (default 3))\n" + \
+"XXCLIOPTSXX        --detect.sbt.excluded.configurations='CONFIG'\n" + \
+"XXCLIOPTSXX            (OPTIONAL SBT Configurations Excluded: The names of the sbt configurations to exclude.)\n" + \
+"XXCLIOPTSXX        --detect.sbt.included.configurations='CONFIG'\n" + \
+"XXCLIOPTSXX            (OPTIONAL SBT Configurations Included: The names of the sbt configurations to include.)\n",
+'yarn': "XXCLIOPTSXX        --detect.yarn.prod.only=true\n" + \
+"XXCLIOPTSXX            (OPTIONAL Include Yarn Production Dependencies Only: Set this to true to only scan production dependencies.)\n"
 }
 
 detector_cli_required_dict = {
-'bazel': "        --detect.bazel.target='TARGET'\n" + \
-"            (REQUIRED Bazel Target: The Bazel target (for example, //foo:foolib) for which dependencies are collected.)\n",
-'bitbake': "        --detect.bitbake.build.env.name=NAME\n" + \
-"            (REQUIRED BitBake Init Script Name: The name of the build environment init script (default: oe-init-build-env).)\n"
+'bazel': "XXCLIOPTSXX        --detect.bazel.target='TARGET'\n" + \
+"XXCLIOPTSXX            (REQUIRED Bazel Target: The Bazel target (for example, //foo:foolib) for which dependencies are collected.)\n",
+'bitbake': "XXCLIOPTSXX        --detect.bitbake.build.env.name=NAME\n" + \
+"XXCLIOPTSXX            (REQUIRED BitBake Init Script Name: The name of the build environment init script (default: oe-init-build-env).)\n"
 }
 
 linux_only_detectors = ['clang', 'bitbake']
@@ -588,8 +591,8 @@ def check_singlefiles(f):
 		"    Action:  Consider specifying Single file matching in Signature scan\n" + \
 		"             (--detect.blackduck.signature.scanner.individual.file.matching=SOURCE)\n\n"
 		if cli_msgs_dict['scan'].find("individual.file.matching") < 0:
-			cli_msgs_dict['scan'] += "        --detect.blackduck.signature.scanner.individual.file.matching=SOURCE\n" + \
-			"            (To check singleton .js files for OSS matches)\n"
+			cli_msgs_dict['scan'] += "XXCLIOPTSXX        --detect.blackduck.signature.scanner.individual.file.matching=SOURCE\n" + \
+			"XXCLIOPTSXX            (To check singleton .js files for OSS matches)\n"
 
 		#if f:
 		#	f.write("\nSINGLE JS FILES:\n")
@@ -755,9 +758,9 @@ def signature_process(folder, f):
 		"    Action:  Remove files or ignore folders (using .bdignore), also consider zipping\n" + \
 		"             files and using Binary scan (Specify -f option to add list of large binary\n" + \
 		"             files to the report file, and use the --detect.binary.scan.file.path=binary_files.zip option)\n\n"
-		cli_msgs_dict['scan'] += "          --detect.binary.scan.file.path=binary_files.zip\n" + \
-		"            (To scan binary files within the project; zip files first - see list of binary\n" + \
-		"             files in report file; binary scan license required)\n"
+		cli_msgs_dict['scan'] += "XXCLIOPTSXX        --detect.binary.scan.file.path=binary_files.zip\n" + \
+		"XXCLIOPTSXX            (To scan binary files within the project; zip files first - see list of binary\n" + \
+		"XXCLIOPTSXX            files in report file; binary scan license required)\n"
 		if f:
 			f.write("\nLARGE BINARY FILES:\n(Consider zipping these files and then running Detect with --detect.binary.scan.file.path=binary_files.zip option - subject to license available)\n")
 			for bin in bin_large_list:
@@ -787,22 +790,22 @@ def signature_process(folder, f):
 		recs_msgs_dict['info'] += "- INFORMATION: License or notices files found\n" + \
 		"    Impact:  Local license text may need to be scanned\n" + \
 		"    Action:  Add options --detect.blackduck.signature.scanner.license.search=true\n" + \
-		"             and optionally --detect.blackduck.signature.scanner.upload.source.mode=true\n\n"
-		cli_msgs_dict['lic'] += "        --detect.blackduck.signature.scanner.license.search=true\n" + \
-		"            (To perform client-side scanning for license files and references)\n"
+		"XXCLIOPTSXX             and optionally --detect.blackduck.signature.scanner.upload.source.mode=true\n\n"
+		cli_msgs_dict['lic'] += "XXCLIOPTSXX        --detect.blackduck.signature.scanner.license.search=true\n" + \
+		"XXCLIOPTSXX            (To perform client-side scanning for license files and references)\n"
 		if cli_msgs_dict['lic'].find("upload.source.mode") < 0:
-			cli_msgs_dict['lic'] += "        --detect.blackduck.signature.scanner.upload.source.mode=true\n" + \
-			"            (CAUTION - will upload local source files)\n"
+			cli_msgs_dict['lic'] += "XXCLIOPTSXX        --detect.blackduck.signature.scanner.upload.source.mode=true\n" + \
+			"XXCLIOPTSXX            (CAUTION - will upload local source files)\n"
 
 	if counts['src'][notinarc]+counts['src'][inarc] > 10:
 		recs_msgs_dict['info'] += "- INFORMATION: Source files found for which Snippet analysis supported\n" + \
 		"    Impact:  Snippet analysis can discover copied OSS source files and functions\n" + \
 		"    Action:  Add options --detect.blackduck.signature.scanner.snippet.matching=SNIPPET_MATCHING\n\n"
-		cli_msgs_dict['lic'] += "        --detect.blackduck.signature.scanner.snippet.matching=SNIPPET_MATCHING\n" + \
-		"            (To search for copied OSS source files and functions within source files)\n"
+		cli_msgs_dict['lic'] += "XXCLIOPTSXX        --detect.blackduck.signature.scanner.snippet.matching=SNIPPET_MATCHING\n" + \
+		"XXCLIOPTSXX            (To search for copied OSS source files and functions within source files)\n"
 		if cli_msgs_dict['lic'].find("upload.source.mode") < 0:
-			cli_msgs_dict['lic'] += "        --detect.blackduck.signature.scanner.upload.source.mode=true\n" + \
-			"            (CAUTION - will upload local source files)\n"
+			cli_msgs_dict['lic'] += "XXCLIOPTSXX        --detect.blackduck.signature.scanner.upload.source.mode=true\n" + \
+			"XXCLIOPTSXX            (CAUTION - will upload local source files)\n"
 
 	check_singlefiles(f)
 	print(" Done")
@@ -810,7 +813,6 @@ def signature_process(folder, f):
 
 def detector_process(folder, f):
 	import shutil
-	import platform
 
 	global rep
 
@@ -895,17 +897,17 @@ def detector_process(folder, f):
 		"- Maximum folder depth:   {}\n".format(det_max_depth) + \
 		"---------------------------------\n" + \
 		"- Total discovered:       {}\n\n".format(len(det_dict)) + \
-		"List of package managers required: {}\n".format(','.join(detectors_list))
+		"List of package managers found: {}\n".format(','.join(detectors_list))
 
 	if det_depth1 == 0 and det_other > 0:
 		recs_msgs_dict['imp'] += "- IMPORTANT: No package manager files found in invocation folder but do exist in sub-folders\n" + \
 		"    Impact:  Dependency scan will not be run\n" + \
 		"    Action:  Specify --detect.detector.depth={} (although depth could be up to {})\n\n".format(det_min_depth, det_max_depth)
 		if cli_msgs_dict['scan'].find("detector.depth") < 0:
-			cli_msgs_dict['scan'] += "        --detect.detector.depth={}\n".format(det_min_depth) + \
-			"            (To find package manager files within sub-folders; note depth up to {}\n".format(det_max_depth) + \
-			"            would find all PM files in sub-folders but this may not be necessary as they\n" + \
-			"            may be defined in higher level project and sub-projects only)\n"
+			cli_msgs_dict['scan'] += "XXCLIOPTSXX        --detect.detector.depth={}\n".format(det_min_depth) + \
+			"XXCLIOPTSXX            (To find package manager files within sub-folders; note depth up to {}\n".format(det_max_depth) + \
+			"XXCLIOPTSXX            would find all PM files in sub-folders but this may not be necessary as they\n" + \
+			"XXCLIOPTSXX            may be defined in higher level project and sub-projects only)\n"
 
 	if det_depth1 == 0 and det_other == 0:
 		recs_msgs_dict['info'] += "- INFORMATION: No package manager files found in project at all\n" + \
@@ -916,20 +918,20 @@ def detector_process(folder, f):
 		recs_msgs_dict['crit'] += "- CRITICAL: Package manager programs ({}) missing for package files in invocation folder\n".format(cmds_missing1) + \
 		"    Impact:  Scan will fail\n" + \
 		"    Action:  Either install package manager programs or\n" + \
-		"             consider specifying --detect.detector.buildless=true\n\n"
-		cli_msgs_dict['reqd'] += "        --detect.detector.buildless=true\n" + \
-		"            (OR specify --detect.XXXX.path=<LOCATION> where XXX is package manager\n" + \
-		"            OR install package managers '{}')\n".format(cmds_missing1)
+		"XXCLIOPTSXX             consider specifying --detect.detector.buildless=true\n\n"
+		cli_msgs_dict['reqd'] += "XXCLIOPTSXX        --detect.detector.buildless=true\n" + \
+		"XXCLIOPTSXX            (OR specify --detect.XXXX.path=<LOCATION> where XXX is package manager\n" + \
+		"XXCLIOPTSXX            OR install package managers '{}')\n".format(cmds_missing1)
 
 	if cmds_missingother:
 		recs_msgs_dict['imp'] += "- IMPORTANT: Package manager programs ({}) missing for package files in sub-folders\n".format(cmds_missingother) + \
 		"    Impact:  The scan will fail if the scan depth is modified from the default\n" + \
 		"    Action:  Install package manager programs\n" + \
-		"            (OR specify --detect.XXXX.path=<LOCATION> where XXX is package manager\n" + \
+		"             (OR specify --detect.XXXX.path=<LOCATION> where XXX is package manager\n" + \
 		"             OR specify --detect.detector.buildless=true)\n\n"
 		if cli_msgs_dict['reqd'].find("detector.buildless") < 0:
-			cli_msgs_dict['reqd'] += "        --detect.detector.buildless=true\n" + \
-			"            (OR install package managers '{}' OR use --detect.XXXX.path=<LOCATION> where XXX is package manager)\n".format(cmds_missingother)
+			cli_msgs_dict['reqd'] += "XXCLIOPTSXX        --detect.detector.buildless=true\n" + \
+			"XXCLIOPTSXX            (OR install package managers '{}' OR use --detect.XXXX.path=<LOCATION> where XXX is package manager)\n".format(cmds_missingother)
 
 	if counts['det'][inarc] > 0:
 		recs_msgs_dict['imp'] += "- IMPORTANT: Package manager files found in archives\n" + \
@@ -964,18 +966,22 @@ def output_recs(critical_only, f):
 
 	if recs_msgs_dict['imp']:
 		if not critical_only:
-			print("-----------------------------------------------------------------------------------------------------")
+			if recs_msgs_dict['crit']:
+				print("-----------------------------------------------------------------------------------------------------")
 			print(recs_msgs_dict['imp'])
 		if f:
-			f.write("-----------------------------------------------------------------------------------------------------\n")
+			if recs_msgs_dict['crit']:
+				f.write("-----------------------------------------------------------------------------------------------------\n")
 			f.write(recs_msgs_dict['imp'] + "\n")
 
 	if recs_msgs_dict['info']:
 		if not critical_only:
-			print("-----------------------------------------------------------------------------------------------------")
+			if recs_msgs_dict['crit'] or recs_msgs_dict['imp']:
+				print("-----------------------------------------------------------------------------------------------------")
 			print(recs_msgs_dict['info'])
 		if f:
-			f.write("-----------------------------------------------------------------------------------------------------\n")
+			if recs_msgs_dict['crit'] or recs_msgs_dict['imp']:
+				f.write("-----------------------------------------------------------------------------------------------------\n")
 			f.write(recs_msgs_dict['info'] + "\n")
 
 	if (not recs_msgs_dict['crit'] and not recs_msgs_dict['imp'] and not recs_msgs_dict['info']) or (critical_only and not recs_msgs_dict['crit']):
@@ -1001,10 +1007,10 @@ def check_prereqs():
 		if shutil.which("java") is None:
 			recs_msgs_dict['crit'] += "- CRITICAL: Java is not installed or on the PATH\n" + \
 			"    Impact:  Detect program will fail\n" + \
-			"    Action:  Install Java 1.8 or 1.11\n\n"
-			if cli_msgs_dict['reqd'].find("detect.java.path") < 0:
-				cli_msgs_dict['reqd'] += "        --detect.java.path=<PATH_TO_JAVA>\n" + \
-				"            (If Java installed, specify path to java executable if not on PATH)\n"
+			"    Action:  Install OpenJDK 1.8 or 1.11\n\n"
+# 			if cli_msgs_dict['reqd'].find("detect.java.path") < 0:
+# 				cli_msgs_dict['reqd'] += ""XXCLIOPTSXX            --detect.java.path=<PATH_TO_JAVA>\n" + \
+# 				"XXCLIOPTSXX            (If Java installed, specify path to java executable if not on PATH)\n"
 		else:
 			javaoutput = subprocess.check_output(['java', '-version'], stderr=subprocess.STDOUT)
 			#javaoutput = 'openjdk version "13.0.1" 2019-10-15'
@@ -1038,35 +1044,46 @@ def check_prereqs():
 				recs_msgs_dict['crit'] += "- CRITICAL: Java program version cannot be determined\n" + \
 				"    Impact:  Scan may fail\n" + \
 				"    Action:  Check Java or OpenJDK version 1.8 or 1.11 is installed\n\n"
-				if cli_msgs_dict['reqd'].find("detect.java.path") < 0:
-					cli_msgs_dict['reqd'] += "        --detect.java.path=<PATH_TO_JAVA>\n" + \
-					"            (If Java installed, specify path to java executable if not on PATH)\n"
+# 				if cli_msgs_dict['reqd'].find("detect.java.path") < 0:
+# 					cli_msgs_dict['reqd'] += "XXCLIOPTSXX        --detect.java.path=<PATH_TO_JAVA>\n" + \
+# 					"XXCLIOPTSXX            (If Java installed, specify path to java executable if not on PATH)\n"
 
 	except:
 		recs_msgs_dict['crit'] += "- CRITICAL: Java is not installed or on the PATH\n" + \
 		"    Impact:  Detect program will fail\n" + \
-		"    Action:  Install Java 1.8 or 1.11\n\n"
-		if cli_msgs_dict['reqd'].find("detect.java.path") < 0:
-			cli_msgs_dict['reqd'] += "        --detect.java.path=<PATH_TO_JAVA>\n" + \
-			"            (If Java installed, specify path to java executable if not on PATH)\n"
+		"    Action:  Install OpenJDK 1.8 or 1.11\n\n"
+# 		if cli_msgs_dict['reqd'].find("detect.java.path") < 0:
+# 			cli_msgs_dict['reqd'] += "XXCLIOPTSXX        --detect.java.path=<PATH_TO_JAVA>\n" + \
+# 			"XXCLIOPTSXX            (If Java installed, specify path to java executable if not on PATH)\n"
 
+	if platform.system() == "Linux" or platform.system() == "Darwin":
+		# check for bash and curl
+		if shutil.which("bash") is None:
+			recs_msgs_dict['crit'] += "- CRITICAL: Bash is not installed or on the PATH\n" + \
+			"    Impact:  Detect program will fail\n" + \
+			"    Action:  Install Bash or add to PATH\n\n"
+	if shutil.which("curl") is None:
+		recs_msgs_dict['crit'] += "- CRITICAL: Curl is not installed or on the PATH\n" + \
+		"    Impact:  Detect program will fail\n" + \
+		"    Action:  Install Curl or add to PATH\n\n"
+			
 def output_cli(critical_only, report, f):
 	global bdignore
 
-	output = "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\nDETECT CLI EXAMPLES\n\n"
+	output = "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\nDETECT CLI\n\n"
 	if recs_msgs_dict['crit']:
 		output += "Note that scan will probably fail - see CRITICAL recommendations above\n\n"
 
 	output += "    MINIMUM REQUIRED OPTIONS:\n" + \
-	"        " + cli_msgs_dict['reqd']
-	print(output)
+	cli_msgs_dict['reqd']
+	print(output.replace("XXCLIOPTSXX", ""))
 	if bdignore:
 		if report:
-			print("        (Note that a .bdignore exclude file is recommended - see the report file '{}')\n".format(report))
+			print("        (Note that .bdignore exclude file is recommended - see the report file '{}' or use '-o' option)\n".format(report))
 		else:
-			print("        (Note that a .bdignore exclude file is recommended - specify a report file using '-r repfile')\n")
+			print("        (Note that .bdignore exclude file is recommended - specify a report file using '-r repfile' or use '-o' option)\n")
 	if f:
-		f.write(output + "\n")
+		f.write(output.replace("XXCLIOPTSXX", "") + "\n")
 
 	output = ""
 	if cli_msgs_dict['scan'] != '':
@@ -1085,23 +1102,58 @@ def output_cli(critical_only, report, f):
 		output = "\n    PROJECT OPTIONS:\n" + cli_msgs_dict['proj'] + "\n"
 
 	if not critical_only:
-		print(output)
+		print(output.replace("XXCLIOPTSXX", ""))
 	if f:
-		f.write(output + "\n")
+		f.write(output.replace("XXCLIOPTSXX", "") + "\n")
 
 	if f:
 		print("Further information in output report file '{}'\n".format(report))
 	else:
 		print("Use '-r repfile' to produce report file with more information\n")
 
+def output_config(projdir):
+	global bdignore
+
+	bdignore_file = os.path.join(projdir, ".bdignore")
+	if not os.path.exists(bdignore_file):
+		try:
+			b = open(bdignore_file, "a")
+			b.write(bdignore)
+			b.close()
+			print("INFO: .bdignore file written to project folder")
+		except Exception as e:
+			print('ERROR: Unable to open .bdignore file \n' + str(e))
+
+	config_file = os.path.join(projdir, "application-project.yml")
+	if not os.path.exists(config_file):
+		config = "#EXAMPLE PROJECT CONFIG FILE\n" + \
+		"# Uncomment required options\n#\n" + \
+		"# MINIMUM REQUIRED OPTIONS:\n" + cli_msgs_dict['reqd'] + "\n" + \
+		"# OPTIONS TO IMPROVE SCAN COVERAGE:\n" + cli_msgs_dict['scan'] + "\n" + \
+		"# OPTIONS TO REDUCE SIGNATURE SCAN SIZE:\n" + cli_msgs_dict['size'] + "\n" + \
+		"# OPTIONS TO OPTIMIZE DEPENDENCY SCAN:\n" + cli_msgs_dict['dep'] + "\n" + \
+		"# OPTIONS TO IMPROVE LICENSE COMPLIANCE ANALYSIS:\n" + cli_msgs_dict['lic'] + "\n"
+
+	if cli_msgs_dict['proj'] != '':
+		output = "\n    PROJECT OPTIONS:\n" + cli_msgs_dict['proj'] + "\n"
+
+		try:
+			c = open(config_file, "a")
+			c.write(config.replace("XXCLIOPTSXX        --", "# ").replace("=", ": ").replace("XXCLIOPTSXX        ", "#"))
+			c.close()
+			print("INFO: application-project.yml file written to project folder (Edit to uncomment options)")
+		except Exception as e:
+			print('ERROR: Unable to open project config file \n' + str(e))
+
 parser = argparse.ArgumentParser(description='Examine files/folders to determine scan recommendations', prog='detect_advisor')
 
 parser.add_argument("scanfolder", help="Project folder to analyse")
-parser.add_argument("-r", "--report", help="Output report file")
+parser.add_argument("-r", "--report", help="Output report file (must not exist already)")
 parser.add_argument("-d", "--detectors_only", help="Check for detector files and prerequisites only",action='store_true')
 parser.add_argument("-s", "--signature_only", help="Check for files and folders for signature scan only",action='store_true')
 parser.add_argument("-c", "--critical_only", help="Only show critical issues which will causes detect to fail",action='store_true')
-parser.add_argument("-f", "--full", help="Output full information to report file if specified",action='store_true')
+#parser.add_argument("-f", "--full", help="Output full information to report file if specified",action='store_true')
+parser.add_argument("-o", "--output_config", help="Create .yml config and .bdignore file in project folder",action='store_true')
 
 args = parser.parse_args()
 
@@ -1115,18 +1167,21 @@ if args.report and os.path.exists(args.report):
 
 rep = ""
 bdignore = ""
-cli_msgs_dict['reqd'] = "--blackduck.url=https://YOURSERVER --blackduck.api.token=YOURTOKEN\n" + \
-"        --detect.source.path='{}'\n".format(os.path.abspath(args.scanfolder))
-cli_msgs_dict['proj'] = "        --detect.project.name=PROJECT_NAME --detect.project.version.name=VERSION_NAME\n" + \
-"            (Optionally specify project and version names)\n" + \
-"        --detect.project.tier=X\n" + \
-"            (Optionally define project tier numeric)\n" + \
-"        --detect.project.version.phase=ARCHIVED/DEPRECATED/DEVELOPMENT/PLANNING/PRERELEASE/RELEASED\n" + \
-"            (Optionally specify project phase - default DEVELOPMENT)\n" + \
-"        --detect.project.version.distribution=EXTERNAL/SAAS/INTERNAL/OPENSOURCE\n" + \
-"            (Optionally specify version distribution - default EXTERNAL)\n"
+cli_msgs_dict['reqd'] = "XXCLIOPTSXX        --blackduck.url=https://YOURSERVER\n" + \
+"XXCLIOPTSXX        --blackduck.api.token=YOURTOKEN\n" + \
+"XXCLIOPTSXX        --detect.source.path='{}'\n".format(os.path.abspath(args.scanfolder))
+cli_msgs_dict['proj'] = "XXCLIOPTSXX        --detect.project.name=PROJECT_NAME\n" + \
+"XXCLIOPTSXX        --detect.project.version.name=VERSION_NAME\n" + \
+"XXCLIOPTSXX            (Optionally specify project and version names)\n" + \
+"XXCLIOPTSXX        --detect.project.tier=X\n" + \
+"XXCLIOPTSXX            (Optionally define project tier numeric)\n" + \
+"XXCLIOPTSXX        --detect.project.version.phase=ARCHIVED/DEPRECATED/DEVELOPMENT/PLANNING/PRERELEASE/RELEASED\n" + \
+"XXCLIOPTSXX            (Optionally specify project phase - default DEVELOPMENT)\n" + \
+"XXCLIOPTSXX        --detect.project.version.distribution=EXTERNAL/SAAS/INTERNAL/OPENSOURCE\n" + \
+"XXCLIOPTSXX            (Optionally specify version distribution - default EXTERNAL)\n"
 
-print("\nPROCESSING:")
+print("\nDETECT ADVISOR v{} - for use with Synopsys Detect v{} or later\n".format(advisor_version, detect_version))
+print("PROCESSING:")
 
 if os.path.isabs(args.scanfolder):
 	print("Working on project folder {}\n".format(args.scanfolder))
@@ -1147,20 +1202,22 @@ else:
 	f = None
 
 if not args.signature_only:
-	if args.full:
+#	if args.full:
+	if True:
 		detector_process(args.scanfolder, f)
 	else:
 		detector_process(args.scanfolder, None)
 else:
-	cli_required += "        --detect.tools=SIGNATURE_SCAN\n"
+	cli_required += "XXCLIOPTSXX        --detect.tools=SIGNATURE_SCAN\n"
 
 if not args.detectors_only:
-	if args.full:
-		signature_process(args.scanfolder, f)
+#	if args.full:
+	if True:
+			signature_process(args.scanfolder, f)
 	else:
 		signature_process(args.scanfolder, None)
 else:
-	cli_required += "        --detect.tools=DETECTOR\n"
+	cli_required += "XXCLIOPTSXX        --detect.tools=DETECTOR\n"
 
 print_summary(args.critical_only, f)
 
@@ -1169,6 +1226,9 @@ check_prereqs()
 output_recs(args.critical_only, f)
 
 output_cli(args.critical_only, args.report, f)
+
+if args.output_config:
+	output_config(args.scanfolder)
 
 if f:
 	f.write("\n")
