@@ -54,7 +54,12 @@ detectors_file_dict = {
 'Gemfile.lock': ['gem'],
 'build.sbt': ['sbt'],
 'Package.swift': ['swift'],
-'yarn.lock': ['yarn']
+'yarn.lock': ['yarn'],
+'Makefile': ['clang'],
+'makefile': ['clang'],
+'GNUmakefile': ['clang'],
+'recipe-depends.dot': ['bitbake'],
+'task-depends.dot': ['bitbake']
 }
 
 detectors_ext_dict = {
@@ -80,8 +85,96 @@ detectors_ext_dict = {
 '.sqlproj': ['dotnet'],
 '.dbproj': ['dotnet'],
 '.rproj': ['dotnet'],
-'.sln': ['dotnet']
+'.sln': ['dotnet'],
+'.mk': ['clang']
 }
+
+detector_cli_options_dict = {
+'bazel': "        --detect.bazel.cquery.options='OPTION1,OPTION2'\n" + \
+"            (OPTIONAL List of additional options to pass to the bazel cquery command.)\n" + \
+"        --detect.bazel.dependency.type=MAVEN_JAR/MAVEN_INSTALL/UNSPECIFIED\n" + \
+"            (OPTIONAL Bazel workspace external dependency rule: The Bazel workspace rule used to pull in external dependencies.\n" + \
+"            If not set, Detect will attempt to determine the rule from the contents of the WORKSPACE file (default: UNSPECIFIED).)\n",
+'bitbake': "        --detect.bitbake.package.names='PACKAGE1,PACKAGE2'\n" + \
+"            (OPTIONAL List of package names from which dependencies are extracted.)\n" + \
+"        --detect.bitbake.search.depth=X\n" + \
+"            (OPTIONAL The depth at which Detect will search for the recipe-depends.dot or package-depends.dot files (default: 1).)\n" + \
+"        --detect.bitbake.source.arguments='ARG1,ARG2,ARG3'\n" + \
+"            (OPTIONAL List of arguments to supply when sourcing the build environment init script)\n",
+'conda': "        --detect.conda.environment.name=NAME\n" + \
+"            (OPTIONAL The name of the anaconda environment used by your project)\n",
+'dotnet': "        --detect.nuget.config.path=PATH\n" + \
+"            (OPTIONAL The path to the Nuget.Config file to supply to the nuget exe)\n" + \
+"        --detect.nuget.packages.repo.url=URL\n" + \
+"            (OPTIONAL Nuget Packages Repository URL (default: https://api.nuget.org/v3/index.json).)\n" + \
+"        --detect.nuget.excluded.modules=PROJECT\n" + \
+"            (OPTIONAL Nuget Projects Excluded: The names of the projects in a solution to exclude.)\n" + \
+"        --detect.nuget.ignore.failure=true\n" + \
+"            (OPTIONAL Ignore Nuget Failures: If true errors will be logged and then ignored.)\n" + \
+"        --detect.nuget.included.modules=PROJECT\n" + \
+"            (OPTIONAL Nuget Modules Included: The names of the projects in a solution to include (overrides exclude).)\n",
+'gradle': "        --detect.gradle.build.command='ARGUMENT1 ARGUMENT2'\n" + \
+"            (OPTIONAL Gradle Build Command: Gradle command line arguments to add to the mvn/mvnw command line.)\n" + \
+"        --detect.gradle.excluded.configurations='CONFIG1,CONFIG2'\n" + \
+"            (OPTIONAL Gradle Exclude Configurations: List of Gradle configurations to exclude.)\n" + \
+"        --detect.gradle.excluded.projects='PROJECT1,PROJECT2'\n" + \
+"            (OPTIONAL Gradle Exclude Projects: List of Gradle sub-projects to exclude.)\n" + \
+"        --detect.gradle.included.configurations='CONFIG1,CONFIG2'\n" + \
+"            (OPTIONAL Gradle Include Configurations: List of Gradle configurations to include.)\n" + \
+"        --detect.gradle.included.projects='PROJECT1,PROJECT2'\n" + \
+"            (OPTIONAL Gradle Include Projects: List of Gradle sub-projects to include.)\n",
+'maven': "        --detect.maven.build.command='ARGUMENT1 ARGUMENT2'\n" + \
+"            (OPTIONAL Maven Build Command: Maven command line arguments to add to the mvn/mvnw command line.)\n" + \
+"        --detect.maven.excluded.scopes='SCOPE1,SCOPE2'\n" + \
+"            (OPTIONAL Dependency Scope Excluded: List of Maven scopes. Output will be limited to dependencies outside these scopes (overrides include).)\n" + \
+"        --detect.maven.included.scopes='SCOPE1,SCOPE2'\n" + \
+"            (OPTIONAL Dependency Scope Included: List of Maven scopes. Output will be limited to dependencies within these scopes (overridden by exclude).)\n" + \
+"        --detect.maven.excluded.modules='MODULE1,MODULE2'\n" + \
+"            (OPTIONAL Maven Modules Excluded: List of Maven modules (sub-projects) to exclude.)\n" + \
+"        --detect.maven.included.modules='MODULE1,MODULE2'\n" + \
+"            (OPTIONAL Maven Modules Included: List of Maven modules (sub-projects) to include.)\n" + \
+"        --detect.maven.include.plugins=true\n" + \
+"            (OPTIONAL Maven Include Plugins: Whether or not detect will include the plugins section when parsing a pom.xml.)\n",
+'npm': "        --detect.npm.arguments='ARG1 ARG2'\n" + \
+"            (OPTIONAL Additional arguments to add to the npm command line when running Detect against an NPM project.)\n" + \
+"        --detect.npm.include.dev.dependencies=false\n" + \
+"            (OPTIONAL Include NPM Development Dependencies: Set this value to false if you would like to exclude your dev dependencies.)\n",
+'packagist': "        --detect.packagist.include.dev.dependencies=false\n" + \
+"            (OPTIONAL Include Packagist Development Dependencies: Set this value to false if you would like to exclude your dev requires dependencies.)\n",
+'pear': "        --detect.pear.only.required.deps=true\n" + \
+"            (OPTIONAL Include Only Required Pear Dependencies: Set to true if you would like to include only required packages.)\n",
+'pip': "        --detect.pip.only.project.tree=true\n" + \
+"            (OPTIONAL PIP Include Only Project Tree: By default, pipenv includes all dependencies found in the graph. Set to true to only\n" + \
+"            include dependencies found underneath the dependency that matches the provided pip project and version name.)\n" + \
+"        --detect.pip.project.name=NAME\n" + \
+"            (OPTIONAL PIP Project Name: The name of your PIP project, to be used if your project's name cannot be correctly inferred from its setup.py file.)\n" + \
+"        --detect.pip.project.version.name=VERSION\n" + \
+"            (OPTIONAL PIP Project Version Name: The version of your PIP project, to be used if your project's version name\n" + \
+"            cannot be correctly inferred from its setup.py file.)\n" + \
+"        --detect.pip.requirements.path='PATH1,PATH2'\n" + \
+"            (OPTIONAL PIP Requirements Path: List of paths to requirements.txt files.)\n",
+'ruby': "        --detect.ruby.include.dev.dependencies=true\n" + \
+"            (OPTIONAL Ruby Development Dependencies: If set to true, development dependencies will be included when parsing *.gemspec files.)\n" + \
+"        --detect.ruby.include.runtime.dependencies=false\n" + \
+"            (OPTIONAL Ruby Runtime Dependencies: If set to false, runtime dependencies will not be included when parsing *.gemspec files.)\n",
+'sbt': "        --detect.sbt.report.search.depth\n" + \
+"            (OPTIONAL SBT Report Search Depth: Depth the sbt detector will use to search for report files (default 3))\n" + \
+"        --detect.sbt.excluded.configurations='CONFIG'\n" + \
+"            (OPTIONAL SBT Configurations Excluded: The names of the sbt configurations to exclude.)\n" + \
+"        --detect.sbt.included.configurations='CONFIG'\n" + \
+"            (OPTIONAL SBT Configurations Included: The names of the sbt configurations to include.)\n",
+'yarn': "        --detect.yarn.prod.only=true\n" + \
+"            (OPTIONAL Include Yarn Production Dependencies Only: Set this to true to only scan production dependencies.)\n"
+}
+
+detector_cli_required_dict = {
+'bazel': "        --detect.bazel.target='TARGET'\n" + \
+"            (REQUIRED Bazel Target: The Bazel target (for example, //foo:foolib) for which dependencies are collected.)\n",
+'bitbake': "        --detect.bitbake.build.env.name=NAME\n" + \
+"            (REQUIRED BitBake Init Script Name: The name of the build environment init script (default: oe-init-build-env).)\n"
+}
+
+linux_only_detectors = ['clang', 'bitbake']
 
 largesize = 5000000
 hugesize = 20000000
@@ -134,6 +227,7 @@ other_list = []
 bdignore_list = []
 
 det_dict = {}
+detectors_list = []
 
 crc_dict = {}
 
@@ -145,6 +239,19 @@ large_dict = {}
 arc_files_dict = {}
 
 messages = ""
+recs_msgs_dict = {
+'crit': '',
+'imp': '',
+'info': ''
+}
+cli_msgs_dict = {
+'reqd': '',
+'proj' : '',
+'scan': '',
+'size': '',
+'dep': '',
+'lic': ''
+}
 
 def process_nested_zip(z, zippath, zipdepth, dirdepth):
 	global max_arc_depth
@@ -263,7 +370,7 @@ def checkfile(name, path, size, size_comp, dirdepth, inarc):
 			if not inarc:
 				det_dict[path] = dirdepth
 			ftype = 'det'
-		if ext in srcext_list:
+		elif ext in srcext_list:
 			src_list.append(path)
 			ftype = 'src'
 		elif ext in jarext_list:
@@ -402,28 +509,34 @@ def process_dirdups(f):
 		dcount += 1
 		if dcount % ((ditems//6) + 1) == 0:
 			print(".", end="", flush=True)
-		if adict['num_entries'] == 0 or adict['size'] < hugesize:
+		try:
+			if adict['num_entries'] == 0 or adict['size'] < hugesize:
+				continue
+		except:
 			continue
 		dupmatch = False
 		for cpath, cdict in dir_dict.items():
 			if apath != cpath:
-				if adict['num_entries'] == cdict['num_entries'] and adict['size'] == cdict['size'] \
-				and adict['filenamesstring'] == cdict['filenamesstring']:
-					if adict['depth'] <= cdict['depth']:
-						keypath = apath
-						valpath = cpath
-					else:
-						keypath = cpath
-						valpath = apath
+				try:
+					if adict['num_entries'] == cdict['num_entries'] and adict['size'] == cdict['size'] \
+					and adict['filenamesstring'] == cdict['filenamesstring']:
+						if adict['depth'] <= cdict['depth']:
+							keypath = apath
+							valpath = cpath
+						else:
+							keypath = cpath
+							valpath = apath
 
-					newdup = False
-					if keypath not in tmp_dup_dir_dict.keys():
-						newdup = True
-					elif tmp_dup_dir_dict[keypath] != valpath:
-						newdup = True
-					if newdup:
-						tmp_dup_dir_dict[keypath] = valpath
-					break
+						newdup = False
+						if keypath not in tmp_dup_dir_dict.keys():
+							newdup = True
+						elif tmp_dup_dir_dict[keypath] != valpath:
+							newdup = True
+						if newdup:
+							tmp_dup_dir_dict[keypath] = valpath
+						break
+				except:
+					pass
 
 	# Now remove dupdirs with matching parent folders
 	for xpath in tmp_dup_dir_dict.keys():
@@ -448,8 +561,6 @@ def process_dirdups(f):
 	return(count_dupdirs, size_dupdirs)
 
 def check_singlefiles(f):
-	global recs_critical, recs_important, recs_other
-	global cli_required, cli_optional, cli_other
 
 	# Check for singleton js & other single files
 	sfmatch = False
@@ -472,14 +583,14 @@ def check_singlefiles(f):
 					sfmatch = True
 					sf_list.append(thisfile)
 	if sfmatch:
-		recs_other += "- INFORMATION: {} singleton .js files found\n".format(len(sf_list)) + \
+		recs_msgs_dict['info'] += "- INFORMATION: {} singleton .js files found\n".format(len(sf_list)) + \
 		"    Impact:  OSS components within JS files may not be detected\n" + \
-		"    Action:  Consider specifying Single file matching\n" + \
+		"    Action:  Consider specifying Single file matching in Signature scan\n" + \
 		"             (--detect.blackduck.signature.scanner.individual.file.matching=SOURCE)\n\n"
-		if cli_other.find("individual.file.matching") < 0:
-			cli_other += "        --detect.blackduck.signature.scanner.individual.file.matching=SOURCE\n"
-		if cli_other.find("upload.source.mode") < 0:
-			cli_other += "        --detect.blackduck.signature.scanner.upload.source.mode=true\n            (CAUTION - will upload source files)\n"
+		if cli_msgs_dict['scan'].find("individual.file.matching") < 0:
+			cli_msgs_dict['scan'] += "        --detect.blackduck.signature.scanner.individual.file.matching=SOURCE\n" + \
+			"            (To check singleton .js files for OSS matches)\n"
+
 		#if f:
 		#	f.write("\nSINGLE JS FILES:\n")
 		#	for thisfile in sf_list:
@@ -597,8 +708,6 @@ def print_summary(critical_only, f):
 		f.write(summary)
 
 def signature_process(folder, f):
-	global recs_critical, recs_important, recs_other
-	global cli_required, cli_optional, cli_other
 	global bdignore
 
 	#print("SIGNATURE SCAN ANALYSIS:")
@@ -616,37 +725,39 @@ def signature_process(folder, f):
 
 	# Produce Recommendations
 	if sizes['file'][notinarc]+sizes['arc'][notinarc] > 5000000000:
-		recs_critical += "- CRITICAL: Overall scan size ({:>,d} MB) is too large\n".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000)) + \
+		recs_msgs_dict['crit'] += "- CRITICAL: Overall scan size ({:>,d} MB) is too large\n".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000)) + \
 		"    Impact:  Scan will fail\n" + \
 		"    Action:  Ignore folders or remove large files - look for .bdignore in report file\n\n"
 	elif sizes['file'][notinarc]+sizes['arc'][notinarc] > 2000000000:
-		recs_important += "- IMPORTANT: Overall scan size ({:>,d} MB) is large\n".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000)) + \
+		recs_msgs_dict['imp'] += "- IMPORTANT: Overall scan size ({:>,d} MB) is large\n".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000)) + \
 		"    Impact:  Will impact Capacity license usage\n" + \
 		"    Action:  Ignore folders or remove large files - look for .bdignore in report file\n\n"
 
 	if counts['file'][notinarc]+counts['file'][inarc] > 1000000:
-		recs_important += "- IMPORTANT: Overall number of files ({:>,d}) is very large\n".format(trunc((counts['file'][notinarc]+counts['file'][inarc]))) + \
+		recs_msgs_dict['imp'] += "- IMPORTANT: Overall number of files ({:>,d}) is very large\n".format(trunc((counts['file'][notinarc]+counts['file'][inarc]))) + \
 		"    Impact:  Scan time could be VERY long\n" + \
 		"    Action:  Ignore folders or split project (scan sub-projects) - look for .bdignore in report file\n\n"
 	elif counts['file'][notinarc]+counts['file'][inarc] > 200000:
-		recs_other += "- INFORMATION: Overall number of files ({:>,d}) is large\n".format(trunc((counts['file'][notinarc]+counts['file'][inarc]))) + \
+		recs_msgs_dict['info'] += "- INFORMATION: Overall number of files ({:>,d}) is large\n".format(trunc((counts['file'][notinarc]+counts['file'][inarc]))) + \
 		"    Impact:  Scan time could be long\n" + \
 		"    Action:  Ignore folders or split project (scan sub-projects) - look for .bdignore in report file\n\n"
 
 	#
 	# Need to add check for nothing to scan (no supported scan files)
 	if counts['src'][notinarc]+counts['src'][inarc]+counts['jar'][notinarc]+counts['jar'][inarc]+counts['other'][notinarc]+counts['other'][inarc] == 0:
-		recs_other += "- INFORMATION: No source, jar or other files found\n".format(trunc((counts['file'][notinarc]+sizes['file'][inarc]))) + \
+		recs_msgs_dict['info'] += "- INFORMATION: No source, jar or other files found\n".format(trunc((counts['file'][notinarc]+sizes['file'][inarc]))) + \
 		"    Impact:  Scan may not detect any OSS from files (dependencies only)\n" + \
 		"    Action:  Check scan location is correct\n"
 
 	if sizes['bin'][notinarc]+sizes['bin'][inarc] > 20000000:
-		recs_important += "- IMPORTANT: Large amount of data ({:>,d} MB) in {} binary files found\n".format(trunc((sizes['bin'][notinarc]+sizes['bin'][inarc])/1000000), len(bin_list)) + \
+		recs_msgs_dict['imp'] += "- IMPORTANT: Large amount of data ({:>,d} MB) in {} binary files found\n".format(trunc((sizes['bin'][notinarc]+sizes['bin'][inarc])/1000000), len(bin_list)) + \
 		"    Impact:  Binary files not analysed by standard scan, will impact Capacity license usage\n" + \
 		"    Action:  Remove files or ignore folders (using .bdignore), also consider zipping\n" + \
 		"             files and using Binary scan (Specify -f option to add list of large binary\n" + \
 		"             files to the report file, and use the --detect.binary.scan.file.path=binary_files.zip option)\n\n"
-		cli_other += "        --detect.binary.scan.file.path=binary_files.zip\n            (subject to Binary scan license - zip binary files first - see list of binary files in report file)\n"
+		cli_msgs_dict['scan'] += "          --detect.binary.scan.file.path=binary_files.zip\n" + \
+		"            (To scan binary files within the project; zip files first - see list of binary\n" + \
+		"             files in report file; binary scan license required)\n"
 		if f:
 			f.write("\nLARGE BINARY FILES:\n(Consider zipping these files and then running Detect with --detect.binary.scan.file.path=binary_files.zip option - subject to license available)\n")
 			for bin in bin_large_list:
@@ -654,7 +765,7 @@ def signature_process(folder, f):
 			f.write("\n")
 
 	if size_dirdups > 20000000:
-		recs_important += "- IMPORTANT: Large amount of data ({:,d} MB) in {:,d} duplicate folders\n".format(trunc(size_dirdups/1000000), len(dup_dir_dict)) + \
+		recs_msgs_dict['imp'] += "- IMPORTANT: Large amount of data ({:,d} MB) in {:,d} duplicate folders\n".format(trunc(size_dirdups/1000000), len(dup_dir_dict)) + \
 		"    Impact:  Scan capacity potentially utilised without detecting additional\n" + \
 		"             components, will impact Capacity license usage\n" + \
 		"    Action:  Remove or ignore duplicate folders (recommended .bdignore file contents in report file)\n\n"
@@ -663,7 +774,7 @@ def signature_process(folder, f):
 				bdignore += bpath + "\n"
 
 	if size_dups > 20000000:
-		recs_important += "- IMPORTANT: Large amount of data ({:,d} MB) in {:,d} duplicate files\n".format(trunc(size_dups/1000000), len(dup_large_dict)) + \
+		recs_msgs_dict['imp'] += "- IMPORTANT: Large amount of data ({:,d} MB) in {:,d} duplicate files\n".format(trunc(size_dups/1000000), len(dup_large_dict)) + \
 		"    Impact:  Scan capacity potentially utilised without detecting additional\n" + \
 		"             components, will impact Capacity license usage\n" + \
 		"    Action:  Remove duplicate files or ignore folders (recommended .bdignore file contents in report file)\n\n"
@@ -673,21 +784,25 @@ def signature_process(folder, f):
 		#print("")
 
 	if counts['lic'][notinarc] > 10:
-		recs_other += "- INFORMATION: License or notices files found\n" + \
+		recs_msgs_dict['info'] += "- INFORMATION: License or notices files found\n" + \
 		"    Impact:  Local license text may need to be scanned\n" + \
 		"    Action:  Add options --detect.blackduck.signature.scanner.license.search=true\n" + \
 		"             and optionally --detect.blackduck.signature.scanner.upload.source.mode=true\n\n"
-		cli_other += "        --detect.blackduck.signature.scanner.license.search=true\n"
-		if cli_other.find("upload.source.mode") < 0:
-			cli_other += "        --detect.blackduck.signature.scanner.upload.source.mode=true\n            (CAUTION - will upload local source files)\n"
+		cli_msgs_dict['lic'] += "        --detect.blackduck.signature.scanner.license.search=true\n" + \
+		"            (To perform client-side scanning for license files and references)\n"
+		if cli_msgs_dict['lic'].find("upload.source.mode") < 0:
+			cli_msgs_dict['lic'] += "        --detect.blackduck.signature.scanner.upload.source.mode=true\n" + \
+			"            (CAUTION - will upload local source files)\n"
 
 	if counts['src'][notinarc]+counts['src'][inarc] > 10:
-		recs_other += "- INFORMATION: Source files found for which Snippet analysis supported\n" + \
+		recs_msgs_dict['info'] += "- INFORMATION: Source files found for which Snippet analysis supported\n" + \
 		"    Impact:  Snippet analysis can discover copied OSS source files and functions\n" + \
 		"    Action:  Add options --detect.blackduck.signature.scanner.snippet.matching=SNIPPET_MATCHING\n\n"
-		cli_other += "        --detect.blackduck.signature.scanner.snippet.matching=SNIPPET_MATCHING\n"
-		if cli_other.find("upload.source.mode") < 0:
-			cli_other += "        --detect.blackduck.signature.scanner.upload.source.mode=true\n"
+		cli_msgs_dict['lic'] += "        --detect.blackduck.signature.scanner.snippet.matching=SNIPPET_MATCHING\n" + \
+		"            (To search for copied OSS source files and functions within source files)\n"
+		if cli_msgs_dict['lic'].find("upload.source.mode") < 0:
+			cli_msgs_dict['lic'] += "        --detect.blackduck.signature.scanner.upload.source.mode=true\n" + \
+			"            (CAUTION - will upload local source files)\n"
 
 	check_singlefiles(f)
 	print(" Done")
@@ -695,10 +810,9 @@ def signature_process(folder, f):
 
 def detector_process(folder, f):
 	import shutil
+	import platform
 
-	global recs_critical, recs_important, recs_other
 	global rep
-	global cli_required, cli_optional, cli_other
 
 	print("- Processing Dependency Scan .....", end="", flush=True)
 
@@ -736,6 +850,17 @@ def detector_process(folder, f):
 					exes = detectors_ext_dict[os.path.splitext(fname)[1]]
 				missing_cmds = ""
 				for exe in exes:
+					if exe not in detectors_list:
+						detectors_list.append(exe)
+						if platform.system() != "Linux" and exe in linux_only_detectors:
+							if depth == 1:
+								recs_msgs_dict['crit'] += "- CRITICAL: Package manager '{}' requires scanning on a Linux platform\n".format(exe) + \
+								"    Impact:  Scan will fail\n" + \
+								"    Action:  Re-run Detect scan on Linux\n\n"
+							else:
+								recs_msgs_dict['imp'] += "- IMPORTANT: Package manager '{}' requires scanning on a Linux platform\n".format(exe) + \
+								"    Impact:  Scan may fail if detector depth change from default value\n" + \
+								"    Action:  Re-run Detect scan on Linux\n\n"
 					if shutil.which(exe) is not None:
 						command_exists = True
 					else:
@@ -749,6 +874,8 @@ def detector_process(folder, f):
 					f.write("{}\n".format(detpath))
 
 				if not command_exists and missing_cmds:
+					if missing_cmds.find(" OR ") > 0:
+						missing_cmds = "(" + missing_cmds + ")"
 					if depth == 1:
 						if cmds_missing1:
 							cmds_missing1 += " AND " + missing_cmds
@@ -767,47 +894,59 @@ def detector_process(folder, f):
 		"- Minimum folder depth:   {}\n".format(det_min_depth) + \
 		"- Maximum folder depth:   {}\n".format(det_max_depth) + \
 		"---------------------------------\n" + \
-		"- Total discovered:       {}\n".format(len(det_dict))
+		"- Total discovered:       {}\n\n".format(len(det_dict)) + \
+		"List of package managers required: {}\n".format(','.join(detectors_list))
 
 	if det_depth1 == 0 and det_other > 0:
-		recs_important += "- IMPORTANT: No package manager files found in invocation folder but do exist in sub-folders\n" + \
+		recs_msgs_dict['imp'] += "- IMPORTANT: No package manager files found in invocation folder but do exist in sub-folders\n" + \
 		"    Impact:  Dependency scan will not be run\n" + \
-		"    Action:  Specify --detect.detector.depth={}\n\n".format(det_min_depth)
-		if cli_optional.find("detector.depth") < 0:
-			cli_optional += "        --detect.detector.depth={}\n".format(det_min_depth)
+		"    Action:  Specify --detect.detector.depth={} (although depth could be up to {})\n\n".format(det_min_depth, det_max_depth)
+		if cli_msgs_dict['scan'].find("detector.depth") < 0:
+			cli_msgs_dict['scan'] += "        --detect.detector.depth={}\n".format(det_min_depth) + \
+			"            (To find package manager files within sub-folders; note depth up to {}\n".format(det_max_depth) + \
+			"            would find all PM files in sub-folders but this may not be necessary as they\n" + \
+			"            may be defined in higher level project and sub-projects only)\n"
 
 	if det_depth1 == 0 and det_other == 0:
-		recs_other += "- INFORMATION: No package manager files found in project at all\n" + \
+		recs_msgs_dict['info'] += "- INFORMATION: No package manager files found in project at all\n" + \
 		"    Impact:  No dependency scan will be performed\n" + \
 		"    Action:  This may be expected, but ensure you are scanning the correct location\n\n"
 
 	if cmds_missing1:
-		recs_critical += "- CRITICAL: Package manager programs ({}) missing for package files in invocation folder\n".format(cmds_missing1) + \
+		recs_msgs_dict['crit'] += "- CRITICAL: Package manager programs ({}) missing for package files in invocation folder\n".format(cmds_missing1) + \
 		"    Impact:  Scan will fail\n" + \
 		"    Action:  Either install package manager programs or\n" + \
 		"             consider specifying --detect.detector.buildless=true\n\n"
-		cli_required += "        --detect.detector.buildless=true\n            (OR install package managers '{}')\n".format(cmds_missing1)
+		cli_msgs_dict['reqd'] += "        --detect.detector.buildless=true\n" + \
+		"            (OR specify --detect.XXXX.path=<LOCATION> where XXX is package manager\n" + \
+		"            OR install package managers '{}')\n".format(cmds_missing1)
 
 	if cmds_missingother:
-		recs_important += "- IMPORTANT: Package manager programs ({}) missing for package files in sub-folders\n".format(cmds_missingother) + \
+		recs_msgs_dict['imp'] += "- IMPORTANT: Package manager programs ({}) missing for package files in sub-folders\n".format(cmds_missingother) + \
 		"    Impact:  The scan will fail if the scan depth is modified from the default\n" + \
-		"    Action:  Either install package manager programs or\n" + \
-		"             consider specifying --detect.detector.buildless=true\n\n"
-		if cli_optional.find("detector.buildless") < 0:
-			cli_optional += "        --detect.detector.buildless=true\n            (OR install package managers '{}')\n".format(cmds_missingother)
+		"    Action:  Install package manager programs\n" + \
+		"            (OR specify --detect.XXXX.path=<LOCATION> where XXX is package manager\n" + \
+		"             OR specify --detect.detector.buildless=true)\n\n"
+		if cli_msgs_dict['reqd'].find("detector.buildless") < 0:
+			cli_msgs_dict['reqd'] += "        --detect.detector.buildless=true\n" + \
+			"            (OR install package managers '{}' OR use --detect.XXXX.path=<LOCATION> where XXX is package manager)\n".format(cmds_missingother)
 
 	if counts['det'][inarc] > 0:
-		recs_important += "- IMPORTANT: Package manager files found in archives\n" + \
+		recs_msgs_dict['imp'] += "- IMPORTANT: Package manager files found in archives\n" + \
 		"    Impact:  Dependency scan not performed for projects in archives\n" + \
 		"    Action:  Extract zip archives and rescan\n\n"
+
+	for cmd in detectors_list:
+		if cmd in detector_cli_options_dict.keys():
+			cli_msgs_dict['dep'] += detector_cli_options_dict[cmd]
+		if cmd in detector_cli_required_dict.keys():
+			cli_msgs_dict['crit'] += detector_cli_required_dict[cmd]
 
 	print(" Done")
 
 	return
 
 def output_recs(critical_only, f):
-	global recs_critical, recs_important, recs_other
-	global cli_required, cli_optional, cli_other
 	global messages
 	global bdignore
 
@@ -818,28 +957,28 @@ def output_recs(critical_only, f):
 	if f:
 		f.write("\nRECOMMENDATIONS:\n")
 
-	if recs_critical:
-		print(recs_critical)
-		print("----------------------------------------------------------------------------------")
+	if recs_msgs_dict['crit']:
+		print(recs_msgs_dict['crit'])
 		if f:
-			f.write(recs_critical + "\n")
-			f.write("----------------------------------------------------------------------------------\n")
+			f.write(recs_msgs_dict['crit'] + "\n")
 
-	if recs_important:
+	if recs_msgs_dict['imp']:
 		if not critical_only:
-			print(recs_important)
-			print("----------------------------------------------------------------------------------")
+			print("-----------------------------------------------------------------------------------------------------")
+			print(recs_msgs_dict['imp'])
 		if f:
-			f.write(recs_important + "\n")
-			f.write("----------------------------------------------------------------------------------\n")
+			f.write("-----------------------------------------------------------------------------------------------------\n")
+			f.write(recs_msgs_dict['imp'] + "\n")
 
-	if recs_other:
+	if recs_msgs_dict['info']:
 		if not critical_only:
-			print(recs_other)
+			print("-----------------------------------------------------------------------------------------------------")
+			print(recs_msgs_dict['info'])
 		if f:
-			f.write(recs_other + "\n")
+			f.write("-----------------------------------------------------------------------------------------------------\n")
+			f.write(recs_msgs_dict['info'] + "\n")
 
-	if (not recs_critical and not recs_important and not recs_other) or (critical_only and not recs_critical):
+	if (not recs_msgs_dict['crit'] and not recs_msgs_dict['imp'] and not recs_msgs_dict['info']) or (critical_only and not recs_msgs_dict['crit']):
 		print("- None")
 		if f:
 			f.write("None\n")
@@ -853,18 +992,19 @@ def check_prereqs():
 	import re
 	import shutil
 
-	global recs_critical, recs_important, recs_other
 	global rep
-	global cli_required, cli_optional, cli_other
 
 	global messages
 
 	# Check java
 	try:
 		if shutil.which("java") is None:
-			recs_critical += "- CRITICAL: Java is not installed or on the PATH\n" + \
+			recs_msgs_dict['crit'] += "- CRITICAL: Java is not installed or on the PATH\n" + \
 			"    Impact:  Detect program will fail\n" + \
 			"    Action:  Install Java 1.8 or 1.11\n\n"
+			if cli_msgs_dict['reqd'].find("detect.java.path") < 0:
+				cli_msgs_dict['reqd'] += "        --detect.java.path=<PATH_TO_JAVA>\n" + \
+				"            (If Java installed, specify path to java executable if not on PATH)\n"
 		else:
 			javaoutput = subprocess.check_output(['java', '-version'], stderr=subprocess.STDOUT)
 			#javaoutput = 'openjdk version "13.0.1" 2019-10-15'
@@ -882,7 +1022,7 @@ def check_prereqs():
 							if major == "8" or major == "11":
 								rec = "none"
 							else:
-								recs_important += "- IMPORTANT: OpenJDK version {} is not documented as supported by Detect\n".format(version_string) + \
+								recs_msgs_dict['imp'] += "- IMPORTANT: OpenJDK version {} is not documented as supported by Detect\n".format(version_string) + \
 								"    Impact:  Scan may fail\n" + \
 								"    Action:  Check that Detect operates correctly\n\n"
 						elif prog == "java":
@@ -890,30 +1030,35 @@ def check_prereqs():
 							if major == "1" and (minor == "8" or minor == "11"):
 								rec = "none"
 							else:
-								recs_important += "- IMPORTANT: Java version {} is not documented as supported by Detect\n".format(version_string) + \
+								recs_msgs_dict['imp'] += "- IMPORTANT: Java version {} is not documented as supported by Detect\n".format(version_string) + \
 								"    Impact:  Scan may fail\n" + \
 								"    Action:  Check that Detect operates correctly\n\n"
 
 			if crit:
-				recs_critical += "- CRITICAL: Java program version cannot be determined\n" + \
+				recs_msgs_dict['crit'] += "- CRITICAL: Java program version cannot be determined\n" + \
 				"    Impact:  Scan may fail\n" + \
 				"    Action:  Check Java or OpenJDK version 1.8 or 1.11 is installed\n\n"
+				if cli_msgs_dict['reqd'].find("detect.java.path") < 0:
+					cli_msgs_dict['reqd'] += "        --detect.java.path=<PATH_TO_JAVA>\n" + \
+					"            (If Java installed, specify path to java executable if not on PATH)\n"
 
 	except:
-		recs_critical += "- CRITICAL: Java is not installed or on the PATH\n" + \
+		recs_msgs_dict['crit'] += "- CRITICAL: Java is not installed or on the PATH\n" + \
 		"    Impact:  Detect program will fail\n" + \
 		"    Action:  Install Java 1.8 or 1.11\n\n"
+		if cli_msgs_dict['reqd'].find("detect.java.path") < 0:
+			cli_msgs_dict['reqd'] += "        --detect.java.path=<PATH_TO_JAVA>\n" + \
+			"            (If Java installed, specify path to java executable if not on PATH)\n"
 
 def output_cli(critical_only, report, f):
-	global cli_required, cli_optional, cli_other
 	global bdignore
 
 	output = "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\nDETECT CLI EXAMPLES\n\n"
-	if recs_critical:
+	if recs_msgs_dict['crit']:
 		output += "Note that scan will probably fail - see CRITICAL recommendations above\n\n"
 
 	output += "    MINIMUM REQUIRED OPTIONS:\n" + \
-	"        " + cli_required
+	"        " + cli_msgs_dict['reqd']
 	print(output)
 	if bdignore:
 		if report:
@@ -924,11 +1069,20 @@ def output_cli(critical_only, report, f):
 		f.write(output + "\n")
 
 	output = ""
-	if cli_optional:
-		output = "\n    OTHER IMPORTANT OPTIONS:\n" + cli_optional + "\n"
+	if cli_msgs_dict['scan'] != '':
+		output += "\n    OPTIONS TO IMPROVE SCAN COVERAGE:\n" + cli_msgs_dict['scan'] + "\n"
 
-	if cli_other:
-		output += "    OTHER OPTIONS TO CONSIDER:\n" + cli_other + "\n"
+	if cli_msgs_dict['size'] != '':
+		output += "\n    OPTIONS TO REDUCE SIGNATURE SCAN SIZE:\n" + cli_msgs_dict['size'] + "\n"
+
+	if cli_msgs_dict['dep'] != '':
+		output += "\n    OPTIONS TO OPTIMIZE DEPENDENCY SCAN:\n" + cli_msgs_dict['dep'] + "\n"
+
+	if cli_msgs_dict['lic'] != '':
+		output += "\n    OPTIONS TO IMPROVE LICENSE COMPLIANCE ANALYSIS:\n" + cli_msgs_dict['lic'] + "\n"
+
+	if cli_msgs_dict['proj'] != '':
+		output = "\n    PROJECT OPTIONS:\n" + cli_msgs_dict['proj'] + "\n"
 
 	if not critical_only:
 		print(output)
@@ -959,18 +1113,25 @@ if args.report and os.path.exists(args.report):
 	print("Report file {} already exists\nExiting".format(args.report))
 	exit(2)
 
-recs_critical = ""
-recs_important = ""
-recs_other = ""
 rep = ""
 bdignore = ""
-cli_required = "--blackduck.url=https://YOURSERVER --blackduck.api.token=YOURTOKEN\n        --detect.source.path='{}'\n".format(os.path.abspath(args.scanfolder))
-cli_optional = ""
-cli_other = ""
+cli_msgs_dict['reqd'] = "--blackduck.url=https://YOURSERVER --blackduck.api.token=YOURTOKEN\n" + \
+"        --detect.source.path='{}'\n".format(os.path.abspath(args.scanfolder))
+cli_msgs_dict['proj'] = "        --detect.project.name=PROJECT_NAME --detect.project.version.name=VERSION_NAME\n" + \
+"            (Optionally specify project and version names)\n" + \
+"        --detect.project.tier=X\n" + \
+"            (Optionally define project tier numeric)\n" + \
+"        --detect.project.version.phase=ARCHIVED/DEPRECATED/DEVELOPMENT/PLANNING/PRERELEASE/RELEASED\n" + \
+"            (Optionally specify project phase - default DEVELOPMENT)\n" + \
+"        --detect.project.version.distribution=EXTERNAL/SAAS/INTERNAL/OPENSOURCE\n" + \
+"            (Optionally specify version distribution - default EXTERNAL)\n"
 
 print("\nPROCESSING:")
 
-print("Working on project folder {} (Absolute path {})\n".format(args.scanfolder, os.path.abspath(args.scanfolder)))
+if os.path.isabs(args.scanfolder):
+	print("Working on project folder {}\n".format(args.scanfolder))
+else:
+	print("Working on project folder {} (Absolute path {})\n".format(args.scanfolder, os.path.abspath(args.scanfolder)))
 
 print("- Reading hierarchy          .....", end="", flush=True)
 process_dir(args.scanfolder, 0)
