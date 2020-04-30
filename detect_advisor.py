@@ -1123,27 +1123,30 @@ def output_config(projdir):
 			print("INFO: .bdignore file written to project folder")
 		except Exception as e:
 			print('ERROR: Unable to open .bdignore file \n' + str(e))
+	else:
+		print("INFO: .bdignore file already exists - not updated")
 
 	config_file = os.path.join(projdir, "application-project.yml")
 	if not os.path.exists(config_file):
-		config = "#EXAMPLE PROJECT CONFIG FILE\n" + \
-		"# Uncomment required options\n#\n" + \
-		"# MINIMUM REQUIRED OPTIONS:\n" + cli_msgs_dict['reqd'] + "\n" + \
-		"# OPTIONS TO IMPROVE SCAN COVERAGE:\n" + cli_msgs_dict['scan'] + "\n" + \
-		"# OPTIONS TO REDUCE SIGNATURE SCAN SIZE:\n" + cli_msgs_dict['size'] + "\n" + \
-		"# OPTIONS TO OPTIMIZE DEPENDENCY SCAN:\n" + cli_msgs_dict['dep'] + "\n" + \
-		"# OPTIONS TO IMPROVE LICENSE COMPLIANCE ANALYSIS:\n" + cli_msgs_dict['lic'] + "\n"
-
-	if cli_msgs_dict['proj'] != '':
-		output = "\n    PROJECT OPTIONS:\n" + cli_msgs_dict['proj'] + "\n"
+		config = "#\n# EXAMPLE PROJECT CONFIG FILE\n" + \
+		"# Uncomment and update required options\n#\n#\n" + \
+		"# MINIMUM REQUIRED OPTIONS:\n#\n" + cli_msgs_dict['reqd'] + "\n" + \
+		"# OPTIONS TO IMPROVE SCAN COVERAGE:\n#\n" + cli_msgs_dict['scan'] + "\n" + \
+		"# OPTIONS TO REDUCE SIGNATURE SCAN SIZE:\n#\n" + cli_msgs_dict['size'] + "\n" + \
+		"# OPTIONS TO OPTIMIZE DEPENDENCY SCAN:\n#\n" + cli_msgs_dict['dep'] + "\n" + \
+		"# OPTIONS TO IMPROVE LICENSE COMPLIANCE ANALYSIS:\n#\n" + cli_msgs_dict['lic'] + "\n"
+		"# PROJECT OPTIONS:\n#\n" + cli_msgs_dict['proj'] + "\n"
 
 		try:
 			c = open(config_file, "a")
 			c.write(config.replace("XXCLIOPTSXX        --", "# ").replace("=", ": ").replace("XXCLIOPTSXX        ", "#"))
 			c.close()
-			print("INFO: application-project.yml file written to project folder (Edit to uncomment options)")
+			print("INFO: application-project.yml file written to project folder (Edit to uncomment options)\n" + \
+			"      - Use --spring.profiles.active=project to specify this configuration\n")
 		except Exception as e:
 			print('ERROR: Unable to open project config file \n' + str(e))
+	else:
+		print("INFO: Project config file application-project.yml already exists - not updated")
 
 parser = argparse.ArgumentParser(description='Examine files/folders to determine scan recommendations', prog='detect_advisor')
 

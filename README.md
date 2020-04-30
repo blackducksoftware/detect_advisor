@@ -22,7 +22,7 @@ Python 3 must be installed prior to using this script.
 
 # USAGE
 
-The `detect\_advisor.py` script can be invoked as follows:
+The `detect_advisor.py` script can be invoked as follows:
 
     usage: detect_advisor [-h] [-r REPORT] [-d] [-s] [-c] [-f] scanfolder
 
@@ -35,16 +35,16 @@ The `detect\_advisor.py` script can be invoked as follows:
       -h, --help            show this help message and exit
       -r REPORT, --report REPORT
                             Output report file (must not exist already)
-      -d, --detectors\_only  Check for detector files and prerequisites only
-      -s, --signature\_only  Check for files and folders for signature scan only
-      -c, --critical\_only   Only show critical issues which will cause Detect to fail
-      -o, --output\_config   Create .yml config and .bdignore file in project folder
+      -d, --detectors_only  Check for detector files and prerequisites only
+      -s, --signature_only  Check for files and folders for signature scan only
+      -c, --critical_only   Only show critical issues which will cause Detect to fail
+      -o, --output_config   Create .yml config and .bdignore file in project folder
 
 The `scanfolder` is required and can be a relative or absolute path.
 
 The `-r` or `--report` option allows a report file to be specified which will contain the console output and additional information; when the `-f` or `--full` option is also specified, lists of found files and other information will be added.
 
-The `-c` or `--critical\_only` option will limit the console output to critical issues only and skip the summary section and other information, although these sections will be written to the report file if specified with `-r repfile`.
+The `-c` or `--critical_only` option will limit the console output to critical issues only and skip the summary section and other information, although these sections will be written to the report file if specified with `-r repfile`.
 
 The `-d` and `-s` options specify that only Dependency (Detector) or Signature scan checking should be performed respectively.
 
@@ -163,15 +163,15 @@ This section includes recommended CLI options for Synopsys Detect. Note that a `
         MINIMUM REQUIRED OPTIONS:
             --blackduck.url=https://YOURSERVER
             --blackduck.api.token=YOURTOKEN
-            --detect.source.path='/Users/matthewbrady/Documents/detect\_adviser'
+            --detect.source.path='/Users/matthewbrady/Documents/detect_adviser'
             --detect.detector.buildless=true
                 (OR install package managers 'dotnet' OR use --detect.XXXX.path=<LOCATION> where XXX is package manager)
     
             (Note that .bdignore exclude file is recommended - see the report file 'repfile.txt' or use '-o' option)
     
         PROJECT OPTIONS:
-            --detect.project.name=PROJECT\_NAME
-            --detect.project.version.name=VERSION\_NAME
+            --detect.project.name=PROJECT_NAME
+            --detect.project.version.name=VERSION_NAME
                 (Optionally specify project and version names)
             --detect.project.tier=X
                 (Optionally define project tier numeric)
