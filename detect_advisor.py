@@ -884,7 +884,7 @@ def detector_process(folder, f):
 								"    Action:  Re-run Detect scan on Linux\n\n"
 							else:
 								recs_msgs_dict['imp'] += "- IMPORTANT: Package manager '{}' requires scanning on a Linux platform\n".format(exe) + \
-								"    Impact:  Scan may fail if detector depth change from default value\n" + \
+								"    Impact:  Scan may fail if detector depth changed from default value 0\n" + \
 								"    Action:  Re-run Detect scan on Linux\n\n"
 					if shutil.which(exe) is not None:
 						command_exists = True
@@ -1015,10 +1015,8 @@ def output_recs(critical_only, f):
 	if bdignore and f:
 		f.write("\nRECOMMENDED .bdignore FILE CONTENTS:\n(.bdignore file must be created in invocation or project folder)\n\n" + bdignore + "\n")
 
-
 def check_prereqs():
 	import subprocess
-	import re
 	import shutil
 
 	global rep
@@ -1035,33 +1033,36 @@ def check_prereqs():
 # 				cli_msgs_dict['reqd'] += ""XXCLIOPTSXX    --detect.java.path=<PATH_TO_JAVA>\n" + \
 # 				"XXCLIOPTSXX    (If Java installed, specify path to java executable if not on PATH)\n"
 		else:
-			javaoutput = subprocess.check_output(['java', '-version'], stderr=subprocess.STDOUT)
-			#javaoutput = 'openjdk version "13.0.1" 2019-10-15'
-			#javaoutput = 'java version "1.8.0_181"'
-			crit = True
-			if javaoutput:
-				line0 = javaoutput.decode("utf-8").splitlines()[0]
-				prog = line0.split(" ")[0].lower()
-				if prog:
-					version_string = line0.split('"')[1]
-					if version_string:
-						major, minor, _ = version_string.split('.')
-						if prog == "openjdk":
-							crit = False
-							if major == "8" or major == "11":
-								rec = "none"
-							else:
-								recs_msgs_dict['imp'] += "- IMPORTANT: OpenJDK version {} is not documented as supported by Detect\n".format(version_string) + \
-								"    Impact:  Scan may fail\n" + \
-								"    Action:  Check that Detect operates correctly\n\n"
-						elif prog == "java":
-							crit = False
-							if major == "1" and (minor == "8" or minor == "11"):
-								rec = "none"
-							else:
-								recs_msgs_dict['imp'] += "- IMPORTANT: Java version {} is not documented as supported by Detect\n".format(version_string) + \
-								"    Impact:  Scan may fail\n" + \
-								"    Action:  Check that Detect operates correctly\n\n"
+			try:
+				javaoutput = subprocess.check_output(['java', '-version'], stderr=subprocess.STDOUT)
+				#javaoutput = 'openjdk version "13.0.1" 2019-10-15'
+				#javaoutput = 'java version "1.8.0_181"'
+				crit = True
+				if javaoutput:
+					line0 = javaoutput.decode("utf-8").splitlines()[0]
+					prog = line0.split(" ")[0].lower()
+					if prog:
+						version_string = line0.split('"')[1]
+						if version_string:
+							major, minor, _ = version_string.split('.')
+							if prog == "openjdk":
+								crit = False
+								if major == "8" or major == "11":
+									rec = "none"
+								else:
+									recs_msgs_dict['imp'] += "- IMPORTANT: OpenJDK version {} is not documented as supported by Detect\n".format(version_string) + \
+									"    Impact:  Scan may fail\n" + \
+									"    Action:  Check that Detect operates correctly\n\n"
+							elif prog == "java":
+								crit = False
+								if major == "1" and (minor == "8" or minor == "11"):
+									rec = "none"
+								else:
+									recs_msgs_dict['imp'] += "- IMPORTANT: Java version {} is not documented as supported by Detect\n".format(version_string) + \
+									"    Impact:  Scan may fail\n" + \
+									"    Action:  Check that Detect operates correctly\n\n"
+			except:
+				crit = True
 
 			if crit:
 				recs_msgs_dict['crit'] += "- CRITICAL: Java program version cannot be determined\n" + \
@@ -1085,10 +1086,57 @@ def check_prereqs():
 			recs_msgs_dict['crit'] += "- CRITICAL: Bash is not installed or on the PATH\n" + \
 			"    Impact:  Detect program will fail\n" + \
 			"    Action:  Install Bash or add to PATH\n\n"
+
 	if shutil.which("curl") is None:
 		recs_msgs_dict['crit'] += "- CRITICAL: Curl is not installed or on the PATH\n" + \
 		"    Impact:  Detect program will fail\n" + \
 		"    Action:  Install Curl or add to PATH\n\n"
+	else:
+		if not check_connection("https://detect.synopsys.com"):
+			recs_msgs_dict['crit'] += "- CRITICAL: No connection to https://detect.synopsys.com\n" + \
+			"    Impact:  Detect wrapper script cannot be downloaded, online scan not possible\n" + \
+			"    Action:  Download Detect manually and run offline (see docs)\n\n"
+
+		if not check_connection("https://sig-repo.synopsys.com"):
+			recs_msgs_dict['crit'] += "- CRITICAL: No connection to https://sig-repo.synopsys.com\n" + \
+			"    Impact:  Detect jar cannot be downloaded; online scan cannot be performed\n" + \
+			"    Action:  Download Detect manually and run offline (see docs)\n\n"
+
+def check_connection(url):
+	import subprocess
+
+	try:
+		output = subprocess.check_output(['curl', '-s', '-m', '5', url], stderr=subprocess.STDOUT)
+		return True
+	except:
+		return False
+
+def check_docker_prereqs():
+	import shutil
+	import subprocess
+
+	if platform.system() != "Linux" and platform.system() != "Darwin":
+		recs_msgs_dict['crit'] += "- CRITICAL: Docker image scanning only supported on Linux or MacOS\n" + \
+		"    Impact:  Docker image scan will fail\n" + \
+		"    Action:  Perform scan Docker on Linux or MacOS\n\n"
+	else:
+		if shutil.which("docker") is None:
+			recs_msgs_dict['crit'] += "- CRITICAL: Docker not installed - required for Docker image scanning\n" + \
+			"    Impact:  Docker image scan will fail\n" + \
+			"    Action:  Install docker\n\n"
+		else:
+			try:
+				output = subprocess.check_output(['docker', 'run', 'hello-world'], stderr=subprocess.STDOUT)
+			except:
+				recs_msgs_dict['crit'] += "- CRITICAL: Docker could not be started\n" + \
+				"    Impact:  Detect image scan will fail (docker inspector cannot be started)\n" + \
+				"    Action:  Check docker permissions OR not running within container\n\n"
+
+		if shutil.which("curl") is not None:
+			if not check_connection("https://blackducksoftware.github.io"):
+				recs_msgs_dict['crit'] += "- CRITICAL: No connection to https://blackducksoftware.github.io\n" + \
+				"    Impact:  Detect docker inspector cannot be downloaded; online scan cannot be performed\n" + \
+				"    Action:  Download docker inspector manually and run offline (see docs)\n\n"
 
 def output_cli(critical_only, report, f):
 	global bdignore
@@ -1175,11 +1223,13 @@ parser = argparse.ArgumentParser(description='Examine files/folders to determine
 
 parser.add_argument("scanfolder", help="Project folder to analyse")
 parser.add_argument("-r", "--report", help="Output report file (must not exist already)")
-parser.add_argument("-d", "--detectors_only", help="Check for detector files and prerequisites only",action='store_true')
+parser.add_argument("-d", "--detector_only", help="Check for detector files and prerequisites only",action='store_true')
 parser.add_argument("-s", "--signature_only", help="Check for files and folders for signature scan only",action='store_true')
 parser.add_argument("-c", "--critical_only", help="Only show critical issues which will causes detect to fail",action='store_true')
 #parser.add_argument("-f", "--full", help="Output full information to report file if specified",action='store_true')
 parser.add_argument("-o", "--output_config", help="Create .yml config and .bdignore file in project folder",action='store_true')
+parser.add_argument("-D", "--docker", help="Check docker prerequisites",action='store_true')
+parser.add_argument("--docker_only", help="Only check docker prerequisites",action='store_true')
 
 args = parser.parse_args()
 
@@ -1227,27 +1277,32 @@ if args.report:
 else:
 	f = None
 
-if not args.signature_only:
+if not args.signature_only and not args.docker_only:
 #	if args.full:
 	if True:
 		detector_process(args.scanfolder, f)
 	else:
 		detector_process(args.scanfolder, None)
-else:
-	cli_required += "XXCLIOPTSXX--detect.tools=SIGNATURE_SCAN\n"
+if args.signature_only:
+	cli_msgs_dict['reqd'] += "XXCLIOPTSXX--detect.tools=SIGNATURE_SCAN\n"
 
-if not args.detectors_only:
+if not args.detector_only and not args.docker_only:
 #	if args.full:
 	if True:
 			signature_process(args.scanfolder, f)
 	else:
 		signature_process(args.scanfolder, None)
-else:
-	cli_required += "XXCLIOPTSXX--detect.tools=DETECTOR\n"
+if args.detector_only:
+	cli_msgs_dict['reqd'] += "XXCLIOPTSXX--detect.tools=DETECTOR\n"
 
 print_summary(args.critical_only, f)
 
 check_prereqs()
+
+if args.docker or args.docker_only:
+	check_docker_prereqs()
+if args.docker_only:
+	cli_msgs_dict['reqd'] += "XXCLIOPTSXX--detect.tools=DOCKER\n"
 
 output_recs(args.critical_only, f)
 
