@@ -22,10 +22,9 @@ binext_list = ['.dll', '.obj', '.o', '.a', '.lib', '.iso', '.qcow2', '.vmdk', '.
 arcext_list = ['.zip', '.gz', '.tar', '.xz', '.lz', '.bz2', '.7z', '.rar', '.rar', \
 '.cpio', '.Z', '.lz4', '.lha', '.arj']
 jarext_list = ['.jar', '.ear', '.war']
+supported_zipext_list = ['.jar', '.ear', '.war', '.zip']
 pkgext_list = ['.rpm', '.deb', '.dmg']
 lic_list = ['LICENSE', 'LICENSE.txt', 'notice.txt', 'license.txt', 'license.html', 'NOTICE', 'NOTICE.txt']
-supported_zipext_list = jarext_list
-supported_zipext_list.append('.zip')
 
 detectors_file_dict = {
 'build.env': ['bitbake'],
@@ -340,6 +339,7 @@ def process_zip(zippath, zipdepth, dirdepth):
 
 def checkfile(name, path, size, size_comp, dirdepth, in_archive):
 	ext = os.path.splitext(name)[1]
+#	print(ext)
 	if ext != ".zip":
 		if not in_archive:
 			counts['file'][notinarc] += 1
@@ -405,7 +405,7 @@ def checkfile(name, path, size, size_comp, dirdepth, in_archive):
 	else:
 		other_list.append(path)
 		ftype = 'other'
-	#print("name:{} type:{}, size_comp:{}, size:{}".format(name, ftype, size_comp, size))
+	#print("path:{} type:{}, size_comp:{}, size:{}".format(path, ftype, size_comp, size))
 	if not in_archive:
 		counts[ftype][notinarc] += 1
 		sizes[ftype][notinarc] += size
@@ -631,7 +631,8 @@ def print_summary(critical_only, f):
 	global rep
 
 	summary = "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\n" + \
-	"SUMMARY INFO:            Num Outside     Size Outside      Num Inside     Size Inside     Size Inside\n" + \
+	"SUMMARY INFO:\nTotal Scan Size = {:,d} MB\n\n".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000)) + \
+	"                         Num Outside     Size Outside      Num Inside     Size Inside     Size Inside\n" + \
 	"                            Archives         Archives        Archives        Archives        Archives\n" + \
 	"                                                                        (UNcompressed)    (compressed)\n" + \
 	"====================  ==============   ==============   =============   =============   =============\n"
@@ -929,7 +930,7 @@ def detector_process(folder, f):
 		if cli_msgs_dict['scan'].find("detector.depth") < 0:
 			cli_msgs_dict['scan'] += "XXCLIOPTSXX--detect.detector.depth={}\n".format(det_min_depth) + \
 			"XXCLIOPTSXX    (To find package manager files within sub-folders; note depth {} would find\n".format(det_max_depth) + \
-			"XXCLIOPTSXX    all PM files in sub-folders but higher level projects may already include them\n"
+			"XXCLIOPTSXX    all PM files in sub-folders but higher level projects may already include these)\n"
 
 	if det_depth1 == 0 and det_other == 0:
 		recs_msgs_dict['info'] += "- INFORMATION: No package manager files found in project at all\n" + \
@@ -951,10 +952,10 @@ def detector_process(folder, f):
 		"    Action:  Install package manager programs\n" + \
 		"             (OR specify --detect.XXXX.path=<LOCATION> where XXX is package manager\n" + \
 		"             OR specify --detect.detector.buildless=true)\n\n"
-		if cli_msgs_dict['reqd'].find("detector.buildless") < 0:
-			cli_msgs_dict['reqd'] += "XXCLIOPTSXX--detect.detector.buildless=true\n" + \
-			"XXCLIOPTSXX    (OR install package managers '{}' OR use --detect.XXXX.path=<LOCATION>\n".format(cmds_missingother) + \
-			"XXCLIOPTSXX    where XXX is package manager)\n"
+		if cli_msgs_dict['scan'].find("detector.buildless") < 0:
+			cli_msgs_dict['scan'] += "XXCLIOPTSXX--detect.detector.buildless=true\n" + \
+			"XXCLIOPTSXX    (OR install package managers '{}'\n".format(cmds_missingother) + \
+			"XXCLIOPTSXX    (OR use --detect.XXXX.path=<LOCATION> where XXX is package manager)\n"
 
 	if counts['det'][inarc] > 0:
 		recs_msgs_dict['imp'] += "- IMPORTANT: Package manager files found in archives\n" + \
@@ -1204,7 +1205,7 @@ def output_config(projdir):
 		"# MINIMUM REQUIRED OPTIONS:\n#\n" + cli_msgs_dict['reqd'] + "\n" + \
 		"# OPTIONS TO IMPROVE SCAN COVERAGE:\n#\n" + cli_msgs_dict['scan'] + "\n" + \
 		"# OPTIONS TO REDUCE SIGNATURE SCAN SIZE:\n#\n" + cli_msgs_dict['size'] + "\n" + \
-		"# OPTIONS TO OPTIMIZE DEPENDENCY SCAN:\n#\n" + cli_msgs_dict['dep'] + "\n" + \
+		"# OPTIONS TO CONFIGURE DEPENDENCY SCAN:\n#\n" + cli_msgs_dict['dep'] + "\n" + \
 		"# OPTIONS TO IMPROVE LICENSE COMPLIANCE ANALYSIS:\n#\n" + cli_msgs_dict['lic'] + "\n"
 		"# PROJECT OPTIONS:\n#\n" + cli_msgs_dict['proj'] + "\n"
 
@@ -1248,13 +1249,13 @@ cli_msgs_dict['reqd'] = "XXCLIOPTSXX--blackduck.url=https://YOURSERVER\n" + \
 "XXCLIOPTSXX--detect.source.path='{}'\n".format(os.path.abspath(args.scanfolder))
 cli_msgs_dict['proj'] = "XXCLIOPTSXX--detect.project.name=PROJECT_NAME\n" + \
 "XXCLIOPTSXX--detect.project.version.name=VERSION_NAME\n" + \
-"XXCLIOPTSXX    (Optionally specify project and version names)\n" + \
+"XXCLIOPTSXX    (OPTIONAL Specify project and version names)\n" + \
 "XXCLIOPTSXX--detect.project.tier=X\n" + \
-"XXCLIOPTSXX    (Optionally define project tier numeric)\n" + \
+"XXCLIOPTSXX    (OPTIONAL Define project tier numeric)\n" + \
 "XXCLIOPTSXX--detect.project.version.phase=ARCHIVED/DEPRECATED/DEVELOPMENT/PLANNING/PRERELEASE/RELEASED\n" + \
-"XXCLIOPTSXX    (Optionally specify project phase - default DEVELOPMENT)\n" + \
+"XXCLIOPTSXX    (OPTIONAL Specify project phase - default DEVELOPMENT)\n" + \
 "XXCLIOPTSXX--detect.project.version.distribution=EXTERNAL/SAAS/INTERNAL/OPENSOURCE\n" + \
-"XXCLIOPTSXX    (Optionally specify version distribution - default EXTERNAL)\n"
+"XXCLIOPTSXX    (OPTIONAL Specify version distribution - default EXTERNAL)\n"
 
 print("\nDETECT ADVISOR v{} - for use with Synopsys Detect v{} or later\n".format(advisor_version, detect_version))
 print("PROCESSING:")
