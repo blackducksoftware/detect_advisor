@@ -15,7 +15,7 @@ It will expand .zip and .jar files automatically, processing recursive files (zi
 
 It will produce a set of categorized recommendations and Detect command line options to support different types of scans and other operations.
 
-It can optionally write a report file including the console output and other information, and also create a .bdignore and .yml project config file with appropariate options.
+It can optionally write a report file including the console output and other information, and also create a .bdignore file (to ignore duplicate folders) and .yml project config file containing example detect options within comments for selection.
 
 # PREREQUISITES
 
@@ -51,7 +51,7 @@ The `-c` or `--critical_only` option will limit the console output to critical i
 
 The `-d` and `-s` options specify that only Dependency (Detector) or Signature scan checking should be performed respectively.
 
-The '-D' or '--docker' option will check docker scanning prerequisites; use '--docker_only' to check only docker prerequisites (other checks not performed).
+The `-D` or `--docker` option will check docker scanning prerequisites; use `--docker_only` to check only docker prerequisites (other checks not performed).
 
 # EXAMPLE USAGE
 
@@ -85,11 +85,12 @@ This section includes counts and size analysis for the files and folders beneath
 
 The `Size Outside Archives` value in the `ALL FILES (Scan Size)` row represents the total scan size as calculated by Detect (used for capacity license).
 
-Note that the Archives row covers all archive file types but that only .zip files are extracted by `detect_advisor` (whereas Synopsys Detect extracts other types of archives automatically). The final 3 `Inside Archives` columns indicate items found within .zip archives for the different types (except for the Jar row which references .jar/.ear/.war files). The `Inside Archives` columns for the Archives row itself reports archive files within .zips (or nested deeper - zips within zips within zips etc.).
+Note that the `Archives(exc. Jars)` row covers all archive file types but that only .zip files are extracted by `detect_advisor` (whereas Synopsys Detect extracts other types of archives automatically). The final 3 `Inside Archives` columns indicate items found within .zip archives for the different types (except for the Jar row which references .jar/.ear/.war files). The `Inside Archives` columns for the Archives row itself reports archive files within .zips (or nested deeper - zips within zips within zips etc.).
 
-    +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+    SUMMARY INFO:
+    Total Scan Size = 4,774 MB
 
-    SUMMARY INFO:            Num Outside     Size Outside      Num Inside     Size Inside     Size Inside
+                             Num Outside     Size Outside      Num Inside     Size Inside     Size Inside
                                 Archives         Archives        Archives        Archives        Archives
                                                                             (UNcompressed)    (compressed)
     ====================  ==============   ==============   =============   =============   =============
