@@ -8,7 +8,7 @@ import platform
 
 #
 # Constants
-advisor_version = "0.2 Beta"
+advisor_version = "0.3 Beta"
 detect_version = "6.2.1"
 srcext_list = ['.R','.actionscript','.ada','.adb','.ads','.aidl','.as','.asm','.asp',\
 '.aspx','.awk','.bas','.bat','.bms','.c','.c++','.cbl','.cc','.cfc','.cfm','.cgi','.cls',\
