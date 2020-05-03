@@ -1317,9 +1317,16 @@ def check_input_yn(prompt, default):
 def interactive():
 	report = ""
 
-	folder = input("Enter project folder to scan (default current folder):")
+	try:
+		folder = input("Enter project folder to scan (default current folder '{}'):".format(os.getcwd()))
+	except:
+		print("Exiting")
+		exit(1)
 	if folder == "":
 		folder = "."
+	elif not os.path.isdir(args.scanfolder):
+		print("Scan location '{}' does not exist\nExiting".format(folder))
+		exit(1)
 	try:
 		scan_type = check_input_options("Types of scan to check? [(B)oth, (d)ependency or (s)ignature] (B):", ['b','d','s'])
 		docker_bool = check_input_yn("Docker scan check? [y/n] (N):", False)
@@ -1330,7 +1337,7 @@ def interactive():
 		config_bool = check_input_yn("Create .bdignore & app.yml file? [y/n] (N):", False)
 	except:
 		print("Exiting")
-		return("", "", False, False, "", False)
+		exit(1)
 	return(folder, scan_type, docker_bool, critical_bool, report, config_bool)
 	
 parser = argparse.ArgumentParser(description='Check prerequisites for Detect, scan folders, provide recommendations and example CLI options', prog='detect_advisor')
@@ -1350,19 +1357,17 @@ args = parser.parse_args()
 
 if args.scanfolder == "":
 	args.scanfolder, scan_type, args.docker, args.critical_only, args.report, args.output_config = interactive()
-	if args.scanfolder == "":
-		exit(0)
-	elif scan_type == "d":
+	if scan_type == "d":
 		args.detector_only = True
 	elif scan_type == "s":
 		args.signature_only = True
 
 if not os.path.isdir(args.scanfolder):
-	print("Scan location {} does not exist\nExiting".format(args.scanfolder))
+	print("Scan location '{}' does not exist\nExiting".format(args.scanfolder))
 	exit(1)
 
 if args.report and os.path.exists(args.report):
-	print("Report file {} already exists\nExiting".format(args.report))
+	print("Report file '{}' already exists\nExiting".format(args.report))
 	exit(2)
 
 rep = ""
