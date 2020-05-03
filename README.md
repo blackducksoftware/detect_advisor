@@ -25,14 +25,12 @@ Python 3 must be installed prior to using this script.
 
 The `detect_advisor.py` script can be invoked as follows:
 
-    usage: detect_advisor [-h] [-r REPORT] [-d] [-s] [-c] [-f] scanfolder
+    usage: detect_advisor [-h] [-r REPORT] [-d] [-s] [-c] [-f] [scanfolder]
 
     Examine files/folders to determine scan recommendations
 
-    positional arguments:
-      scanfolder            Project folder to analyse
-
     optional arguments:
+      scanfolder            Project folder to analyse
       -h, --help            show this help message and exit
       -r REPORT, --report REPORT
                             Output report file (must not exist already)
@@ -43,7 +41,9 @@ The `detect_advisor.py` script can be invoked as follows:
       -D, --docker          Check for docker prerequisites
       --docker_only         Check for docker prerequisites only
 
-The `scanfolder` is required and can be a relative or absolute path.
+If `scanfolder` is not specified then options will be requested interactively.
+
+When specified, `scanfolder` can be a relative or absolute path.
 
 The `-r repfile` or `--report repfile` option will output the console messages and additional information to the file `repfile`.
 
@@ -54,6 +54,19 @@ The `-d` and `-s` options specify that only Dependency (Detector) or Signature s
 The `-D` or `--docker` option will check docker scanning prerequisites; use `--docker_only` to check only docker prerequisites (other checks not performed).
 
 # EXAMPLE USAGE
+
+The following command will allow options to be entered interactively:
+
+    python3 detect_advisor.py
+    
+The interactive questions are shown below:
+
+    Enter project folder to scan (default current folder '/users/myuser/project'):
+    Types of scan to check? [(B)oth, (d)ependency or (s)ignature] (B):
+    Docker scan check? [y/n] (N):
+    Critical recommendations only? [y/n] (N):
+    Create output report file? [y/n] (N):
+    Create .bdignore & .yml config file? [y/n] (N):
 
 The following command will run the script on the `myproject` sub-folder, producing standard console output only:
 
