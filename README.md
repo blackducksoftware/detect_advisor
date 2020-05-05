@@ -1,4 +1,4 @@
-# Synopsys Detect Advisor Script - detect_advisor.py v0.3 Beta
+# Synopsys Detect Advisor Script - detect_advisor.py
 # OVERVIEW
 
 This script is provided under an OSS license (specified in the LICENSE file) to assist users when scanning projects using the Synopsys Detect program to scan projects.
@@ -7,19 +7,21 @@ It does not represent any extension of licensed functionality of Synopsys softwa
 
 # DESCRIPTION
 
-The `detect_advisor.py` script processes the specified folder (and sub-folders) to provide recommendations on how to run Synopsys Detect to scan optimally.
+The `detect_advisor.py` script is designed to pre-scan project folders and locations to determine whether the Synopsys Detect program (see https://blackducksoftware.github.io/synopsys-detect/latest/) used for Synopsys Black Duck SCA scans can be executed (prerequisites are met) and also to provide recommendations and advice on how to perform and optimize scanning.
 
-It will check the prerequisites to run Detect (including the correct version of Java) and scan the project location for files and archives, calculate the total scan size, check for project files and package managers and will also detect large duplicate files and folders.
+It is available as a python script with no prerequisites except Python 3 (can be downloaded and run without dependencies), or alternatively compiled executables for Windows, Linux and Mac OS are provided in the `executables` folder for download and execution standalone.
+
+The script will check the prerequisites to run Detect (including the correct version of Java) and scan the project location for files and archives, calculate the total scan size, check for project files and package managers and will also detect large duplicate files and folders.
 
 It will expand .zip and .jar files automatically, processing recursive files (zips within zips etc.). Other archive types (.gz, .tar, .Z etc.) are not currently expanded.
 
 It will produce a set of categorized recommendations and Detect command line options to support different types of scans and other operations.
 
-It can optionally write a report file including the console output and other information, and also create a .bdignore file (to ignore duplicate folders) and .yml project config file containing example detect options within comments for selection.
+It can optionally write a report file including the console output and other information, and also create a `.bdignore` file (to ignore duplicate folders) and .yml project config file containing example Detect options within comments for selection (use the Detect option `--spring.profiles.active=project` to use this profile).
 
 # PREREQUISITES
 
-Python 3 must be installed prior to using this script.
+Python 3 must be installed prior to using this script. Alternatively compiled, standalone executables are available for Windows, Linux and Mac OS in the `executables` folder.
 
 # USAGE
 
@@ -41,11 +43,11 @@ The `detect_advisor.py` script can be invoked as follows:
       -D, --docker          Check for docker prerequisites
       --docker_only         Check for docker prerequisites only
 
-If `scanfolder` is not specified then options will be requested interactively.
+If `scanfolder` is not specified then options will be requested interactively. Enter q or use CTRL-C to terminate interactive entry.
 
-When specified, `scanfolder` can be a relative or absolute path.
+When specified, `scanfolder` can be a relative or absolute path (special characters such as ~ or $HOME not supported).
 
-The `-r repfile` or `--report repfile` option will output the console messages and additional information to the file `repfile`.
+The `-r repfile` or `--report repfile` option will output the console messages and additional information to the file `repfile`, moving a previous repfile if it exists to `repfile.XXX` where XXX is an incremental number.
 
 The `-c` or `--critical_only` option will limit the console output to critical issues only and skip the summary section and other information, although all sections will still be written to the report file (if specified with `-r repfile`).
 
@@ -61,12 +63,13 @@ The following command will allow options to be entered interactively:
     
 The interactive questions are shown below:
 
-    Enter project folder to scan (default current folder '/users/myuser/project'):
-    Types of scan to check? [(B)oth, (d)ependency or (s)ignature] (B):
-    Docker scan check? [y/n] (N):
-    Critical recommendations only? [y/n] (N):
-    Create output report file? [y/n] (N):
-    Create .bdignore & .yml config file? [y/n] (N):
+    Enter project folder to scan (default current folder '/Users/myuser/myproject'):
+    Types of scan to check? (b)oth, (d)ependency or (s)ignature] [b]:
+    Docker scan check? (y/n) [n]:
+    Critical recommendations only? (y/n) [n]:
+    Create output report file? (y/n) [y]:
+    Report file name [report.txt]:
+    Create .bdignore & application-project.yml file? (y/n) [n]:
 
 The following command will run the script on the `myproject` sub-folder, producing standard console output only:
 
@@ -78,19 +81,19 @@ The following command will run the script on the `myproject` sub-folder, produci
 
 The following command will scan the absolute path `/users/matthew/myproject`; the `-c` option will reduce the console output to only include critical issues while writing full output in the `myreport.txt` file:
 
-    python3 detect_advisor.py -c -r myreport.txt /users/matthew/myproject
+    python3 detect_advisor.py -c -r myreport.txt /users/myuser/myproject
     
-The following command will scan the absolute path `/users/matthew/myproject`; the `-o` option will cause `.bdignore` and `application-project.yml` files to be written to the project folder:
+The following command will scan the absolute path `/users/myuser/myproject`; the `-o` option will cause `.bdignore` and `application-project.yml` files to be written to the project folder:
 
-    python3 detect_advisor.py -o /users/matthew/myproject
+    python3 detect_advisor.py -o /users/myuser/myproject
 
-The following command will scan the absolute path `/users/matthew/myproject`; the `-s` option will cause only Signature scan checking to be performed:
+The following command will scan the absolute path `/users/myuser/myproject`; the `-s` option will cause only Signature scan checking to be performed:
 
-    python3 detect_advisor.py -s -r myreport.txt /users/matthew/myproject
+    python3 detect_advisor.py -s -r myreport.txt /users/myuser/myproject
 
-The following command will scan the absolute path `/users/matthew/myproject`; the `-d` option will also check Docker scannning prerequisites:
+The following command will scan the absolute path `/users/myuser/myproject`; the `-d` option will also check Docker scannning prerequisites:
 
-    python3 detect_advisor.py -d /users/matthew/myproject
+    python3 detect_advisor.py -d /users/myuser/myproject
 
 # SUMMARY INFO
 
@@ -190,14 +193,17 @@ This section includes a list of findings categorised into CRITICAL (will cause D
 
 # DETECT CLI
 
-This section includes recommended CLI options for Synopsys Detect. Note that a `.bdignore` file may also be recommended which will be listed in the optional report file (`-r repfile`) if specified.
+This section includes recommended CLI options for Synopsys Detect. If connectivity to the download locations is not verified, then proxy options will also be added in case a proxy connection is required.
 
-    DETECT CLI
-
+    DETECT CLI:
+    
+        DETECT COMMAND:
+        bash <(curl -s -L https://detect.synopsys.com/detect.sh)
+    
         MINIMUM REQUIRED OPTIONS:
             --blackduck.url=https://YOURSERVER
             --blackduck.api.token=YOURTOKEN
-            --detect.source.path='/Users/matthewbrady/Documents/detect_adviser'
+            --detect.source.path='/Users/myuser/myproject'
             --detect.detector.buildless=true
                 (OR install package managers 'dotnet' OR use --detect.XXXX.path=<LOCATION>
                 where XXX is package manager)
@@ -246,7 +252,7 @@ This section includes recommended CLI options for Synopsys Detect. Note that a `
 
 # REPORT FILE
 
-An optional report file can be specified (`-r repfile` or `--report repfile`) including full information with lists of duplicate large files, duplicate large folders, binary files etc.
+An optional report file can be specified (`-r repfile` or `--report repfile`) including full information with lists of duplicate large files, duplicate large folders, binary files etc. If the report file already exists it will be backed up to `repfile.XXX` where XXX is an incremental numeric.
 
 If large duplicate files or folders are identified (or folders containing only binary files), then a recommended `.bdignore` with list of folders to ignore is also produced in the report file.
 
@@ -254,6 +260,6 @@ A list of large binary files is also produced in the report file, and you should
 
 # OUTPUT CONFIG FILES
 
-The `-o` option will create `.bdignore` and `application-project.yml` files in the project folder if they do not already exist. The .bdignore file will contain a list of duplicate folders or those containing only binary files for exclusion. The `application-project.yml` file will contain a list of commented detect options from the DETECT CLI section, which you will need to modify and uncomment according to your needs.
+The `-o` option will create `.bdignore` and `application-project.yml` files in the project folder if they do not already exist. The `.bdignore` file will contain a list of duplicate folders or those containing only binary files for exclusion. The `application-project.yml` file will contain a list of commented detect options from the DETECT CLI section, which you will need to modify and uncomment according to your needs.
 
-The application-project.yml config file can be used to configure Detect using the single `--spring.profiles.active=project` option.
+The `application-project.yml` config file can be used to configure Detect using the single `--spring.profiles.active=project` option.
