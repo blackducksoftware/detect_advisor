@@ -8,7 +8,7 @@ import platform
 
 #
 # Constants
-advisor_version = "0.4 Beta"
+advisor_version = "0.5 Beta"
 detect_version = "6.2.1"
 srcext_list = ['.R','.actionscript','.ada','.adb','.ads','.aidl','.as','.asm','.asp',\
 '.aspx','.awk','.bas','.bat','.bms','.c','.c++','.cbl','.cc','.cfc','.cfm','.cgi','.cls',\
@@ -281,6 +281,22 @@ cli_msgs_dict = {
 'rep': ''
 }
 
+cli_msgs_dict['detect_linux'] = " bash <(curl -s -L https://detect.synopsys.com/detect.sh)\n"
+cli_msgs_dict['detect_linux_proxy'] = " (You may need to configure a proxy to download and run the Detect script as follows)\n"+ \
+" export DETECT_CURL_OPTS='--proxy http://USER:PASSWORD@PROXYHOST:PROXYPORT'\n" + \
+" bash <(curl -s -L ${DETECT_CURL_OPTS} https://detect.synopsys.com/detect.sh)\n" + \
+"--blackduck.proxy.host=PROXYHOST\n" + \
+"--blackduck.proxy.port=PROXYPORT\n" + \
+"--blackduck.proxy.username=USERNAME\n" + \
+"--blackduck.proxy.password=PASSWORD\n"
+cli_msgs_dict['detect_win'] = " powershell \"[Net.ServicePointManager]::SecurityProtocol = 'tls12'; irm https://detect.synopsys.com/detect.ps1?$(Get-Random) | iex; detect\"\n"
+cli_msgs_dict['detect_win_proxy'] = " (You may need to configure a proxy to download and run the Detect script as follows)\n"+ \
+"    ${Env:blackduck.proxy.host} = PROXYHOST\n" + \
+"    ${Env:blackduck.proxy.port} = PROXYPORT\n" + \
+"    ${Env:blackduck.proxy.password} = PROXYUSER\n" + \
+"    ${Env:blackduck.proxy.username} = PROXYPASSWORD\n" + \
+"    powershell \"[Net.ServicePointManager]::SecurityProtocol = 'tls12'; irm https://detect.synopsys.com/detect.ps1?$(Get-Random) | iex; detect\"\n"
+cli_msgs_dict['detect'] = ""
 cli_msgs_dict['reqd'] = "--blackduck.url=https://YOURSERVER\n" + \
 "--blackduck.api.token=YOURTOKEN\n"
 cli_msgs_dict['proj'] = "--detect.project.name=PROJECT_NAME\n" + \
@@ -654,7 +670,7 @@ def check_singlefiles(f):
 		"             (--detect.blackduck.signature.scanner.individual.file.matching=SOURCE)\n\n"
 		if cli_msgs_dict['scan'].find("individual.file.matching") < 0:
 			cli_msgs_dict['scan'] += "--detect.blackduck.signature.scanner.individual.file.matching=SOURCE\n" + \
-			"    (To check singleton .js files for OSS matches)\n"
+			"    (To include singleton .js files in signature scan for OSS matches)\n"
 
 		#if f:
 		#	f.write("\nSINGLE JS FILES:\n")
@@ -1135,12 +1151,16 @@ def check_prereqs():
 # 			cli_msgs_dict['reqd'] += "--detect.java.path=<PATH_TO_JAVA>\n" + \
 # 			"    (If Java installed, specify path to java executable if not on PATH)\n"
 
+	os_platform = ""
 	if platform.system() == "Linux" or platform.system() == "Darwin":
+		os_platform = "linux"
 		# check for bash and curl
 		if shutil.which("bash") is None:
 			recs_msgs_dict['crit'] += "- CRITICAL: Bash is not installed or on the PATH\n" + \
 			"    Impact:  Detect program will fail\n" + \
 			"    Action:  Install Bash or add to PATH\n\n"
+	else:
+		os_platform = "win"
 
 	if shutil.which("curl") is None:
 		recs_msgs_dict['crit'] += "- CRITICAL: Curl is not installed or on the PATH\n" + \
@@ -1149,13 +1169,15 @@ def check_prereqs():
 	else:
 		if not check_connection("https://detect.synopsys.com"):
 			recs_msgs_dict['crit'] += "- CRITICAL: No connection to https://detect.synopsys.com\n" + \
-			"    Impact:  Detect wrapper script cannot be downloaded, online scan not possible\n" + \
-			"    Action:  Download Detect manually and run offline (see docs)\n\n"
-
-		if not check_connection("https://sig-repo.synopsys.com"):
-			recs_msgs_dict['crit'] += "- CRITICAL: No connection to https://sig-repo.synopsys.com\n" + \
-			"    Impact:  Detect jar cannot be downloaded; online scan cannot be performed\n" + \
-			"    Action:  Download Detect manually and run offline (see docs)\n\n"
+			"    Impact:  Detect wrapper script cannot be downloaded, Detect cannot be started\n" + \
+			"    Action:  Either configure proxy (See CLI section) or download Detect manually and run offline (see docs)\n\n"
+			cli_msgs_dict['detect'] = cli_msgs_dict["detect_" + os_platform + "_proxy"]
+		else:
+			cli_msgs_dict['detect'] = cli_msgs_dict["detect_" + os_platform]
+			if not check_connection("https://sig-repo.synopsys.com"):
+				recs_msgs_dict['crit'] += "- CRITICAL: No connection to https://sig-repo.synopsys.com\n" + \
+				"    Impact:  Detect jar cannot be downloaded; Detect cannot run\n" + \
+				"    Action:  Either configure proxy (See CLI section) or download Detect manually and run offline (see docs)\n\n"
 
 def check_connection(url):
 	import subprocess
@@ -1200,7 +1222,9 @@ def output_cli(critical_only, report, f):
 	if recs_msgs_dict['crit']:
 		output += "Note that scan will probably fail - see CRITICAL recommendations above\n\n"
 
-	output += "    MINIMUM REQUIRED OPTIONS:\n"
+	output += "    DETECT COMMAND:\n"
+	output += re.sub(r"^", "    ", cli_msgs_dict['detect'], flags=re.MULTILINE)
+	output += "\n    MINIMUM REQUIRED OPTIONS:\n"
 	output += re.sub(r"^", "    ", cli_msgs_dict['reqd'], flags=re.MULTILINE)
 
 	print(output)
@@ -1264,6 +1288,7 @@ def output_config(projdir):
 	if not os.path.exists(config_file):
 		config = "#\n# EXAMPLE PROJECT CONFIG FILE\n" + \
 		"# Uncomment and update required options\n#\n#\n" + \
+		"# DETECT COMMAND TO RUN:\n#\n" + cli_msgs_dict['detect'] + "\n" + \
 		"# MINIMUM REQUIRED OPTIONS:\n#\n" + cli_msgs_dict['reqd'] + "\n" + \
 		"# OPTIONS TO IMPROVE SCAN COVERAGE:\n#\n" + cli_msgs_dict['scan'] + "\n" + \
 		"# OPTIONS TO REDUCE SIGNATURE SCAN SIZE:\n#\n" + cli_msgs_dict['size'] + "\n" + \
@@ -1314,6 +1339,29 @@ def check_input_yn(prompt, default):
 		return(False)
 	raise Exception("quit")
 
+def backup_repfile(filename):
+	import os, shutil
+
+	if os.path.isfile(filename):
+		# Determine root filename so the extension doesn't get longer
+		n, e = os.path.splitext(filename)
+
+		# Is e an integer?
+		try:
+			num = int(e)
+			root = n
+		except ValueError:
+			root = filename
+
+		# Find next available file version
+		for i in range(1000):
+			new_file = "{}.{:03d}".format(root, i)
+			if not os.path.isfile(new_file):
+				os.rename(filename, new_file)
+				print("INFO: Moved old report file '{}' to '{}'\n".format(filename, new_file))
+				return(new_file)
+	return("")
+
 def interactive():
 	report = ""
 
@@ -1335,7 +1383,9 @@ def interactive():
 		critical_bool = check_input_yn("Critical recommendations only? (y/n) [n]:", False)
 		report_bool = check_input_yn("Create output report file? (y/n) [y]:", True)
 		if report_bool:
-			report_file = input("Report file name:")
+			report = input("Report file name [report.txt]:")
+			if report == "":
+				report = "report.txt"
 		config_bool = check_input_yn("Create .bdignore & application-project.yml file? (y/n) [n]:", False)
 	except:
 		print("Exiting")
@@ -1366,15 +1416,15 @@ if args.scanfolder == "":
 		elif scan_type == "s":
 			args.signature_only = True
 	except:
-		exit(1)
+		sys.exit(1)
 
 if not os.path.isdir(args.scanfolder):
 	print("Scan location '{}' does not exist\nExiting".format(args.scanfolder))
-	exit(1)
+	sys.exit(1)
 
 if args.report and os.path.exists(args.report):
-	print("Report file '{}' already exists\nExiting".format(args.report))
-	exit(2)
+	backup = backup_repfile(args.report)
+	print("Report file '{}' already existed - backed up to {}".format(args.report, backup))
 
 rep = ""
 bdignore = ""
@@ -1398,7 +1448,7 @@ if args.report:
 		f = open(args.report, "a")
 	except Exception as e:
 		print('ERROR: Unable to create output report file \n' + str(e))
-		exit(3)
+		sys.exit(3)
 else:
 	f = None
 
