@@ -8,7 +8,7 @@ import platform
 
 #
 # Constants
-advisor_version = "0.3 Beta"
+advisor_version = "0.4 Beta"
 detect_version = "6.2.1"
 srcext_list = ['.R','.actionscript','.ada','.adb','.ads','.aidl','.as','.asm','.asp',\
 '.aspx','.awk','.bas','.bat','.bms','.c','.c++','.cbl','.cc','.cfc','.cfm','.cgi','.cls',\
@@ -1330,13 +1330,13 @@ def interactive():
 		raise("quit")
 		return("", "", False, False, "", False)
 	try:
-		scan_type = check_input_options("Types of scan to check? [(B)oth, (d)ependency or (s)ignature] (B):", ['b','d','s'])
-		docker_bool = check_input_yn("Docker scan check? [y/n] (N):", False)
-		critical_bool = check_input_yn("Critical recommendations only? [y/n] (N):", False)
-		report_bool = check_input_yn("Create output report file? [y/n] (N):", False)
+		scan_type = check_input_options("Types of scan to check? (B)oth, (d)ependency or (s)ignature] [b]:", ['b','d','s'])
+		docker_bool = check_input_yn("Docker scan check? (y/n) [n]:", False)
+		critical_bool = check_input_yn("Critical recommendations only? (y/n) [n]:", False)
+		report_bool = check_input_yn("Create output report file? (y/n) [y]:", True)
 		if report_bool:
 			report_file = input("Report file name:")
-		config_bool = check_input_yn("Create .bdignore & app.yml file? [y/n] (N):", False)
+		config_bool = check_input_yn("Create .bdignore & application-project.yml file? (y/n) [n]:", False)
 	except:
 		print("Exiting")
 		raise("quit")
