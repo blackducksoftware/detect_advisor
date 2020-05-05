@@ -295,7 +295,7 @@ cli_msgs_dict['proj'] = "--detect.project.name=PROJECT_NAME\n" + \
 "--detect.project.version.distribution=EXTERNAL/SAAS/INTERNAL/OPENSOURCE\n" + \
 "    (OPTIONAL Specify version distribution for new project - default EXTERNAL)\n" + \
 "--detect.project.user.groups='GROUP1,GROUP2'\n" + \
-"    (OPTIONAL Define group access for project for new project)\n" 
+"    (OPTIONAL Define group access for project for new project)\n"
 cli_msgs_dict['rep'] = "--detect.wait.for.results=true\n" + \
 "    (OPTIONAL Wait for server-side analysis to complete - useful for script execution after scan)\n" + \
 "--detect.cleanup=true\n" + \
@@ -1234,7 +1234,7 @@ def output_cli(critical_only, report, f):
 		output += "\nREPORTING OPTIONS:\n" + cli_msgs_dict['rep'] + "\n"
 
 	output = re.sub(r"^", "    ", output, flags=re.MULTILINE)
-	
+
 	if not critical_only:
 		print(output)
 	if f:
@@ -1321,12 +1321,14 @@ def interactive():
 		folder = input("Enter project folder to scan (default current folder '{}'):".format(os.getcwd()))
 	except:
 		print("Exiting")
-		exit(1)
+		raise("quit")
+		return("", "", False, False, "", False)
 	if folder == "":
 		folder = "."
-	elif not os.path.isdir(args.scanfolder):
+	elif not os.path.isdir(folder):
 		print("Scan location '{}' does not exist\nExiting".format(folder))
-		exit(1)
+		raise("quit")
+		return("", "", False, False, "", False)
 	try:
 		scan_type = check_input_options("Types of scan to check? [(B)oth, (d)ependency or (s)ignature] (B):", ['b','d','s'])
 		docker_bool = check_input_yn("Docker scan check? [y/n] (N):", False)
@@ -1337,9 +1339,10 @@ def interactive():
 		config_bool = check_input_yn("Create .bdignore & app.yml file? [y/n] (N):", False)
 	except:
 		print("Exiting")
-		exit(1)
+		raise("quit")
+		return("", "", False, False, "", False)
 	return(folder, scan_type, docker_bool, critical_bool, report, config_bool)
-	
+
 parser = argparse.ArgumentParser(description='Check prerequisites for Detect, scan folders, provide recommendations and example CLI options', prog='detect_advisor')
 
 parser.add_argument("scanfolder", nargs="?", help="Project folder to analyse", default="")
@@ -1356,11 +1359,14 @@ parser.add_argument("--docker_only", help="Only check docker prerequisites",acti
 args = parser.parse_args()
 
 if args.scanfolder == "":
-	args.scanfolder, scan_type, args.docker, args.critical_only, args.report, args.output_config = interactive()
-	if scan_type == "d":
-		args.detector_only = True
-	elif scan_type == "s":
-		args.signature_only = True
+	try:
+		args.scanfolder, scan_type, args.docker, args.critical_only, args.report, args.output_config = interactive()
+		if scan_type == "d":
+			args.detector_only = True
+		elif scan_type == "s":
+			args.signature_only = True
+	except:
+		exit(1)
 
 if not os.path.isdir(args.scanfolder):
 	print("Scan location '{}' does not exist\nExiting".format(args.scanfolder))
