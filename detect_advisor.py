@@ -8,7 +8,7 @@ import platform
 
 #
 # Constants
-advisor_version = "0.5 Beta"
+advisor_version = "0.6 Beta"
 detect_version = "6.2.1"
 srcext_list = ['.R','.actionscript','.ada','.adb','.ads','.aidl','.as','.asm','.asp',\
 '.aspx','.awk','.bas','.bat','.bms','.c','.c++','.cbl','.cc','.cfc','.cfm','.cgi','.cls',\
@@ -137,7 +137,7 @@ detector_cli_options_dict = {
 "    (OPTIONAL Gradle Include Configurations: List of Gradle configurations to include.)\n" + \
 "--detect.gradle.included.projects='PROJECT1,PROJECT2'\n" + \
 "    (OPTIONAL Gradle Include Projects: List of Gradle sub-projects to include.)\n",
-'maven':
+'mvn':
 "--detect.maven.build.command='ARGUMENT1 ARGUMENT2'\n" + \
 "    (OPTIONAL Maven Build Command: Maven command line arguments to add to the mvn/mvnw command line.)\n" + \
 "--detect.maven.excluded.scopes='SCOPE1,SCOPE2'\n" + \
@@ -161,7 +161,7 @@ detector_cli_options_dict = {
 'pear':
 "--detect.pear.only.required.deps=true\n" + \
 "    (OPTIONAL Include Only Required Pear Dependencies: Set to true if you would like to include only required packages.)\n",
-'pip':
+'python':
 "--detect.pip.only.project.tree=true\n" + \
 "    (OPTIONAL PIP Include Only Project Tree: By default, pipenv includes all dependencies found in the graph. Set to true to only\n" + \
 "    include dependencies found underneath the dependency that matches the provided pip project and version name.)\n" + \
@@ -314,7 +314,7 @@ cli_msgs_dict['proj'] = "--detect.project.name=PROJECT_NAME\n" + \
 "    (OPTIONAL Define group access for project for new project)\n"
 cli_msgs_dict['rep'] = "--detect.wait.for.results=true\n" + \
 "    (OPTIONAL Wait for server-side analysis to complete - useful for script execution after scan)\n" + \
-"--detect.cleanup=true\n" + \
+"--detect.cleanup=false\n" + \
 "    (OPTIONAL Retain scan results in $HOME/blackduck folder)\n" + \
 "--detect.policy.check.fail.on.severities='ALL,NONE,UNSPECIFIED,TRIVIAL,MINOR,MAJOR,CRITICAL,BLOCKER'\n" + \
 "    (OPTIONAL Comma-separated list of policy violation severities that will cause Detect to return fail code\n" + \
@@ -435,7 +435,7 @@ def checkfile(name, path, size, size_comp, dirdepth, in_archive):
 				sizes['large'][inarcunc] += size
 				sizes['large'][inarccomp] += size_comp
 
-	if os.path.basename(name) in detectors_file_dict.keys() and not path.find("node_modules"):
+	if name in detectors_file_dict.keys() and path.find("node_modules") < 0:
 		if not in_archive:
 			det_dict[path] = dirdepth
 		ftype = 'det'
@@ -992,8 +992,8 @@ def detector_process(folder, f):
 	if det_depth1 == 0 and det_other > 0:
 		recs_msgs_dict['imp'] += "- IMPORTANT: No package manager files found in invocation folder but do exist in sub-folders\n" + \
 		"    Impact:  Dependency scan will not be run\n" + \
-		"    Action:  Specify --detect.detector.depth={} (although depth could be up to {})\n" + \
-		"             or scan sub-folders seperately.\n".format(det_min_depth, det_max_depth)
+		"    Action:  Specify --detect.detector.depth={} (although depth could be up to {})\n".format(det_min_depth, det_max_depth) + \
+		"             or scan sub-folders seperately.\n\n"
 		if cli_msgs_dict['scan'].find("detector.depth") < 0:
 			cli_msgs_dict['scan'] += "--detect.detector.depth={}\n".format(det_min_depth) + \
 			"    (To find package manager files within sub-folders; note depth {} would find\n".format(det_max_depth) + \
@@ -1028,6 +1028,8 @@ def detector_process(folder, f):
 		recs_msgs_dict['imp'] += "- IMPORTANT: Package manager files found in archives\n" + \
 		"    Impact:  Dependency scan not performed for projects in archives\n" + \
 		"    Action:  Extract zip archives and rescan\n\n"
+
+	print(detectors_list)
 
 	for cmd in detectors_list:
 		if cmd in detector_cli_options_dict.keys():
@@ -1443,6 +1445,7 @@ print("- Reading hierarchy          .....", end="", flush=True)
 process_dir(args.scanfolder, 0)
 print(" Done")
 
+print(det_dict)
 if args.report:
 	try:
 		f = open(args.report, "a")
@@ -1452,7 +1455,7 @@ if args.report:
 else:
 	f = None
 
-if not args.signature_only and not args.docker_only:
+if not (args.signature_only or args.docker_only):
 #	if args.full:
 	if True:
 		detector_process(args.scanfolder, f)
