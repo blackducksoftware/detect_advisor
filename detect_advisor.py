@@ -1029,8 +1029,6 @@ def detector_process(folder, f):
 		"    Impact:  Dependency scan not performed for projects in archives\n" + \
 		"    Action:  Extract zip archives and rescan\n\n"
 
-	print(detectors_list)
-
 	for cmd in detectors_list:
 		if cmd in detector_cli_options_dict.keys():
 			cli_msgs_dict['dep'] += " For {}:\n".format(cmd) + detector_cli_options_dict[cmd]
@@ -1445,7 +1443,6 @@ print("- Reading hierarchy          .....", end="", flush=True)
 process_dir(args.scanfolder, 0)
 print(" Done")
 
-print(det_dict)
 if args.report:
 	try:
 		f = open(args.report, "a")
