@@ -4,12 +4,12 @@ from math import trunc
 #import tempfile
 import io, re
 import argparse
-import platform
+import platform, sys
 
 #
 # Constants
-advisor_version = "0.6 Beta"
-detect_version = "6.2.1"
+advisor_version = "0.7 Beta"
+detect_version = "6.3.0"
 srcext_list = ['.R','.actionscript','.ada','.adb','.ads','.aidl','.as','.asm','.asp',\
 '.aspx','.awk','.bas','.bat','.bms','.c','.c++','.cbl','.cc','.cfc','.cfm','.cgi','.cls',\
 '.cpp','.cpy','.cs','.cxx','.el','.erl','.f','.f77','.f90','.for','.fpp','.frm','.fs',\
@@ -489,7 +489,6 @@ def process_dir(path, dirdepth):
 	dir_entries = 0
 	filenames_string = ""
 	global messages
-	global bdignore
 
 	dir_dict[path] = {}
 	dirdepth += 1
@@ -522,8 +521,8 @@ def process_dir(path, dirdepth):
 	dir_dict[path]['size'] = dir_size
 	dir_dict[path]['depth'] = dirdepth
 	dir_dict[path]['filenamesstring'] = filenames_string
-	if all_bin:
-		bdignore += path + "\n"
+	if all_bin and path.find("##") < 0:
+		bdignore_list.append(path)
 	return dir_size
 
 def process_largefiledups(f):
@@ -551,7 +550,7 @@ def process_largefiledups(f):
 					dup = True
 				elif aext == "" and cext == "":
 					dup = True
-				if dup:
+				if dup and asize < 1000000000:
 					if apath.find("##") > 0 or cpath.find("##") > 0:
 						if apath.find("##") > 0:
 							acrc = arc_files_dict[apath]
@@ -801,7 +800,6 @@ def print_summary(critical_only, f):
 		f.write(summary)
 
 def signature_process(folder, f):
-	global bdignore
 
 	#print("SIGNATURE SCAN ANALYSIS:")
 
@@ -820,20 +818,20 @@ def signature_process(folder, f):
 	if sizes['file'][notinarc]+sizes['arc'][notinarc] > 5000000000:
 		recs_msgs_dict['crit'] += "- CRITICAL: Overall scan size ({:>,d} MB) is too large\n".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000)) + \
 		"    Impact:  Scan will fail\n" + \
-		"    Action:  Ignore folders or remove large files - look for .bdignore in report file\n\n"
+		"    Action:  Ignore folders, remove large files or use repeated scans of sub-folders (Also consider detect_advisor -b option to create multiple .bdignore files to ignore duplicate folders)\n\n"
 	elif sizes['file'][notinarc]+sizes['arc'][notinarc] > 2000000000:
 		recs_msgs_dict['imp'] += "- IMPORTANT: Overall scan size ({:>,d} MB) is large\n".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000)) + \
 		"    Impact:  Will impact Capacity license usage\n" + \
-		"    Action:  Ignore folders or remove large files - look for .bdignore in report file\n\n"
+		"    Action:  Ignore folders, remove large files or use repeated scans of sub-folders (Also consider detect_advisor -b option to create multiple .bdignore files to ignore duplicate folders)\n\n"
 
 	if counts['file'][notinarc]+counts['file'][inarc] > 1000000:
 		recs_msgs_dict['imp'] += "- IMPORTANT: Overall number of files ({:>,d}) is very large\n".format(trunc((counts['file'][notinarc]+counts['file'][inarc]))) + \
 		"    Impact:  Scan time could be VERY long\n" + \
-		"    Action:  Ignore folders or split project (scan sub-projects) - look for .bdignore in report file\n\n"
+		"    Action:  Ignore folders or split project (scan sub-projects or consider detect_advisor -b option to create multiple .bdignore files to ignore duplicate folders)\n\n"
 	elif counts['file'][notinarc]+counts['file'][inarc] > 200000:
 		recs_msgs_dict['info'] += "- INFORMATION: Overall number of files ({:>,d}) is large\n".format(trunc((counts['file'][notinarc]+counts['file'][inarc]))) + \
 		"    Impact:  Scan time could be long\n" + \
-		"    Action:  Ignore folders or split project (scan sub-projects) - look for .bdignore in report file\n\n"
+		"    Action:  Ignore folders or split project (scan sub-projects or consider detect_advisor -b option to create multiple .bdignore files to ignore duplicate folders)\n\n"
 
 	#
 	# Need to add check for nothing to scan (no supported scan files)
@@ -845,7 +843,7 @@ def signature_process(folder, f):
 	if sizes['bin'][notinarc]+sizes['bin'][inarc] > 20000000:
 		recs_msgs_dict['imp'] += "- IMPORTANT: Large amount of data ({:>,d} MB) in {} binary files found\n".format(trunc((sizes['bin'][notinarc]+sizes['bin'][inarc])/1000000), len(bin_list)) + \
 		"    Impact:  Binary files not analysed by standard scan, will impact Capacity license usage\n" + \
-		"    Action:  Remove files or ignore folders (using .bdignore), also consider zipping\n" + \
+		"    Action:  Remove files or ignore folders (using .bdignore files), also consider zipping\n" + \
 		"             files and using Binary scan (Specify -f option to add list of large binary\n" + \
 		"             files to the report file, and use the --detect.binary.scan.file.path=binary_files.zip option)\n\n"
 		cli_msgs_dict['scan'] += "--detect.binary.scan.file.path=binary_files.zip\n" + \
@@ -861,16 +859,16 @@ def signature_process(folder, f):
 		recs_msgs_dict['imp'] += "- IMPORTANT: Large amount of data ({:,d} MB) in {:,d} duplicate folders\n".format(trunc(size_dirdups/1000000), len(dup_dir_dict)) + \
 		"    Impact:  Scan capacity potentially utilised without detecting additional\n" + \
 		"             components, will impact Capacity license usage\n" + \
-		"    Action:  Remove or ignore duplicate folders (recommended .bdignore file contents in report file)\n\n"
+		"    Action:  Remove or ignore duplicate folders (Consider detect_advisor -b option to create multiple .bdignore files)\n\n"
 		for apath, bpath in dup_dir_dict.items():
 			if bpath.find("##") < 0:
-				bdignore += bpath + "\n"
+				bdignore_list.append(bpath)
 
 	if size_dups > 20000000:
 		recs_msgs_dict['imp'] += "- IMPORTANT: Large amount of data ({:,d} MB) in {:,d} duplicate files\n".format(trunc(size_dups/1000000), len(dup_large_dict)) + \
 		"    Impact:  Scan capacity potentially utilised without detecting additional\n" + \
 		"             components, will impact Capacity license usage\n" + \
-		"    Action:  Remove duplicate files or ignore folders (recommended .bdignore file contents in report file)\n\n"
+		"    Action:  Remove duplicate files or ignore folders (Consider detect_advisor -b option to create multiple .bdignore files)\n\n"
 		#for apath, bpath in dup_large_dict.items():
 		#	if dup_dir_dict.get(os.path.dirname(apath)) == None and dup_dir_dict.get(os.path.dirname(bpath)) == None:
 		#		print("    {}".format(bpath))
@@ -1041,7 +1039,6 @@ def detector_process(folder, f):
 
 def output_recs(critical_only, f):
 	global messages
-	global bdignore
 
 	if f:
 		f.write(messages + "\n")
@@ -1083,8 +1080,10 @@ def output_recs(critical_only, f):
 	if (critical_only and not recs_msgs_dict['crit']):
 		print("- No Critical Recommendations\n")
 
-	if bdignore and f:
-		f.write("\nRECOMMENDED .bdignore FILE CONTENTS:\n(.bdignore file must be created in invocation or project folder)\n\n" + bdignore + "\n")
+	if len(bdignore_list)> 0 and f:
+		f.write("\nFOLDERS WHICH COULD BE IGNORED:\n(Multiple .bdignore files must be created in sub-folders - folder names must use /folder/ pattern)\n\n")
+		for bpath in bdignore_list:
+			f.write(bpath)
 
 def check_prereqs():
 	import subprocess
@@ -1216,7 +1215,6 @@ def check_docker_prereqs():
 				"    Action:  Download docker inspector manually and run offline (see docs)\n\n"
 
 def output_cli(critical_only, report, f):
-	global bdignore
 
 	output = "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\nDETECT CLI:\n\n"
 	if recs_msgs_dict['crit']:
@@ -1228,13 +1226,13 @@ def output_cli(critical_only, report, f):
 	output += re.sub(r"^", "    ", cli_msgs_dict['reqd'], flags=re.MULTILINE)
 
 	print(output)
-	if bdignore:
+	if len(bdignore_list) > 0:
 		if report:
-			print("        (Note that '.bdignore' exclude file is recommended - see the report file '{}' or use '-o' option\n" + \
-			"        to create '.bdignore' file)\n".format(report))
+			print("        (Note that '.bdignore' exclude file is recommended - see the report file '{}' or use '-b' option\n" + \
+			"        to create '.bdignore' files in sub-folders)\n".format(report))
 		else:
 			print("        (Note that '.bdignore' exclude file is recommended - create a report file using '-r repfile' to\n" + \
-			"        see recommended folders to exclude or use '-o' option to create '.bdignore' file)\n")
+			"        see recommended folders to exclude or use '-b' option to create '.bdignore' files in sub-folders)\n")
 	if f:
 		f.write(output + "\n")
 
@@ -1269,20 +1267,27 @@ def output_cli(critical_only, report, f):
 	else:
 		print("INFO: Use '-r repfile' to produce report file with more information")
 
-def output_config(projdir):
-	global bdignore
+def create_bdignores():
+	newcount = 0
+	existcount = 0
 
-	bdignore_file = os.path.join(projdir, ".bdignore")
-	if not os.path.exists(bdignore_file):
-		try:
-			b = open(bdignore_file, "a")
-			b.write(bdignore)
-			b.close()
-			print("INFO: '.bdignore' file created in project folder")
-		except Exception as e:
-			print('ERROR: Unable to open .bdignore file \n' + str(e))
-	else:
-		print("INFO: '.bdignore' file already exists - not updated")
+	for bdpath in bdignore_list:
+		bdignore_file = os.path.join(os.path.dirname(bdpath), ".bdignore")
+		if not os.path.exists(bdignore_file):
+			try:
+				b = open(bdignore_file, "a")
+				b.write("/" + os.path.basename(bdpath) + "/")
+				b.close()
+				#print("INFO: '.bdignore' file created in project folder")
+				newcount += 1
+			except Exception as e:
+				print('ERROR: Unable to create .bdignore file\n' + str(e))
+		else:
+			existcount += 1
+# 			print("INFO: '.bdignore' file already exists - not updated")
+	print("INFO: Created {} .bdignore files ({} .bdignore files already existed - not updated)\n".format(newcount, existcount))
+
+def output_config(projdir):
 
 	config_file = os.path.join(projdir, "application-project.yml")
 	if not os.path.exists(config_file):
@@ -1326,6 +1331,11 @@ def check_input_options(prompt, accepted_values):
 	raise Exception("quit")
 
 def check_input_yn(prompt, default):
+	if default:
+		prompt += " [y]:"
+	else:
+		prompt += " [n]:"
+
 	value = input(prompt)
 	if value == "":
 		return(default)
@@ -1362,36 +1372,45 @@ def backup_repfile(filename):
 				return(new_file)
 	return("")
 
-def interactive():
+def interactive(scanfolder, scantype, docker, critical_only, report, output_config, bdignore):
 	report = ""
+	if scanfolder == "" or scanfolder == None:
+		scanfolder = os.getcwd()
 
 	try:
-		folder = input("Enter project folder to scan (default current folder '{}'):".format(os.getcwd()))
+		folder = input("Enter project folder to scan (default current folder '{}'):".format(scanfolder))
 	except:
 		print("Exiting")
 		raise("quit")
 		return("", "", False, False, "", False)
 	if folder == "":
-		folder = "."
+		folder = scanfolder
 	elif not os.path.isdir(folder):
 		print("Scan location '{}' does not exist\nExiting".format(folder))
 		raise("quit")
 		return("", "", False, False, "", False)
 	try:
-		scan_type = check_input_options("Types of scan to check? (B)oth, (d)ependency or (s)ignature] [b]:", ['b','d','s'])
-		docker_bool = check_input_yn("Docker scan check? (y/n) [n]:", False)
-		critical_bool = check_input_yn("Critical recommendations only? (y/n) [n]:", False)
-		report_bool = check_input_yn("Create output report file? (y/n) [y]:", True)
+		if scantype == "d":
+			mylist = ['d','b','s']
+		elif scantype == "s":
+			mylist = ['s','d','b']
+		else:
+			mylist = ['b','d','s']
+		scantype = check_input_options("Types of scan to check? (b)oth, (d)ependency or (s)ignature] [{}]:".format(scantype), mylist)
+		docker_bool = check_input_yn("Docker scan check? (y/n)", docker)
+		critical_bool = check_input_yn("Critical recommendations only? (y/n)", critical_only)
+		report_bool = check_input_yn("Create output report file? (y/n)", report)
 		if report_bool:
 			report = input("Report file name [report.txt]:")
 			if report == "":
 				report = "report.txt"
-		config_bool = check_input_yn("Create .bdignore & application-project.yml file? (y/n) [n]:", False)
+		bdignore_bool = check_input_yn("Create .bdignore files within sub-folders to exclude folders from scan (USE WITH CAUTION)? (y/n)", bdignore)
+		config_bool = check_input_yn("Create application-project.yml file? (y/n)", output_config)
 	except:
 		print("Exiting")
 		raise("quit")
 		return("", "", False, False, "", False)
-	return(folder, scan_type, docker_bool, critical_bool, report, config_bool)
+	return(folder, scantype, docker_bool, critical_bool, report, config_bool, bdignore_bool)
 
 parser = argparse.ArgumentParser(description='Check prerequisites for Detect, scan folders, provide recommendations and example CLI options', prog='detect_advisor')
 
@@ -1402,21 +1421,29 @@ parser.add_argument("-d", "--detector_only", help="Check for detector files and 
 parser.add_argument("-s", "--signature_only", help="Check for files and folders for signature scan only",action='store_true')
 parser.add_argument("-c", "--critical_only", help="Only show critical issues which will causes detect to fail",action='store_true')
 #parser.add_argument("-f", "--full", help="Output full information to report file if specified",action='store_true')
-parser.add_argument("-o", "--output_config", help="Create .yml config and .bdignore file in project folder",action='store_true')
+parser.add_argument("-o", "--output_config", help="Create .yml config file in project folder",action='store_true')
+parser.add_argument("-b", "--bdignore", help="Create .bdignore files in sub-folders to exclude folders from scan",action='store_true')
 parser.add_argument("-D", "--docker", help="Check docker prerequisites",action='store_true')
+parser.add_argument("-i", "--interactive", help="Use interactive mode to review/set options",action='store_true')
 parser.add_argument("--docker_only", help="Only check docker prerequisites",action='store_true')
 
 args = parser.parse_args()
 
-if args.scanfolder == "":
-	try:
-		args.scanfolder, scan_type, args.docker, args.critical_only, args.report, args.output_config = interactive()
-		if scan_type == "d":
+if args.scanfolder == "" or args.interactive:
+# 	try:
+		if args.detector_only:
+			scantype = "d"
+		elif args.signature_only:
+			scantype = "s"
+		else:
+			scantype = "b"
+		args.scanfolder, scantype, args.docker, args.critical_only, args.report, args.output_config, args.bdignore = interactive(args.scanfolder, scantype, args.docker, args.critical_only, args.report, args.output_config, args.bdignore)
+		if scantype == "d":
 			args.detector_only = True
-		elif scan_type == "s":
+		elif scantype == "s":
 			args.signature_only = True
-	except:
-		sys.exit(1)
+# 	except:
+# 		sys.exit(1)
 
 if not os.path.isdir(args.scanfolder):
 	print("Scan location '{}' does not exist\nExiting".format(args.scanfolder))
@@ -1427,10 +1454,10 @@ if args.report and os.path.exists(args.report):
 	print("Report file '{}' already existed - backed up to {}".format(args.report, backup))
 
 rep = ""
-bdignore = ""
+
 cli_msgs_dict['reqd'] += "--detect.source.path='{}'\n".format(os.path.abspath(args.scanfolder))
 
-print("\nDETECT ADVISOR v{} - for use with Synopsys Detect v{} or later\n".format(advisor_version, detect_version))
+print("\nDETECT ADVISOR v{} - for use with Synopsys Detect versions up to v{}\n".format(advisor_version, detect_version))
 
 print("PROCESSING:")
 
@@ -1485,6 +1512,9 @@ output_cli(args.critical_only, args.report, f)
 
 if args.output_config:
 	output_config(args.scanfolder)
+
+if args.bdignore:
+	create_bdignores()
 
 print("")
 if f:
