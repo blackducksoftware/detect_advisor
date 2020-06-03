@@ -8,7 +8,7 @@ import platform, sys
 
 #
 # Constants
-advisor_version = "0.7 Beta"
+advisor_version = "0.71 Beta"
 detect_version = "6.3.0"
 srcext_list = ['.R','.actionscript','.ada','.adb','.ads','.aidl','.as','.asm','.asp',\
 '.aspx','.awk','.bas','.bat','.bms','.c','.c++','.cbl','.cc','.cfc','.cfm','.cgi','.cls',\
@@ -215,6 +215,7 @@ max_arc_depth = 0
 counts = {
 'file' : [0,0],
 'dir' : [0,0],
+'ignoredir': [0,0],
 'arc' : [0,0],
 'bin' : [0,0],
 'jar' : [0,0],
@@ -230,6 +231,7 @@ counts = {
 sizes = {
 'file' : [0,0,0],
 'dir' : [0,0,0],
+'ignoredir': [0,0,0],
 'arc' : [0,0,0],
 'bin' : [0,0,0],
 'jar' : [0,0,0],
@@ -243,7 +245,7 @@ sizes = {
 
 src_list = []
 bin_list = []
-bin_large_list = []
+bin_large_dict = {}
 large_list = []
 huge_list = []
 arc_list = []
@@ -457,7 +459,7 @@ def checkfile(name, path, size, size_comp, dirdepth, in_archive):
 		elif ext in binext_list:
 			bin_list.append(path)
 			if size > largesize:
-				bin_large_list.append(path)
+				bin_large_dict[path] = size
 			ftype = 'bin'
 		elif ext in arcext_list:
 			arc_list.append(path)
@@ -484,7 +486,7 @@ def checkfile(name, path, size, size_comp, dirdepth, in_archive):
 			sizes[ftype][inarccomp] += size_comp
 	return(ftype)
 
-def process_dir(path, dirdepth):
+def process_dir(path, dirdepth, ignore):
 	dir_size = 0
 	dir_entries = 0
 	filenames_string = ""
@@ -495,32 +497,55 @@ def process_dir(path, dirdepth):
 
 	all_bin = False
 	try:
+		ignore_list = []
+		if not ignore:
+			# Check whether .bdignore exists
+			bdignore_file = os.path.join(path, ".bdignore")
+			if os.path.exists(bdignore_file):
+				b = open(bdignore_file, "r")
+				lines = b.readlines()
+				for bline in lines:
+					ignore_list.append(bline[1:len(bline)-2])
+				b.close()
+				#print(path, ignore_list)
+
 		for entry in os.scandir(path):
+			ignorethis = False
 			dir_entries += 1
 			filenames_string += entry.name + ";"
 			if entry.is_dir(follow_symlinks=False):
-				counts['dir'][notinarc] += 1
-				dir_size += process_dir(entry.path, dirdepth)
-			else:
-				ftype = checkfile(entry.name, entry.path, entry.stat(follow_symlinks=False).st_size, 0, dirdepth, False)
-				if ftype == 'bin':
-					if dir_entries == 1:
-						all_bin = True
+				if ignore or os.path.basename(entry.path) in ignore_list:
+					#print("IGNORE {}".format(entry.path))
+					ignorethis = True
+					counts['ignoredir'][notinarc] += 1
 				else:
-					all_bin = False
-				ext = os.path.splitext(entry.name)[1]
-				if ext in supported_zipext_list:
-					process_zip(entry.path, 0, dirdepth)
+					counts['dir'][notinarc] += 1
+				this_size = process_dir(entry.path, dirdepth, ignorethis)
+				dir_size += this_size
+				if ignorethis:
+					sizes['ignoredir'][notinarc] += this_size
+			else:
+				if not ignore:
+					ftype = checkfile(entry.name, entry.path, entry.stat(follow_symlinks=False).st_size, 0, dirdepth, False)
+					if ftype == 'bin':
+						if dir_entries == 1:
+							all_bin = True
+					else:
+						all_bin = False
+					ext = os.path.splitext(entry.name)[1]
+					if ext in supported_zipext_list:
+						process_zip(entry.path, 0, dirdepth)
 
 				dir_size += entry.stat(follow_symlinks=False).st_size
 	except OSError:
 		messages += "ERROR: Unable to open folder {}\n".format(path)
 		return 0
 
-	dir_dict[path]['num_entries'] = dir_entries
-	dir_dict[path]['size'] = dir_size
-	dir_dict[path]['depth'] = dirdepth
-	dir_dict[path]['filenamesstring'] = filenames_string
+	if not ignore:
+		dir_dict[path]['num_entries'] = dir_entries
+		dir_dict[path]['size'] = dir_size
+		dir_dict[path]['depth'] = dirdepth
+		dir_dict[path]['filenamesstring'] = filenames_string
 	if all_bin and path.find("##") < 0:
 		bdignore_list.append(path)
 	return dir_size
@@ -531,6 +556,7 @@ def process_largefiledups(f):
 	if f:
 		f.write("\nLARGE DUPLICATE FILES:\n")
 
+	count = 0
 	fcount = 0
 	total_dup_size = 0
 	count_dups = 0
@@ -572,6 +598,11 @@ def process_largefiledups(f):
 						count_dups += 1
 						if f:
 							f.write("- Large Duplicate file - {}, {} (size {}MB)\n".format(apath,cpath,trunc(asize/1000000)))
+							count += 1
+
+	if f and count == 0:
+		f.write("    None\n")
+
 	return(count_dups, total_dup_size)
 
 def process_dirdups(f):
@@ -584,6 +615,7 @@ def process_dirdups(f):
 	if f:
 		f.write("\nLARGE DUPLICATE FOLDERS:\n")
 
+	count = 0
 	ditems = len(dir_dict)
 	for apath, adict in dir_dict.items():
 		dcount += 1
@@ -600,7 +632,13 @@ def process_dirdups(f):
 				try:
 					if adict['num_entries'] == cdict['num_entries'] and adict['size'] == cdict['size'] \
 					and adict['filenamesstring'] == cdict['filenamesstring']:
-						if adict['depth'] <= cdict['depth']:
+						if adict['depth'] < cdict['depth']:
+							keypath = apath
+							valpath = cpath
+						elif len(apath) < len(cpath):
+							keypath = apath
+							valpath = cpath
+						elif apath < cpath:
 							keypath = apath
 							valpath = cpath
 						else:
@@ -637,6 +675,10 @@ def process_dirdups(f):
 			if f and dir_dict[xpath]['size'] > hugesize:
 				f.write("- Large Duplicate folder - {}, {} (size {}MB)\n".format(xpath,ypath, \
 				trunc(dir_dict[xpath]['size']/1000000)))
+				count += 1
+
+	if f and count == 0:
+		f.write("    None\n")
 
 	return(count_dupdirs, size_dupdirs)
 
@@ -718,11 +760,26 @@ def print_summary(critical_only, f):
 	trunc(sizes['arc'][inarcunc]/1000000), \
 	trunc(sizes['arc'][inarccomp]/1000000))
 
-	summary += "--------------------  --------------   --------------   -------------   -------------   -------------\n"
+	summary += "====================  ==============   ==============   =============   =============   =============\n"
+
+	summary += row.format("ALL FILES (Scan size)", counts['file'][notinarc]+counts['arc'][notinarc], \
+	trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000), \
+	counts['file'][inarc]+counts['arc'][inarc], \
+	trunc((sizes['file'][inarcunc]+sizes['arc'][inarcunc])/1000000), \
+	trunc((sizes['file'][inarccomp]+sizes['arc'][inarccomp])/1000000))
+
+	summary += "====================  ==============   ==============   =============   =============   =============\n"
 
 	summary += "{:25} {:>10,d}              N/A      {:>10,d}             N/A             N/A   \n".format("Folders", \
 	counts['dir'][notinarc], \
 	counts['dir'][inarc])
+
+	summary += row.format("Ignored Folders", \
+	counts['ignoredir'][notinarc], \
+	trunc(sizes['ignoredir'][notinarc]/1000000), \
+	counts['ignoredir'][inarc], \
+	trunc(sizes['ignoredir'][inarcunc]/1000000), \
+	trunc(sizes['ignoredir'][inarccomp]/1000000))
 
 	summary += row.format("Source Files", \
 	counts['src'][notinarc], \
@@ -766,15 +823,7 @@ def print_summary(critical_only, f):
 	trunc(sizes['pkg'][inarcunc]/1000000), \
 	trunc(sizes['pkg'][inarccomp]/1000000))
 
-	summary += "====================  ==============   ==============   =============   =============   =============\n"
-
-	summary += row.format("ALL FILES (Scan size)", counts['file'][notinarc]+counts['arc'][notinarc], \
-	trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000), \
-	counts['file'][inarc]+counts['arc'][inarc], \
-	trunc((sizes['file'][inarcunc]+sizes['arc'][inarcunc])/1000000), \
-	trunc((sizes['file'][inarccomp]+sizes['arc'][inarccomp])/1000000))
-
-	summary += "====================  ==============   ==============   =============   =============   =============\n"
+	summary += "--------------------  --------------   --------------   -------------   -------------   -------------\n"
 
 	summary += row.format("Large Files (>{:1d}MB)".format(trunc(largesize/1000000)), \
 	counts['large'][notinarc], \
@@ -844,16 +893,27 @@ def signature_process(folder, f):
 		recs_msgs_dict['imp'] += "- IMPORTANT: Large amount of data ({:>,d} MB) in {} binary files found\n".format(trunc((sizes['bin'][notinarc]+sizes['bin'][inarc])/1000000), len(bin_list)) + \
 		"    Impact:  Binary files not analysed by standard scan, will impact Capacity license usage\n" + \
 		"    Action:  Remove files or ignore folders (using .bdignore files), also consider zipping\n" + \
-		"             files and using Binary scan (Specify -f option to add list of large binary\n" + \
-		"             files to the report file, and use the --detect.binary.scan.file.path=binary_files.zip option)\n\n"
+		"             files and using Binary scan (See report file produced with -r option)\n\n"
 		cli_msgs_dict['scan'] += "--detect.binary.scan.file.path=binary_files.zip\n" + \
-		"    (To scan binary files within the project; zip files first - see list of binary\n" + \
-		"    files in report file; binary scan license required)\n"
-		if f:
-			f.write("\nLARGE BINARY FILES:\n(Consider zipping these files and then running Detect with --detect.binary.scan.file.path=binary_files.zip option - subject to license available)\n")
-			for bin in bin_large_list:
-				f.write("    {}\n".format(bin))
-			f.write("\n")
+		"    (See report file produced with -r option for how to zip binary files; binary scan license required)\n"
+		if f and len(bin_large_dict) > 0:
+			f.write("\nLARGE BINARY FILES:\n")
+			for bin in bin_large_dict.keys():
+				f.write("    {} (Size {:d}MB)\n".format(bin, int(bin_large_dict[bin]/1000000)))
+			f.write("\nConsider using the following command to zip binary files and send to binary scan (subject to license):\n    zip binary_files.zip \\\n")
+			binzip_list = []
+			for bin in bin_large_dict.keys():
+				if bin.find("##") < 0:
+					binzip_list.append(bin)
+				elif bin.split("##")[0] not in binzip_list:
+					binzip_list.append(bin.split("##")[0])
+			num = 0
+			for bin in binzip_list:
+				if num > 0:
+					f.write(" \\\n")
+				f.write("    {}".format(bin))
+				num += 1
+			f.write("\n\nThen run Detect with the following options to send the archive for binary scan:\n    --detect.tools=BINARY_SCAN --detect.binary.scan.file.path=binary_files.zip\n\n")
 
 	if size_dirdups > 20000000:
 		recs_msgs_dict['imp'] += "- IMPORTANT: Large amount of data ({:,d} MB) in {:,d} duplicate folders\n".format(trunc(size_dirdups/1000000), len(dup_dir_dict)) + \
@@ -909,6 +969,7 @@ def detector_process(folder, f):
 	if f:
 		f.write("PROJECT FILES FOUND:\n")
 
+	count = 0
 	det_depth1 = 0
 	det_other = 0
 	cmds_missing1 = ""
@@ -962,6 +1023,7 @@ def detector_process(folder, f):
 								missing_cmds = exe
 				if f:
 					f.write("{}\n".format(detpath))
+					count += 1
 
 				if not command_exists and missing_cmds:
 					if missing_cmds.find(" OR ") > 0:
@@ -986,6 +1048,9 @@ def detector_process(folder, f):
 		"---------------------------------\n" + \
 		"- Total discovered:       {}\n\n".format(len(det_dict)) + \
 		"Config files for the following Package Managers found: {}\n".format(', '.join(detectors_list))
+
+	if f and count == 0:
+		f.write("    None\n")
 
 	if det_depth1 == 0 and det_other > 0:
 		recs_msgs_dict['imp'] += "- IMPORTANT: No package manager files found in invocation folder but do exist in sub-folders\n" + \
@@ -1268,24 +1333,38 @@ def output_cli(critical_only, report, f):
 		print("INFO: Use '-r repfile' to produce report file with more information")
 
 def create_bdignores():
-	newcount = 0
-	existcount = 0
+	filecount = 0
+	foldercount = 0
 
 	for bdpath in bdignore_list:
 		bdignore_file = os.path.join(os.path.dirname(bdpath), ".bdignore")
 		if not os.path.exists(bdignore_file):
 			try:
 				b = open(bdignore_file, "a")
-				b.write("/" + os.path.basename(bdpath) + "/")
+				b.write("/" + os.path.basename(bdpath) + "/\n")
 				b.close()
 				#print("INFO: '.bdignore' file created in project folder")
-				newcount += 1
+				filecount += 1
 			except Exception as e:
 				print('ERROR: Unable to create .bdignore file\n' + str(e))
 		else:
-			existcount += 1
-# 			print("INFO: '.bdignore' file already exists - not updated")
-	print("INFO: Created {} .bdignore files ({} .bdignore files already existed - not updated)\n".format(newcount, existcount))
+			# Check whether entry exists
+			try:
+				b = open(bdignore_file, "r")
+				lines = b.readlines()
+				exists = False
+				for line in lines:
+					if line == "/" + os.path.basename(bdpath) + "/\n":
+						exists = True
+				b.close()
+				if not exists:
+					b = open(bdignore_file, "a")
+					b.write("/" + os.path.basename(bdpath) + "/\n")
+					b.close()
+			except Exception as e:
+				print('ERROR: Unable to update .bdignore file\n' + str(e))
+		foldercount += 1
+	print("INFO: Created/updated {} .bdignore files to ignore {} folders\n".format(filecount, foldercount))
 
 def output_config(projdir):
 
@@ -1373,7 +1452,6 @@ def backup_repfile(filename):
 	return("")
 
 def interactive(scanfolder, scantype, docker, critical_only, report, output_config, bdignore):
-	report = ""
 	if scanfolder == "" or scanfolder == None:
 		scanfolder = os.getcwd()
 
@@ -1399,11 +1477,16 @@ def interactive(scanfolder, scantype, docker, critical_only, report, output_conf
 		scantype = check_input_options("Types of scan to check? (b)oth, (d)ependency or (s)ignature] [{}]:".format(scantype), mylist)
 		docker_bool = check_input_yn("Docker scan check? (y/n)", docker)
 		critical_bool = check_input_yn("Critical recommendations only? (y/n)", critical_only)
-		report_bool = check_input_yn("Create output report file? (y/n)", report)
+		if report != "":
+			rep_default = True
+		else:
+			rep_default = False
+			report = "report.txt"
+		report_bool = check_input_yn("Create output report file? (y/n)", rep_default)
 		if report_bool:
-			report = input("Report file name [report.txt]:")
-			if report == "":
-				report = "report.txt"
+			rep = input("Report file name [{}]:".format(report))
+			if rep != "":
+				report = rep
 		bdignore_bool = check_input_yn("Create .bdignore files within sub-folders to exclude folders from scan (USE WITH CAUTION)? (y/n)", bdignore)
 		config_bool = check_input_yn("Create application-project.yml file? (y/n)", output_config)
 	except:
@@ -1467,7 +1550,7 @@ else:
 	print("Working on project folder '{}' (Absolute path '{}')\n".format(args.scanfolder, os.path.abspath(args.scanfolder)))
 
 print("- Reading hierarchy          .....", end="", flush=True)
-process_dir(args.scanfolder, 0)
+process_dir(args.scanfolder, 0, False)
 print(" Done")
 
 if args.report:
