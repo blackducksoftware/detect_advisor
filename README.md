@@ -7,53 +7,61 @@ It does not represent any extension of licensed functionality of Synopsys softwa
 
 # DESCRIPTION
 
-The `detect_advisor.py` script is designed to pre-scan project folders and locations to determine whether the Synopsys Detect program (see https://blackducksoftware.github.io/synopsys-detect/latest/) used for Synopsys Black Duck SCA scans can be executed (prerequisites are met) and also to provide recommendations and advice on how to perform and optimize scanning.
+The `detect_advisor.py` script is designed to pre-scan a project folder to determine whether the Synopsys Detect program (see https://blackducksoftware.github.io/synopsys-detect/latest/) used for Synopsys Black Duck SCA scans can be executed (the prerequisites are met) and also to provide recommendations and advice on how to perform and optimize scanning.
 
 It is available as a python script with no prerequisites except Python 3 (can be downloaded and run without dependencies), or alternatively compiled executables for Windows, Linux and Mac OS are provided in the `executables` folder for download and execution standalone.
 
-The script will check the prerequisites to run Detect (including the correct version of Java) and scan the project location for files and archives, calculate the total scan size, check for project files and package managers and will also detect large duplicate files and folders.
+The script will check the prerequisites to run Detect (including the correct version of Java) and scan the project location for files and archives, calculate the total scan size, check for project (package manager) files and package managers themselves and will also detect large duplicate files and folders.
 
-It will expand .zip and .jar files automatically, processing recursive files (zips within zips etc.). Other archive types (.gz, .tar, .Z etc.) are not currently expanded.
+It will expand .zip and .jar files automatically, processing recursive files (zips within zips etc.). Other archive types (.gz, .tar, .Z etc.) are not currently expanded by detect_advisor (although they will be expanded by Synopsys Detect).
 
 It will produce a set of categorized recommendations and Detect command line options to support different types of scans and other operations.
 
-It can optionally write a report file including the console output and other information, and also create a `.bdignore` file (to ignore duplicate folders) and .yml project config file containing example Detect options within comments for selection (use the Detect option `--spring.profiles.active=project` to use this profile).
+It can optionally write a report file including the console output and other information. It can also create a set of `.bdignore` files (to ignore duplicate folders or those containing only binary files) in sub-folders as well as a .yml project config file containing relevant, commented-out Detect options which can be uncommented, and the .yml can be referenced using the Synopsys Detect option `--spring.profiles.active=project`.
+
+Optionslly, only critical issues (which will stop Detect from scanning at all) can be reported to the console.
+
+An interactive mode is available which will ask a series of questions about the options to use for the advisor analysis.
 
 # PREREQUISITES
 
-Python 3 must be installed prior to using this script. Alternatively compiled, standalone executables are available for Windows, Linux and Mac OS in the `executables` folder.
+Python 3 must be installed prior to using this script. Alternatively, compiled, standalone executables are available for Windows, Linux and Mac OS in the `executables` folder.
 
 # USAGE
 
 The `detect_advisor.py` script can be invoked as follows:
 
-    usage: detect_advisor [-h] [-r REPORT] [-d] [-s] [-c] [-f] [scanfolder]
+    usage: detect_advisor [-h] [-r REPORT] [-d] [-s] [-c] [-o] [-D] [-b] [scanfolder]
 
     Examine files/folders to determine scan recommendations
 
     optional arguments:
-      scanfolder            Project folder to analyse
-      -h, --help            show this help message and exit
+      scanfolder             Top level folder to analyse
+      -h, --help             show this help message and exit
+      -i, --interactive      Ask questions to confirm required options (will be used if 'scanfolder' is blank)
       -r REPORT, --report REPORT
-                            Output report file (must not exist already)
-      -d, --detectors_only  Check for detector files and prerequisites only
-      -s, --signature_only  Check for files and folders for signature scan only
-      -c, --critical_only   Only show critical issues which will cause Detect to fail
-      -o, --output_config   Create .yml config and .bdignore file in project folder
-      -D, --docker          Check for docker prerequisites
-      --docker_only         Check for docker prerequisites only
+                             Output report file (existing report files will be renamed)
+      -d, --dependency_only  Check for detector (package manager) files and prerequisites only - for dependency scans
+      -s, --signature_only   Check for files and folders for signature scan only
+      -c, --critical_only    Only show critical issues which will cause Detect to fail
+      -o, --output_config    Create .yml config and .bdignore file in project folder
+      -b, --bdignore         Create multiple .bdignore files in sub-folders to ignore duplicate folders
+      -D, --docker           Check for docker prerequisites
+      --docker_only          Check for docker prerequisites only
 
-If `scanfolder` is not specified then options will be requested interactively. Enter q or use CTRL-C to terminate interactive entry.
+If `scanfolder` is not specified then options will be requested interactively (alternatively use `-i` or `--interactive` option to specify interactive mode). Enter q or use CTRL-C to terminate interactive entry and the program.
 
-When specified, `scanfolder` can be a relative or absolute path (special characters such as ~ or $HOME not supported).
+When specified, `scanfolder` can be a relative or absolute path (special characters such as ~ or environment variables such as $HOME are not supported in interactive mode).
 
-The `-r repfile` or `--report repfile` option will output the console messages and additional information to the file `repfile`, moving a previous repfile if it exists to `repfile.XXX` where XXX is an incremental number.
+The `-r repfile` or `--report repfile` option will output the console messages and additional information to the file `repfile`, moving previous repfile if it exists to `repfile.XXX` where XXX is an incremental number.
 
-The `-c` or `--critical_only` option will limit the console output to critical issues only and skip the summary section and other information, although all sections will still be written to the report file (if specified with `-r repfile`).
+The `-c` or `--critical_only` option will limit the console output to critical issues only, skipping the summary section and other information, although all sections will still be written to the report file (if specified with `-r repfile`).
 
-The `-d` and `-s` options specify that only Dependency (Detector) or Signature scan checking should be performed respectively.
+The `-d` and `-s` options specify that ONLY Dependency (Detector) or Signature scan checking should be performed respectively.
 
-The `-D` or `--docker` option will check docker scanning prerequisites; use `--docker_only` to check only docker prerequisites (other checks not performed).
+The `-o` or `--output_config` option will create an `application-project.yml` in the project folder with commented out Detect parameters. Uncomment the required parameters and then specify the Detect option `--spring.profiles.active=project` to use this profile.
+
+The `-D` or `--docker` option will check docker scanning prerequisites in addition to other checks; use `--docker_only` to check only docker prerequisites (other checks not performed).
 
 # EXAMPLE USAGE
 
@@ -69,13 +77,14 @@ The interactive questions are shown below:
     Critical recommendations only? (y/n) [n]:
     Create output report file? (y/n) [y]:
     Report file name [report.txt]:
-    Create .bdignore & application-project.yml file? (y/n) [n]:
+    Create .bdignore files (y/n) [n]:
+    Create application-project.yml file? (y/n) [n]:
 
 The following command will run the script on the `myproject` sub-folder, producing standard console output only:
 
     python3 detect_advisor.py myproject
     
-The following command will run the script on the `myproject` sub-folder, producing standard console output and outputting additional information to the `myreport.txt` file (which must not already exist):
+The following command will run the script on the `myproject` sub-folder, producing standard console output and outputting additional information to the `myreport.txt` file (if myreport.txt already exists it is renamed to myreport.001 and so on):
 
     python3 detect_advisor.py -r myreport.txt myproject
 
@@ -83,17 +92,21 @@ The following command will scan the absolute path `/users/matthew/myproject`; th
 
     python3 detect_advisor.py -c -r myreport.txt /users/myuser/myproject
     
-The following command will scan the absolute path `/users/myuser/myproject`; the `-o` option will cause `.bdignore` and `application-project.yml` files to be written to the project folder:
+The following command will scan the absolute path `/users/myuser/myproject`; the `-o` option will cause the `application-project.yml` file to be written to the /users/myuser/myproject folder:
 
     python3 detect_advisor.py -o /users/myuser/myproject
 
-The following command will scan the absolute path `/users/myuser/myproject`; the `-s` option will cause only Signature scan checking to be performed:
+The following command will scan the absolute path `/users/myuser/myproject`; the `-b` option will cause multiple .bdignore files to be created in relevant sub-folders to ignore large duplicate folders or folders containing only binary files. USE WITH CAUTION as it will cause specified folders to be permanently ignored by the Signature scan (until the .bdignore files are removed):
+
+    python3 detect_advisor.py -b /users/myuser/myproject
+
+The following command will scan the absolute path `/users/myuser/myproject` and output to the myreport.txt file; the `-s` option will cause only Signature scan checking to be performed:
 
     python3 detect_advisor.py -s -r myreport.txt /users/myuser/myproject
 
-The following command will scan the absolute path `/users/myuser/myproject`; the `-d` option will also check Docker scannning prerequisites:
+The following command will scan the absolute path `/users/myuser/myproject`; the `-D` option will also check Docker scanning prerequisites:
 
-    python3 detect_advisor.py -d /users/myuser/myproject
+    python3 detect_advisor.py -D /users/myuser/myproject
 
 # SUMMARY INFO
 
@@ -104,39 +117,40 @@ The `Size Outside Archives` value in the `ALL FILES (Scan Size)` row represents 
 Note that the `Archives(exc. Jars)` row covers all archive file types but that only .zip files are extracted by `detect_advisor` (whereas Synopsys Detect extracts other types of archives automatically). The final 3 `Inside Archives` columns indicate items found within .zip archives for the different types (except for the Jar row which references .jar/.ear/.war files). The `Inside Archives` columns for the Archives row itself reports archive files within .zips (or nested deeper - zips within zips within zips etc.).
 
     SUMMARY INFO:
-    Total Scan Size = 4,774 MB
+    Total Scan Size = 5,856 MB
 
                              Num Outside     Size Outside      Num Inside     Size Inside     Size Inside
                                 Archives         Archives        Archives        Archives        Archives
-                                                                            (UNcompressed)    (compressed)
+                                                            (UNcompressed)    (compressed)
     ====================  ==============   ==============   =============   =============   =============
-    Files (exc. Archives)            181         2,753 MB           2,372        2,051 MB        2,026 MB
-    Archives (exc. Jars)               7         2,020 MB               6          666 MB          666 MB
+    Files (exc. Archives)        297,415         4,905 MB         130,126          653 MB          160 MB
+    Archives (exc. Jars)              39           951 MB               9            0 MB            0 MB
+    ====================  ==============   ==============   =============   =============   =============
+    ALL FILES (Scan size)        297,454         5,856 MB         130,135          654 MB          160 MB
+    ====================  ==============   ==============   =============   =============   =============
+    Folders                       30,435              N/A          10,309             N/A             N/A   
+    Ignored Folders                4,169         2,319 MB               0            0 MB            0 MB
+    Source Files                 164,240         1,024 MB          53,740          171 MB           34 MB
+    JAR Archives                       6             6 MB               0            0 MB            0 MB
+    Binary Files                      33            99 MB              10            0 MB            0 MB
+    Other Files                  129,476         2,988 MB          75,282          478 MB          124 MB
+    Package Mgr Files              3,633            25 MB           1,094            2 MB            0 MB
+    OS Package Files                   0             0 MB               0            0 MB            0 MB
     --------------------  --------------   --------------   -------------   -------------   -------------
-    Folders                          120              N/A              99             N/A             N/A   
-    Source Files                       6             0 MB               0            0 MB            0 MB
-    JAR Archives                       4             6 MB               0            0 MB            0 MB
-    Binary Files                       2         1,409 MB               1          704 MB          688 MB
-    Other Files                      166             0 MB           2,369            9 MB            6 MB
-    Package Mgr Files                  1             0 MB               0            0 MB            0 MB
-    OS Package Files                   2         1,336 MB               2        1,336 MB        1,332 MB
-    ====================  ==============   ==============   =============   =============   =============
-    ALL FILES (Scan size)            188         4,774 MB           2,378        2,717 MB        2,692 MB
-    ====================  ==============   ==============   =============   =============   =============
-    Large Files (>5MB)                 0             0 MB               0            0 MB            0 MB
-    Huge Files (>20MB)                 4         2,746 MB               3        2,041 MB        2,020 MB
+    Large Files (>5MB)                38           336 MB               1            9 MB            4 MB
+    Huge Files (>20MB)                27         1,875 MB               1           35 MB            6 MB
     --------------------  --------------   --------------   -------------   -------------   -------------
 
     PACKAGE MANAGER CONFIG FILES:
     - In invocation folder:   0
-    - In sub-folders:         1
+    - In sub-folders:         3633
     - In archives:            0
     - Minimum folder depth:   2
-    - Maximum folder depth:   2
+    - Maximum folder depth:   14
     ---------------------------------
-    - Total discovered:       1
+    - Total discovered:       3633
 
-    Config files for the following Package Managers found: dotnet
+    Config files for the following Package Managers found: gradlew, gradle, clang, dotnet, npm, yarn, pod, python, python3, pip
 
 # RECOMMENDATIONS
 
@@ -193,7 +207,7 @@ This section includes a list of findings categorised into CRITICAL (will cause D
 
 # DETECT CLI
 
-This section includes recommended CLI options for Synopsys Detect. If connectivity to the download locations is not verified, then proxy options will also be added in case a proxy connection is required.
+This section includes recommended CLI options for Synopsys Detect. If connectivity to the download locations is not verified by detect_advisor, then proxy options will also be added in case a proxy connection is required.
 
     DETECT CLI:
     
@@ -252,14 +266,16 @@ This section includes recommended CLI options for Synopsys Detect. If connectivi
 
 # REPORT FILE
 
-An optional report file can be specified (`-r repfile` or `--report repfile`) including full information with lists of duplicate large files, duplicate large folders, binary files etc. If the report file already exists it will be backed up to `repfile.XXX` where XXX is an incremental numeric.
+An optional report file can be specified (`-r repfile` or `--report repfile`) which will include full information with lists of duplicate large files, duplicate large folders, binary files etc. If the report file already exists it will be backed up to `repfile.XXX` where XXX is an incremental numeric.
 
-If large duplicate files or folders are identified (or folders containing only binary files), then a recommended `.bdignore` with list of folders to ignore is also produced in the report file.
+If large duplicate files or folders are identified (or folders containing only binary files), then a list of folders to ignore is also produced in the report file.
 
-A list of large binary files is also produced in the report file, and you should consider sending them to Binary scan (note this a separate licensed product to standard Black Duck) by zipping into an archive, and using the Detect `--detect.binary.scan.file.path=XXX.zip` option.
+The report file will also include a list of large binary files, with instructions on how to zip the files and submit for binary scan (note this a separate licensed product to standard Black Duck).
+
+Note that reported paths which include the characters `##` indicate items within zip or similar archives.
 
 # OUTPUT CONFIG FILES
 
-The `-o` option will create `.bdignore` and `application-project.yml` files in the project folder if they do not already exist. The `.bdignore` file will contain a list of duplicate folders or those containing only binary files for exclusion. The `application-project.yml` file will contain a list of commented detect options from the DETECT CLI section, which you will need to modify and uncomment according to your needs.
+The `-o` or `--output_config` option will create the `application-project.yml` files in the project folder if it does not already exist. The `application-project.yml` file will contain a list of commented Detect options from the DETECT CLI section, which you will need to modify and uncomment according to your needs. The `application-project.yml` config file can be used to configure Detect using the single `--spring.profiles.active=project` option.
 
-The `application-project.yml` config file can be used to configure Detect using the single `--spring.profiles.active=project` option.
+The `-b` or `--bdignore` option will create multiple `.bdignore` files in sub-folders beneath the project folder if they do not already exist. The `.bdignore` files will be created in parent folders of duplicate folders or those containing only binary files for exclusion. USE WITH CAUTION as it will cause specified folders to be permanently ignored by the Signature scan until the .bdignore files are removed.
