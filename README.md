@@ -31,7 +31,7 @@ Python 3 must be installed prior to using this script. Alternatively, compiled, 
 
 The `detect_advisor.py` script can be invoked as follows:
 
-    usage: detect_advisor [-h] [-r REPORT] [-d] [-s] [-c] [-o] [-D] [-b] [scanfolder]
+    usage: detect_advisor [-h] [-r REPORT] [-d] [-s] [-c] [-o] [-D] [-b] [-i] [scanfolder]
 
     Examine files/folders to determine scan recommendations
 
