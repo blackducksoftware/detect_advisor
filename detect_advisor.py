@@ -8,8 +8,8 @@ import platform, sys
 
 #
 # Constants
-advisor_version = "0.71 Beta"
-detect_version = "6.3.0"
+advisor_version = "0.8 Beta"
+detect_version = "6.4.0"
 srcext_list = ['.R','.actionscript','.ada','.adb','.ads','.aidl','.as','.asm','.asp',\
 '.aspx','.awk','.bas','.bat','.bms','.c','.c++','.cbl','.cc','.cfc','.cfm','.cgi','.cls',\
 '.cpp','.cpy','.cs','.cxx','.el','.erl','.f','.f77','.f90','.for','.fpp','.frm','.fs',\
@@ -28,6 +28,8 @@ lic_list = ['LICENSE', 'LICENSE.txt', 'notice.txt', 'license.txt', 'license.html
 
 detectors_file_dict = {
 'build.env': ['bitbake'],
+'cargo.toml': ['cargo'],
+'cargo.lock': ['cargo'],
 'compile_commands.json': ['clang'],
 'Podfile.lock': ['pod'],
 'environment.yml': ['conda'],
@@ -52,6 +54,7 @@ detectors_file_dict = {
 'package.xml': ['pear'],
 'pipfile': ['python','python3','pipenv'],
 'pipfile.lock': ['python','python3','pipenv'],
+'pyproject.toml': ['poetry'],
 'setup.py': ['python','python3','pip'],
 'requirements.txt': ['python','python3','pip'],
 'Gemfile.lock': ['gem'],
@@ -1055,10 +1058,11 @@ def detector_process(folder, f):
 	if det_depth1 == 0 and det_other > 0:
 		recs_msgs_dict['imp'] += "- IMPORTANT: No package manager files found in invocation folder but do exist in sub-folders\n" + \
 		"    Impact:  Dependency scan will not be run\n" + \
-		"    Action:  Specify --detect.detector.depth={} (although depth could be up to {})\n".format(det_min_depth, det_max_depth) + \
-		"             or scan sub-folders seperately.\n\n"
-		if cli_msgs_dict['scan'].find("detector.depth") < 0:
-			cli_msgs_dict['scan'] += "--detect.detector.depth={}\n".format(det_min_depth) + \
+		"    Action:  Specify --detect.detector.search.depth={} (although depth could be up to {})\n".format(det_min_depth, det_max_depth) + \
+		"             optionally with -detect.detector.search.continue=true or scan sub-folders separately.\n\n"
+		if cli_msgs_dict['scan'].find("detector.search.depth") < 0:
+			cli_msgs_dict['scan'] += "--detect.detector.search.depth={}\n".format(det_min_depth) + \
+			"    optionally with optionally with -detect.detector.search.continue=true\n" + \
 			"    (To find package manager files within sub-folders; note depth {} would find\n".format(det_max_depth) + \
 			"    all PM files in sub-folders but higher level projects may already include these)\n"
 
