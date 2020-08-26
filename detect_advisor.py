@@ -5,10 +5,15 @@ from math import trunc
 import io, re
 import argparse
 import platform, sys
+import subprocess
 
-#
+# TODO: remove constants and take these fields as args
+coverage = 2
+blackduck_url = 'https://eng-spider-hub04.dc1.lan'
+api_token = 'ZDBhN2Q1YjctNWMyMS00YTIwLTg5NjUtMjY1ZmNhMmViNmQxOjE4ZWU3MWE0LTg0YzItNDc0OS1hZTQxLTExZjczNWQ5ODRmYg=='
+
 # Constants
-advisor_version = "0.8 Beta"
+advisor_version = "0.9 Beta"
 detect_version = "6.4.0"
 srcext_list = ['.R','.actionscript','.ada','.adb','.ads','.aidl','.as','.asm','.asp',\
 '.aspx','.awk','.bas','.bat','.bms','.c','.c++','.cbl','.cc','.cfc','.cfm','.cgi','.cls',\
@@ -246,6 +251,10 @@ sizes = {
 'pkg' : [0,0,0]
 }
 
+det_min_depth=None
+det_max_depth = None
+package_managers_missing = []
+
 src_list = []
 bin_list = []
 bin_large_dict = {}
@@ -302,7 +311,7 @@ cli_msgs_dict['detect_win_proxy'] = " (You may need to configure a proxy to down
 "    ${Env:blackduck.proxy.username} = PROXYPASSWORD\n" + \
 "    powershell \"[Net.ServicePointManager]::SecurityProtocol = 'tls12'; irm https://detect.synopsys.com/detect.ps1?$(Get-Random) | iex; detect\"\n"
 cli_msgs_dict['detect'] = ""
-cli_msgs_dict['reqd'] = "--blackduck.url=https://YOURSERVER\n" + \
+cli_msgs_dict['reqd'] = "--blackduck.url={}\n".format(blackduck_url) + \
 "--blackduck.api.token=YOURTOKEN\n"
 cli_msgs_dict['proj'] = "--detect.project.name=PROJECT_NAME\n" + \
 "--detect.project.version.name=VERSION_NAME\n" + \
@@ -1072,6 +1081,7 @@ def detector_process(folder, f):
 		"    Action:  This may be expected, but ensure you are scanning the correct location\n\n"
 
 	if cmds_missing1:
+		package_managers_missing.append(cmds_missing1)
 		recs_msgs_dict['crit'] += "- CRITICAL: Package manager programs ({}) missing for package files in invocation folder\n".format(cmds_missing1) + \
 		"    Impact:  Scan will fail\n" + \
 		"    Action:  Either install package manager programs or\n" + \
@@ -1081,6 +1091,7 @@ def detector_process(folder, f):
 		"    OR install package managers '{}')\n".format(cmds_missing1)
 
 	if cmds_missingother:
+		package_managers_missing.append(cmds_missingother)
 		recs_msgs_dict['imp'] += "- IMPORTANT: Package manager programs ({}) missing for package files in sub-folders\n".format(cmds_missingother) + \
 		"    Impact:  The scan will fail if the scan depth is modified from the default\n" + \
 		"    Action:  Install package manager programs\n" + \
@@ -1372,7 +1383,9 @@ def create_bdignores():
 
 def output_config(projdir):
 
-	config_file = os.path.join(projdir, "application-project.yml")
+	#config_file = os.path.join(projdir, "application-project.yml")
+	config_file = os.path.join(os.getcwd(), "application-project.yml")
+	#config_file = os.path "application-project.yml")
 	if not os.path.exists(config_file):
 		config = "#\n# EXAMPLE PROJECT CONFIG FILE\n" + \
 		"# Uncomment and update required options\n#\n#\n" + \
@@ -1499,6 +1512,106 @@ def interactive(scanfolder, scantype, docker, critical_only, report, output_conf
 		return("", "", False, False, "", False)
 	return(folder, scantype, docker_bool, critical_bool, report, config_bool, bdignore_bool)
 
+
+def get_detector_search_depth_args():
+	search_depth_args = ['detect.detector.search.continue: true'] # always use
+
+	if coverage < 3:
+		search_depth = det_min_depth if not None else 0  # distance to package manager
+	if 3 < coverage < 7:
+		search_depth = int(det_max_depth/2) if (det_max_depth and int(det_max_depth/2) > 0) else 1
+	if coverage > 6:
+		search_depth = det_max_depth if det_max_depth else 1
+
+	search_depth_args.append('detect.detector.search.depth: {}'.format(search_depth))
+
+	return search_depth_args
+
+
+def get_detector_exclusion_args():
+	detector_exclusion_args = []
+	if coverage < 4:
+		detector_exclusion_args.append('detect.detector.search.exclusion: test,samples,examples')
+	if coverage > 8:
+		detector_exclusion_args.append('detect.detector.search.exclusion.defaults: false')
+	#'detect.detector.search.exclusion.patterns'
+	#'detect.detector.search.exclusion.paths'
+	#'detect.detector.search.exclusion.files' # meant for package manager dependency files to prevent them from being found and applying a particular package manager to the scan
+	return detector_exclusion_args
+
+
+def get_detector_dev_dependeny_args():
+	return
+
+
+def get_detector_package_manager_args():
+	detector_package_manager_args = []
+	if package_managers_missing:
+		if coverage > 3:
+			detector_package_manager_args.append('detect.detector.buildless: true')
+		if coverage <= 3:
+			detector_package_manager_args.append('detect.tools.excluded: DETECTOR')
+
+	return detector_package_manager_args
+
+
+def get_detector_args():
+	detector_args = []
+	for item in get_detector_search_depth_args():
+		detector_args.append(item)
+
+	for item in get_detector_exclusion_args():
+		detector_args.append(item)
+
+	#for item in get_detector_dev_dependeny_args():
+	#	detector_args.append(item)
+
+	for item in get_detector_package_manager_args():
+		detector_args.append(item)
+
+	return detector_args
+
+def uncomment_detect_commands():
+	print("opening file")
+	with open('application-project.yml', 'r+') as f:
+		data = f.readlines()
+
+	detector_args = get_detector_args()
+
+	for line in data:
+		if "blackduck.url" in line or 'detect.source.path' in line:
+			data[data.index(line)]= line.replace('#', '')
+		if 'blackduck.api.token' in line:
+			data[data.index(line)] = line.replace('#', '').replace('YOURTOKEN', api_token)
+		for arg in detector_args:
+			if arg in line:
+				data[data.index(line)] = line.replace('#', '')
+				detector_args.remove(arg)
+
+	for arg in detector_args:
+		data.append(arg + '\n')
+
+	with open('application-project.yml', 'w') as f:
+		f.writelines(data)
+
+def run_detect():
+	uncomment_detect_commands()
+	detect_command = cli_msgs_dict['detect'].strip() + ' ' + '--spring.profiles.active=project' + ' ' + ' --blackduck.trust.cert=true'
+	print("Running command: {}\n".format(detect_command))
+	p = subprocess.Popen(detect_command, shell=True, executable='/bin/bash',
+						 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+	stdout, stderr = p.communicate()
+	out_file = 'latest_detect_run.txt'
+	err_file = 'latest_detect_errors.txt'
+	out = open(out_file, 'w')
+	err = open(err_file, 'w')
+
+	out.write(stdout.decode('utf-8'))
+	err.write(stderr.decode('utf-8'))
+
+	print("Detect logs written to: {}".format(out_file))
+
+
 parser = argparse.ArgumentParser(description='Check prerequisites for Detect, scan folders, provide recommendations and example CLI options', prog='detect_advisor')
 
 parser.add_argument("scanfolder", nargs="?", help="Project folder to analyse", default="")
@@ -1599,6 +1712,7 @@ output_cli(args.critical_only, args.report, f)
 
 if args.output_config:
 	output_config(args.scanfolder)
+	run_detect()
 
 if args.bdignore:
 	create_bdignores()
@@ -1607,3 +1721,4 @@ print("")
 if f:
 	f.write("\n")
 	f.close()
+
