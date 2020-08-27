@@ -15,6 +15,13 @@ api_token = 'ZDBhN2Q1YjctNWMyMS00YTIwLTg5NjUtMjY1ZmNhMmViNmQxOjE4ZWU3MWE0LTg0YzI
 # Constants
 advisor_version = "0.9 Beta"
 detect_version = "6.4.0"
+from pydoc import cli
+
+from TarExaminer import is_tar_docker
+
+advisor_version = "0.71 Beta"
+detect_version = "6.3.0"
+
 srcext_list = ['.R','.actionscript','.ada','.adb','.ads','.aidl','.as','.asm','.asp',\
 '.aspx','.awk','.bas','.bat','.bms','.c','.c++','.cbl','.cc','.cfc','.cfm','.cgi','.cls',\
 '.cpp','.cpy','.cs','.cxx','.el','.erl','.f','.f77','.f90','.for','.fpp','.frm','.fs',\
@@ -28,8 +35,10 @@ arcext_list = ['.zip', '.gz', '.tar', '.xz', '.lz', '.bz2', '.7z', '.rar', '.rar
 '.cpio', '.Z', '.lz4', '.lha', '.arj']
 jarext_list = ['.jar', '.ear', '.war']
 supported_zipext_list = ['.jar', '.ear', '.war', '.zip']
+dockerext_list = ['.tar', '.gz']
 pkgext_list = ['.rpm', '.deb', '.dmg']
 lic_list = ['LICENSE', 'LICENSE.txt', 'notice.txt', 'license.txt', 'license.html', 'NOTICE', 'NOTICE.txt']
+coverage = 8
 
 detectors_file_dict = {
 'build.env': ['bitbake'],
@@ -264,6 +273,7 @@ arc_list = []
 jar_list = []
 other_list = []
 pkg_list = []
+docker_list = []
 
 bdignore_list = []
 
@@ -287,12 +297,14 @@ recs_msgs_dict = {
 }
 cli_msgs_dict = {
 'reqd': '',
+'docker': '',
 'proj' : '',
 'scan': '',
 'size': '',
 'dep': '',
 'lic': '',
-'rep': ''
+'rep': '',
+
 }
 
 cli_msgs_dict['detect_linux'] = " bash <(curl -s -L https://detect.synopsys.com/detect.sh)\n"
@@ -326,6 +338,7 @@ cli_msgs_dict['proj'] = "--detect.project.name=PROJECT_NAME\n" + \
 "    (OPTIONAL Specify version distribution for new project - default EXTERNAL)\n" + \
 "--detect.project.user.groups='GROUP1,GROUP2'\n" + \
 "    (OPTIONAL Define group access for project for new project)\n"
+
 cli_msgs_dict['rep'] = "--detect.wait.for.results=true\n" + \
 "    (OPTIONAL Wait for server-side analysis to complete - useful for script execution after scan)\n" + \
 "--detect.cleanup=false\n" + \
@@ -343,6 +356,7 @@ cli_msgs_dict['rep'] = "--detect.wait.for.results=true\n" + \
 "--detect.report.timeout=XXX\n" + \
 "    (OPTIONAL Amount of time in seconds Detect will wait for scans to finish and to generate reports (default 300).\n" + \
 "    300 seconds may be sufficient, but very large scans can take up to 20 minutes (1200 seconds) or longer)\n"
+
 
 def process_nested_zip(z, zippath, zipdepth, dirdepth):
 	global max_arc_depth
@@ -474,6 +488,10 @@ def checkfile(name, path, size, size_comp, dirdepth, in_archive):
 				bin_large_dict[path] = size
 			ftype = 'bin'
 		elif ext in arcext_list:
+			if ext in dockerext_list:
+				if (is_tar_docker(path)):
+					# we will invoke --detect.docker.tar on these
+					cli_msgs_dict['docker'] += "--detect.docker.tar='{}'\n".format(os.path.abspath(path))
 			arc_list.append(path)
 			ftype = 'arc'
 		elif ext in pkgext_list:
@@ -549,6 +567,7 @@ def process_dir(path, dirdepth, ignore):
 						process_zip(entry.path, 0, dirdepth)
 
 				dir_size += entry.stat(follow_symlinks=False).st_size
+
 	except OSError:
 		messages += "ERROR: Unable to open folder {}\n".format(path)
 		return 0
@@ -1335,6 +1354,9 @@ def output_cli(critical_only, report, f):
 	if cli_msgs_dict['rep'] != '':
 		output += "\nREPORTING OPTIONS:\n" + cli_msgs_dict['rep'] + "\n"
 
+	if cli_msgs_dict['docker'] != '':
+		output += "\nDOCKER IMAGES TO SCAN:\n" + cli_msgs_dict['docker'] + "\n"
+
 	output = re.sub(r"^", "    ", output, flags=re.MULTILINE)
 
 	if not critical_only:
@@ -1396,7 +1418,8 @@ def output_config(projdir):
 		"# OPTIONS TO CONFIGURE DEPENDENCY SCAN:\n#\n" + cli_msgs_dict['dep'] + "\n" + \
 		"# OPTIONS TO IMPROVE LICENSE COMPLIANCE ANALYSIS:\n#\n" + cli_msgs_dict['lic'] + "\n" + \
 		"# PROJECT OPTIONS:\n#\n" + cli_msgs_dict['proj'] + "\n" + \
-		"# REPORTING OPTIONS:\n#\n" + cli_msgs_dict['rep'] + "\n"
+		"# REPORTING OPTIONS:\n#\n" + cli_msgs_dict['rep'] + "\n" + \
+		"# DOCKER SCANNING:\n#\n" + cli_msgs_dict['docker'] + "\n"
 
 		config = re.sub("=", ": ", config)
 		config = re.sub(r"\n ", r"\n#", config, flags=re.S)
@@ -1472,6 +1495,8 @@ def interactive(scanfolder, scantype, docker, critical_only, report, output_conf
 	if scanfolder == "" or scanfolder == None:
 		scanfolder = os.getcwd()
 
+	# @@@ remove code
+	scanfolder = "/Users/damonw/bds/problems/trailheads/strange_debian_postgres"
 	try:
 		folder = input("Enter project folder to scan (default current folder '{}'):".format(scanfolder))
 	except:
@@ -1573,6 +1598,7 @@ def get_detector_args():
 
 def uncomment_detect_commands():
 	print("opening file")
+	config_file = os.path.join(args.scanfolder, "application-project.yml")
 	with open('application-project.yml', 'r+') as f:
 		data = f.readlines()
 
@@ -1591,7 +1617,7 @@ def uncomment_detect_commands():
 	for arg in detector_args:
 		data.append(arg + '\n')
 
-	with open('application-project.yml', 'w') as f:
+	with open(config_file, 'w') as f:
 		f.writelines(data)
 
 def run_detect():
