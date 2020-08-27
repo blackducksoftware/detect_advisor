@@ -114,7 +114,7 @@ detector_cli_options_dict = {
 "--detect.bazel.cquery.options='OPTION1,OPTION2'\n" + \
 "    (OPTIONAL List of additional options to pass to the bazel cquery command.)\n" + \
 "--detect.bazel.dependency.type=MAVEN_JAR/MAVEN_INSTALL/UNSPECIFIED\n" + \
-"    (OPTIONAL Bazel workspace external dependency rule: The Bazel workspace rule used to pull in external dependencies.\n" + \
+"       (OPTIONAL Bazel workspace external dependency rule: The Bazel workspace rule used to pull in external dependencies.\n" + \
 "    If not set, Detect will attempt to determine the rule from the contents of the WORKSPACE file (default: UNSPECIFIED).)\n",
 'bitbake':
 "--detect.bitbake.package.names='PACKAGE1,PACKAGE2'\n" + \
@@ -359,1290 +359,1302 @@ cli_msgs_dict['rep'] = "--detect.wait.for.results=true\n" + \
 
 
 def process_nested_zip(z, zippath, zipdepth, dirdepth):
-	global max_arc_depth
-	global messages
+    global max_arc_depth
+    global messages
 
-	zipdepth += 1
-	if zipdepth > max_arc_depth:
-		max_arc_depth = zipdepth
+    zipdepth += 1
+    if zipdepth > max_arc_depth:
+        max_arc_depth = zipdepth
 
-	#print("ZIP:{}:{}".format(zipdepth, zippath))
-	z2_filedata =  io.BytesIO(z.read())
-	try:
-		with zipfile.ZipFile(z2_filedata) as nz:
-			for zinfo in nz.infolist():
-				dirdepth = process_zip_entry(zinfo, zippath, dirdepth)
-				if os.path.splitext(zinfo.filename)[1] in supported_zipext_list:
-					with nz.open(zinfo.filename) as z2:
-						process_nested_zip(z2, zippath + "##" + zinfo.filename, zipdepth, dirdepth)
-	except:
-		messages += "WARNING: Can't open nested zip {} (Skipped)\n".format(zippath)
+    #print("ZIP:{}:{}".format(zipdepth, zippath))
+    z2_filedata =  io.BytesIO(z.read())
+    try:
+        with zipfile.ZipFile(z2_filedata) as nz:
+            for zinfo in nz.infolist():
+                dirdepth = process_zip_entry(zinfo, zippath, dirdepth)
+                if os.path.splitext(zinfo.filename)[1] in supported_zipext_list:
+                    with nz.open(zinfo.filename) as z2:
+                        process_nested_zip(z2, zippath + "##" + zinfo.filename, zipdepth, dirdepth)
+    except:
+        messages += "WARNING: Can't open nested zip {} (Skipped)\n".format(zippath)
 
 
 def process_zip_entry(zinfo, zippath, dirdepth):
-	#print("ENTRY:" + zippath + "##" + zinfo.filename)
-	fullpath = zippath + "##" + zinfo.filename
-	odir = zinfo.filename
-	dir = os.path.dirname(zinfo.filename)
-	depthinzip = 0
-	while dir != odir:
-		depthinzip += 1
-		odir = dir
-		dir = os.path.dirname(dir)
+    #print("ENTRY:" + zippath + "##" + zinfo.filename)
+    fullpath = zippath + "##" + zinfo.filename
+    odir = zinfo.filename
+    dir = os.path.dirname(zinfo.filename)
+    depthinzip = 0
+    while dir != odir:
+        depthinzip += 1
+        odir = dir
+        dir = os.path.dirname(dir)
 
-	dirdepth = dirdepth + depthinzip
-	tdir = zippath + "##" + os.path.dirname(zinfo.filename)
-	if tdir not in dir_dict.keys():
-		counts['dir'][inarc] += 1
-		dir_dict[tdir] = {}
-		dir_dict[tdir]['num_entries'] = 1
-		dir_dict[tdir]['size'] = zinfo.file_size
-		dir_dict[tdir]['depth'] = dirdepth
-		dir_dict[tdir]['filenamesstring'] = zinfo.filename + ";"
-	else:
-		dir_dict[tdir]['num_entries'] += 1
-		dir_dict[tdir]['size'] += zinfo.file_size
-		dir_dict[tdir]['depth'] = dirdepth
-		dir_dict[tdir]['filenamesstring'] += zinfo.filename + ";"
+    dirdepth = dirdepth + depthinzip
+    tdir = zippath + "##" + os.path.dirname(zinfo.filename)
+    if tdir not in dir_dict.keys():
+        counts['dir'][inarc] += 1
+        dir_dict[tdir] = {}
+        dir_dict[tdir]['num_entries'] = 1
+        dir_dict[tdir]['size'] = zinfo.file_size
+        dir_dict[tdir]['depth'] = dirdepth
+        dir_dict[tdir]['filenamesstring'] = zinfo.filename + ";"
+    else:
+        dir_dict[tdir]['num_entries'] += 1
+        dir_dict[tdir]['size'] += zinfo.file_size
+        dir_dict[tdir]['depth'] = dirdepth
+        dir_dict[tdir]['filenamesstring'] += zinfo.filename + ";"
 
-	arc_files_dict[fullpath] = zinfo.CRC
-	checkfile(zinfo.filename, fullpath, zinfo.file_size, zinfo.compress_size, dirdepth, True)
-	return dirdepth
+    arc_files_dict[fullpath] = zinfo.CRC
+    checkfile(zinfo.filename, fullpath, zinfo.file_size, zinfo.compress_size, dirdepth, True)
+    return dirdepth
 
 def process_zip(zippath, zipdepth, dirdepth):
-	global max_arc_depth
-	global messages
+    global max_arc_depth
+    global messages
 
-	zipdepth += 1
-	if zipdepth > max_arc_depth:
-		max_arc_depth = zipdepth
+    zipdepth += 1
+    if zipdepth > max_arc_depth:
+        max_arc_depth = zipdepth
 
-	#print("ZIP:{}:{}".format(zipdepth, zippath))
-	try:
-		with zipfile.ZipFile(zippath) as z:
-			for zinfo in z.infolist():
-				if zinfo.is_dir():
-					continue
-				fullpath = zippath + "##" + zinfo.filename
-				process_zip_entry(zinfo, zippath, dirdepth)
-				if os.path.splitext(zinfo.filename)[1] in supported_zipext_list:
-					with z.open(zinfo.filename) as z2:
-						process_nested_zip(z2, fullpath, zipdepth, dirdepth)
-	except:
-		messages += "WARNING: Can't open zip {} (Skipped)\n".format(zippath)
+    #print("ZIP:{}:{}".format(zipdepth, zippath))
+    try:
+        with zipfile.ZipFile(zippath) as z:
+            for zinfo in z.infolist():
+                if zinfo.is_dir():
+                    continue
+                fullpath = zippath + "##" + zinfo.filename
+                process_zip_entry(zinfo, zippath, dirdepth)
+                if os.path.splitext(zinfo.filename)[1] in supported_zipext_list:
+                    with z.open(zinfo.filename) as z2:
+                        process_nested_zip(z2, fullpath, zipdepth, dirdepth)
+    except:
+        messages += "WARNING: Can't open zip {} (Skipped)\n".format(zippath)
 
 def checkfile(name, path, size, size_comp, dirdepth, in_archive):
-	ext = os.path.splitext(name)[1]
-#	print(ext)
-	if ext != ".zip":
-		if not in_archive:
-			counts['file'][notinarc] += 1
-			sizes['file'][notinarc] += size
-		else:
-			counts['file'][inarc] += 1
-			sizes['file'][inarcunc] += size
-			sizes['file'][inarccomp] += size_comp
-		if size > hugesize:
-			huge_list.append(path)
-			large_dict[path] = size
-			if not in_archive:
-				counts['huge'][notinarc] += 1
-				sizes['huge'][notinarc] += size
-			else:
-				counts['huge'][inarc] += 1
-				sizes['huge'][inarcunc] += size
-				sizes['huge'][inarccomp] += size_comp
-		elif size > largesize:
-			large_list.append(path)
-			large_dict[path] = size
-			if not in_archive:
-				counts['large'][notinarc] += 1
-				sizes['large'][notinarc] += size
-			else:
-				counts['large'][inarc] += 1
-				sizes['large'][inarcunc] += size
-				sizes['large'][inarccomp] += size_comp
+    ext = os.path.splitext(name)[1]
+#    print(ext)
+    if ext != ".zip":
+        if not in_archive:
+            counts['file'][notinarc] += 1
+            sizes['file'][notinarc] += size
+        else:
+            counts['file'][inarc] += 1
+            sizes['file'][inarcunc] += size
+            sizes['file'][inarccomp] += size_comp
+        if size > hugesize:
+            huge_list.append(path)
+            large_dict[path] = size
+            if not in_archive:
+                counts['huge'][notinarc] += 1
+                sizes['huge'][notinarc] += size
+            else:
+                counts['huge'][inarc] += 1
+                sizes['huge'][inarcunc] += size
+                sizes['huge'][inarccomp] += size_comp
+        elif size > largesize:
+            large_list.append(path)
+            large_dict[path] = size
+            if not in_archive:
+                counts['large'][notinarc] += 1
+                sizes['large'][notinarc] += size
+            else:
+                counts['large'][inarc] += 1
+                sizes['large'][inarcunc] += size
+                sizes['large'][inarccomp] += size_comp
 
-	if name in detectors_file_dict.keys() and path.find("node_modules") < 0:
-		if not in_archive:
-			det_dict[path] = dirdepth
-		ftype = 'det'
-	elif os.path.basename(name) in lic_list:
-		other_list.append(path)
-		ftype = 'other'
-		counts['lic'][notinarc] += 1
-	elif (ext != ""):
-		if ext in detectors_ext_dict.keys():
-			if not in_archive:
-				det_dict[path] = dirdepth
-			ftype = 'det'
-		elif ext in srcext_list:
-			src_list.append(path)
-			ftype = 'src'
-		elif ext in jarext_list:
-			jar_list.append(path)
-			ftype = 'jar'
-		elif ext in binext_list:
-			bin_list.append(path)
-			if size > largesize:
-				bin_large_dict[path] = size
-			ftype = 'bin'
-		elif ext in arcext_list:
-			if ext in dockerext_list:
-				if (is_tar_docker(path)):
-					# we will invoke --detect.docker.tar on these
-					cli_msgs_dict['docker'] += "--detect.docker.tar='{}'\n".format(os.path.abspath(path))
-			arc_list.append(path)
-			ftype = 'arc'
-		elif ext in pkgext_list:
-			pkg_list.append(path)
-			ftype = 'pkg'
-		else:
-			other_list.append(path)
-			ftype = 'other'
-	else:
-		other_list.append(path)
-		ftype = 'other'
-	#print("path:{} type:{}, size_comp:{}, size:{}".format(path, ftype, size_comp, size))
-	if not in_archive:
-		counts[ftype][notinarc] += 1
-		sizes[ftype][notinarc] += size
-	else:
-		counts[ftype][inarc] += 1
-		sizes[ftype][inarcunc] += size
-		if size_comp == 0:
-			sizes[ftype][inarccomp] += size
-		else:
-			sizes[ftype][inarccomp] += size_comp
-	return(ftype)
+    if name in detectors_file_dict.keys() and path.find("node_modules") < 0:
+        if not in_archive:
+            det_dict[path] = dirdepth
+        ftype = 'det'
+    elif os.path.basename(name) in lic_list:
+        other_list.append(path)
+        ftype = 'other'
+        counts['lic'][notinarc] += 1
+    elif (ext != ""):
+        if ext in detectors_ext_dict.keys():
+            if not in_archive:
+                det_dict[path] = dirdepth
+            ftype = 'det'
+        elif ext in srcext_list:
+            src_list.append(path)
+            ftype = 'src'
+        elif ext in jarext_list:
+            jar_list.append(path)
+            ftype = 'jar'
+        elif ext in binext_list:
+            bin_list.append(path)
+            if size > largesize:
+                bin_large_dict[path] = size
+            ftype = 'bin'
+        elif ext in arcext_list:
+            if ext in dockerext_list:
+                if (is_tar_docker(path)):
+                    # we will invoke --detect.docker.tar on these
+                    cli_msgs_dict['docker'] += "--detect.docker.tar='{}'\n".format(os.path.abspath(path))
+            arc_list.append(path)
+            ftype = 'arc'
+        elif ext in pkgext_list:
+            pkg_list.append(path)
+            ftype = 'pkg'
+        else:
+            other_list.append(path)
+            ftype = 'other'
+    else:
+        other_list.append(path)
+        ftype = 'other'
+    #print("path:{} type:{}, size_comp:{}, size:{}".format(path, ftype, size_comp, size))
+    if not in_archive:
+        counts[ftype][notinarc] += 1
+        sizes[ftype][notinarc] += size
+    else:
+        counts[ftype][inarc] += 1
+        sizes[ftype][inarcunc] += size
+        if size_comp == 0:
+            sizes[ftype][inarccomp] += size
+        else:
+            sizes[ftype][inarccomp] += size_comp
+    return(ftype)
 
 def process_dir(path, dirdepth, ignore):
-	dir_size = 0
-	dir_entries = 0
-	filenames_string = ""
-	global messages
+    dir_size = 0
+    dir_entries = 0
+    filenames_string = ""
+    global messages
 
-	dir_dict[path] = {}
-	dirdepth += 1
+    dir_dict[path] = {}
+    dirdepth += 1
 
-	all_bin = False
-	try:
-		ignore_list = []
-		if not ignore:
-			# Check whether .bdignore exists
-			bdignore_file = os.path.join(path, ".bdignore")
-			if os.path.exists(bdignore_file):
-				b = open(bdignore_file, "r")
-				lines = b.readlines()
-				for bline in lines:
-					ignore_list.append(bline[1:len(bline)-2])
-				b.close()
-				#print(path, ignore_list)
+    all_bin = False
+    try:
+        ignore_list = []
+        if not ignore:
+            # Check whether .bdignore exists
+            bdignore_file = os.path.join(path, ".bdignore")
+            if os.path.exists(bdignore_file):
+                b = open(bdignore_file, "r")
+                lines = b.readlines()
+                for bline in lines:
+                    ignore_list.append(bline[1:len(bline)-2])
+                b.close()
+                #print(path, ignore_list)
 
-		for entry in os.scandir(path):
-			ignorethis = False
-			dir_entries += 1
-			filenames_string += entry.name + ";"
-			if entry.is_dir(follow_symlinks=False):
-				if ignore or os.path.basename(entry.path) in ignore_list:
-					#print("IGNORE {}".format(entry.path))
-					ignorethis = True
-					counts['ignoredir'][notinarc] += 1
-				else:
-					counts['dir'][notinarc] += 1
-				this_size = process_dir(entry.path, dirdepth, ignorethis)
-				dir_size += this_size
-				if ignorethis:
-					sizes['ignoredir'][notinarc] += this_size
-			else:
-				if not ignore:
-					ftype = checkfile(entry.name, entry.path, entry.stat(follow_symlinks=False).st_size, 0, dirdepth, False)
-					if ftype == 'bin':
-						if dir_entries == 1:
-							all_bin = True
-					else:
-						all_bin = False
-					ext = os.path.splitext(entry.name)[1]
-					if ext in supported_zipext_list:
-						process_zip(entry.path, 0, dirdepth)
+        for entry in os.scandir(path):
+            ignorethis = False
+            dir_entries += 1
+            filenames_string += entry.name + ";"
+            if entry.is_dir(follow_symlinks=False):
+                if ignore or os.path.basename(entry.path) in ignore_list:
+                    #print("IGNORE {}".format(entry.path))
+                    ignorethis = True
+                    counts['ignoredir'][notinarc] += 1
+                else:
+                    counts['dir'][notinarc] += 1
+                this_size = process_dir(entry.path, dirdepth, ignorethis)
+                dir_size += this_size
+                if ignorethis:
+                    sizes['ignoredir'][notinarc] += this_size
+            else:
+                if not ignore:
+                    ftype = checkfile(entry.name, entry.path, entry.stat(follow_symlinks=False).st_size, 0, dirdepth, False)
+                    if ftype == 'bin':
+                        if dir_entries == 1:
+                            all_bin = True
+                    else:
+                        all_bin = False
+                    ext = os.path.splitext(entry.name)[1]
+                    if ext in supported_zipext_list:
+                        process_zip(entry.path, 0, dirdepth)
 
-				dir_size += entry.stat(follow_symlinks=False).st_size
+                dir_size += entry.stat(follow_symlinks=False).st_size
 
-	except OSError:
-		messages += "ERROR: Unable to open folder {}\n".format(path)
-		return 0
+    except OSError:
+        messages += "ERROR: Unable to open folder {}\n".format(path)
+        return 0
 
-	if not ignore:
-		dir_dict[path]['num_entries'] = dir_entries
-		dir_dict[path]['size'] = dir_size
-		dir_dict[path]['depth'] = dirdepth
-		dir_dict[path]['filenamesstring'] = filenames_string
-	if all_bin and path.find("##") < 0:
-		bdignore_list.append(path)
-	return dir_size
+    if not ignore:
+        dir_dict[path]['num_entries'] = dir_entries
+        dir_dict[path]['size'] = dir_size
+        dir_dict[path]['depth'] = dirdepth
+        dir_dict[path]['filenamesstring'] = filenames_string
+    if all_bin and path.find("##") < 0:
+        bdignore_list.append(path)
+    return dir_size
 
 def process_largefiledups(f):
-	import filecmp
+    import filecmp
 
-	if f:
-		f.write("\nLARGE DUPLICATE FILES:\n")
+    if f:
+        f.write("\nLARGE DUPLICATE FILES:\n")
 
-	count = 0
-	fcount = 0
-	total_dup_size = 0
-	count_dups = 0
-	fitems = len(large_dict)
-	for apath, asize in large_dict.items():
-		fcount += 1
-		if fcount % ((fitems//6) + 1) == 0:
-			print(".", end="", flush=True)
-		dup = False
-		for cpath, csize in large_dict.items():
-			if apath == cpath:
-				continue
-			if asize == csize:
-				aext = os.path.splitext(apath)[1]
-				cext = os.path.splitext(cpath)[1]
-				if aext == cext:
-					dup = True
-				elif aext == "" and cext == "":
-					dup = True
-				if dup and asize < 1000000000:
-					if apath.find("##") > 0 or cpath.find("##") > 0:
-						if apath.find("##") > 0:
-							acrc = arc_files_dict[apath]
-						else:
-							acrc = get_crc(apath)
-						if cpath.find("##") > 0:
-							ccrc = arc_files_dict[cpath]
-						else:
-							ccrc = get_crc(cpath)
-						test = (acrc == ccrc)
-					else:
-						test = filecmp.cmp(apath, cpath, True)
+    count = 0
+    fcount = 0
+    total_dup_size = 0
+    count_dups = 0
+    fitems = len(large_dict)
+    for apath, asize in large_dict.items():
+        fcount += 1
+        if fcount % ((fitems//6) + 1) == 0:
+            print(".", end="", flush=True)
+        dup = False
+        for cpath, csize in large_dict.items():
+            if apath == cpath:
+                continue
+            if asize == csize:
+                aext = os.path.splitext(apath)[1]
+                cext = os.path.splitext(cpath)[1]
+                if aext == cext:
+                    dup = True
+                elif aext == "" and cext == "":
+                    dup = True
+                if dup and asize < 1000000000:
+                    if apath.find("##") > 0 or cpath.find("##") > 0:
+                        if apath.find("##") > 0:
+                            acrc = arc_files_dict[apath]
+                        else:
+                            acrc = get_crc(apath)
+                        if cpath.find("##") > 0:
+                            ccrc = arc_files_dict[cpath]
+                        else:
+                            ccrc = get_crc(cpath)
+                        test = (acrc == ccrc)
+                    else:
+                        test = filecmp.cmp(apath, cpath, True)
 
-					if test and dup_large_dict.get(cpath) == None and \
-					dup_dir_dict.get(os.path.dirname(apath)) == None and \
-					dup_dir_dict.get(os.path.dirname(cpath)) == None:
-						dup_large_dict[apath] = cpath
-						total_dup_size += asize
-						count_dups += 1
-						if f:
-							f.write("- Large Duplicate file - {}, {} (size {}MB)\n".format(apath,cpath,trunc(asize/1000000)))
-							count += 1
+                    if test and dup_large_dict.get(cpath) == None and \
+                    dup_dir_dict.get(os.path.dirname(apath)) == None and \
+                    dup_dir_dict.get(os.path.dirname(cpath)) == None:
+                        dup_large_dict[apath] = cpath
+                        total_dup_size += asize
+                        count_dups += 1
+                        if f:
+                            f.write("- Large Duplicate file - {}, {} (size {}MB)\n".format(apath,cpath,trunc(asize/1000000)))
+                            count += 1
 
-	if f and count == 0:
-		f.write("    None\n")
+    if f and count == 0:
+        f.write("    None\n")
 
-	return(count_dups, total_dup_size)
+    return(count_dups, total_dup_size)
 
 def process_dirdups(f):
-	count_dupdirs = 0
-	size_dupdirs = 0
-	dcount = 0
+    count_dupdirs = 0
+    size_dupdirs = 0
+    dcount = 0
 
-	tmp_dup_dir_dict = {}
+    tmp_dup_dir_dict = {}
 
-	if f:
-		f.write("\nLARGE DUPLICATE FOLDERS:\n")
+    if f:
+        f.write("\nLARGE DUPLICATE FOLDERS:\n")
 
-	count = 0
-	ditems = len(dir_dict)
-	for apath, adict in dir_dict.items():
-		dcount += 1
-		if dcount % ((ditems//6) + 1) == 0:
-			print(".", end="", flush=True)
-		try:
-			if adict['num_entries'] == 0 or adict['size'] < hugesize:
-				continue
-		except:
-			continue
-		dupmatch = False
-		for cpath, cdict in dir_dict.items():
-			if apath != cpath:
-				try:
-					if adict['num_entries'] == cdict['num_entries'] and adict['size'] == cdict['size'] \
-					and adict['filenamesstring'] == cdict['filenamesstring']:
-						if adict['depth'] < cdict['depth']:
-							keypath = apath
-							valpath = cpath
-						elif len(apath) < len(cpath):
-							keypath = apath
-							valpath = cpath
-						elif apath < cpath:
-							keypath = apath
-							valpath = cpath
-						else:
-							keypath = cpath
-							valpath = apath
+    count = 0
+    ditems = len(dir_dict)
+    for apath, adict in dir_dict.items():
+        dcount += 1
+        if dcount % ((ditems//6) + 1) == 0:
+            print(".", end="", flush=True)
+        try:
+            if adict['num_entries'] == 0 or adict['size'] < hugesize:
+                continue
+        except:
+            continue
+        dupmatch = False
+        for cpath, cdict in dir_dict.items():
+            if apath != cpath:
+                try:
+                    if adict['num_entries'] == cdict['num_entries'] and adict['size'] == cdict['size'] \
+                    and adict['filenamesstring'] == cdict['filenamesstring']:
+                        if adict['depth'] < cdict['depth']:
+                            keypath = apath
+                            valpath = cpath
+                        elif len(apath) < len(cpath):
+                            keypath = apath
+                            valpath = cpath
+                        elif apath < cpath:
+                            keypath = apath
+                            valpath = cpath
+                        else:
+                            keypath = cpath
+                            valpath = apath
 
-						newdup = False
-						if keypath not in tmp_dup_dir_dict.keys():
-							newdup = True
-						elif tmp_dup_dir_dict[keypath] != valpath:
-							newdup = True
-						if newdup:
-							tmp_dup_dir_dict[keypath] = valpath
-						break
-				except:
-					pass
+                        newdup = False
+                        if keypath not in tmp_dup_dir_dict.keys():
+                            newdup = True
+                        elif tmp_dup_dir_dict[keypath] != valpath:
+                            newdup = True
+                        if newdup:
+                            tmp_dup_dir_dict[keypath] = valpath
+                        break
+                except:
+                    pass
 
-	# Now remove dupdirs with matching parent folders
-	for xpath in tmp_dup_dir_dict.keys():
-		ypath = tmp_dup_dir_dict[xpath]
-		#print("Processing folder:" + xpath + " dup " + ypath)
-		xdir = os.path.dirname(xpath)
-		ydir = os.path.dirname(ypath)
-		if xdir in tmp_dup_dir_dict.keys() and tmp_dup_dir_dict[xdir] == ydir:
-			# parents match - ignore
-			#print("Ignorning dup dir: " + xpath + " " + ypath)
-			pass
-		else:
-			# Create dupdir entry
-			#print("Adding dup dir: " + xpath + " " + ypath)
-			dup_dir_dict[xpath] = ypath
-			count_dupdirs += 1
-			size_dupdirs += dir_dict[xpath]['size']
-			if f and dir_dict[xpath]['size'] > hugesize:
-				f.write("- Large Duplicate folder - {}, {} (size {}MB)\n".format(xpath,ypath, \
-				trunc(dir_dict[xpath]['size']/1000000)))
-				count += 1
+    # Now remove dupdirs with matching parent folders
+    for xpath in tmp_dup_dir_dict.keys():
+        ypath = tmp_dup_dir_dict[xpath]
+        #print("Processing folder:" + xpath + " dup " + ypath)
+        xdir = os.path.dirname(xpath)
+        ydir = os.path.dirname(ypath)
+        if xdir in tmp_dup_dir_dict.keys() and tmp_dup_dir_dict[xdir] == ydir:
+            # parents match - ignore
+            #print("Ignorning dup dir: " + xpath + " " + ypath)
+            pass
+        else:
+            # Create dupdir entry
+            #print("Adding dup dir: " + xpath + " " + ypath)
+            dup_dir_dict[xpath] = ypath
+            count_dupdirs += 1
+            size_dupdirs += dir_dict[xpath]['size']
+            if f and dir_dict[xpath]['size'] > hugesize:
+                f.write("- Large Duplicate folder - {}, {} (size {}MB)\n".format(xpath,ypath, \
+                trunc(dir_dict[xpath]['size']/1000000)))
+                count += 1
 
-	if f and count == 0:
-		f.write("    None\n")
+    if f and count == 0:
+        f.write("    None\n")
 
-	return(count_dupdirs, size_dupdirs)
+    return(count_dupdirs, size_dupdirs)
 
 def check_singlefiles(f):
 
-	# Check for singleton js & other single files
-	sfmatch = False
-	sf_list = []
-	for thisfile in src_list:
-		ext = os.path.splitext(thisfile)[1]
-		if ext == '.js':
-			# get dir
-			# check for .js in filenamesstring
-			thisdir = dir_dict.get(os.path.dirname(thisfile))
-			if thisfile.find("node_modules") > 0:
-				continue
-			if thisdir != None:
-				all_js = True
-				for filename in thisdir['filenamesstring'].split(';'):
-					srcext = os.path.splitext(filename)[1]
-					if srcext != '.js':
-						all_js = False
-				if not all_js:
-					sfmatch = True
-					sf_list.append(thisfile)
-	if sfmatch:
-		recs_msgs_dict['info'] += "- INFORMATION: {} singleton .js files found\n".format(len(sf_list)) + \
-		"    Impact:  OSS components within JS files may not be detected\n" + \
-		"    Action:  Consider specifying Single file matching in Signature scan\n" + \
-		"             (--detect.blackduck.signature.scanner.individual.file.matching=SOURCE)\n\n"
-		if cli_msgs_dict['scan'].find("individual.file.matching") < 0:
-			cli_msgs_dict['scan'] += "--detect.blackduck.signature.scanner.individual.file.matching=SOURCE\n" + \
-			"    (To include singleton .js files in signature scan for OSS matches)\n"
+    # Check for singleton js & other single files
+    sfmatch = False
+    sf_list = []
+    for thisfile in src_list:
+        ext = os.path.splitext(thisfile)[1]
+        if ext == '.js':
+            # get dir
+            # check for .js in filenamesstring
+            thisdir = dir_dict.get(os.path.dirname(thisfile))
+            if thisfile.find("node_modules") > 0:
+                continue
+            if thisdir != None:
+                all_js = True
+                for filename in thisdir['filenamesstring'].split(';'):
+                    srcext = os.path.splitext(filename)[1]
+                    if srcext != '.js':
+                        all_js = False
+                if not all_js:
+                    sfmatch = True
+                    sf_list.append(thisfile)
+    if sfmatch:
+        recs_msgs_dict['info'] += "- INFORMATION: {} singleton .js files found\n".format(len(sf_list)) + \
+        "    Impact:  OSS components within JS files may not be detected\n" + \
+        "    Action:  Consider specifying Single file matching in Signature scan\n" + \
+        "             (--detect.blackduck.signature.scanner.individual.file.matching=SOURCE)\n\n"
+        if cli_msgs_dict['scan'].find("individual.file.matching") < 0:
+            cli_msgs_dict['scan'] += "--detect.blackduck.signature.scanner.individual.file.matching=SOURCE\n" + \
+            "    (To include singleton .js files in signature scan for OSS matches)\n"
 
-		#if f:
-		#	f.write("\nSINGLE JS FILES:\n")
-		#	for thisfile in sf_list:
-		#		f.write("- {}\n".format(thisfile))
+        #if f:
+        #    f.write("\nSINGLE JS FILES:\n")
+        #    for thisfile in sf_list:
+        #        f.write("- {}\n".format(thisfile))
 
 def get_crc(myfile):
-	import zlib
-	buffersize = 65536
+    import zlib
+    buffersize = 65536
 
-	crcvalue = 0
-	try:
-		with open(myfile, 'rb') as afile:
-			buffr = afile.read(buffersize)
-			while len(buffr) > 0:
-				crcvalue = zlib.crc32(buffr, crcvalue)
-				buffr = afile.read(buffersize)
-	except:
-		messages += "WARNING: Unable to open file {} to calculate CRC\n".format(myfile)
-		return(0)
-	return(crcvalue)
+    crcvalue = 0
+    try:
+        with open(myfile, 'rb') as afile:
+            buffr = afile.read(buffersize)
+            while len(buffr) > 0:
+                crcvalue = zlib.crc32(buffr, crcvalue)
+                buffr = afile.read(buffersize)
+    except:
+        messages += "WARNING: Unable to open file {} to calculate CRC\n".format(myfile)
+        return(0)
+    return(crcvalue)
 
 def print_summary(critical_only, f):
-	global rep
+    global rep
 
-	summary = "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\n" + \
-	"SUMMARY INFO:\nTotal Scan Size = {:,d} MB\n\n".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000)) + \
-	"                         Num Outside     Size Outside      Num Inside     Size Inside     Size Inside\n" + \
-	"                            Archives         Archives        Archives        Archives        Archives\n" + \
-	"                                                                        (UNcompressed)    (compressed)\n" + \
-	"====================  ==============   ==============   =============   =============   =============\n"
+    summary = "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\n" + \
+    "SUMMARY INFO:\nTotal Scan Size = {:,d} MB\n\n".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000)) + \
+    "                         Num Outside     Size Outside      Num Inside     Size Inside     Size Inside\n" + \
+    "                            Archives         Archives        Archives        Archives        Archives\n" + \
+    "                                                                        (UNcompressed)    (compressed)\n" + \
+    "====================  ==============   ==============   =============   =============   =============\n"
 
-	row = "{:25} {:>10,d}    {:>10,d} MB      {:>10,d}   {:>10,d} MB   {:>10,d} MB\n"
+    row = "{:25} {:>10,d}    {:>10,d} MB      {:>10,d}   {:>10,d} MB   {:>10,d} MB\n"
 
-	summary += row.format("Files (exc. Archives)", \
-	counts['file'][notinarc], \
-	trunc(sizes['file'][notinarc]/1000000), \
-	counts['file'][inarc], \
-	trunc(sizes['file'][inarcunc]/1000000), \
-	trunc(sizes['file'][inarccomp]/1000000))
+    summary += row.format("Files (exc. Archives)", \
+    counts['file'][notinarc], \
+    trunc(sizes['file'][notinarc]/1000000), \
+    counts['file'][inarc], \
+    trunc(sizes['file'][inarcunc]/1000000), \
+    trunc(sizes['file'][inarccomp]/1000000))
 
-	summary += row.format("Archives (exc. Jars)", \
-	counts['arc'][notinarc], \
-	trunc(sizes['arc'][notinarc]/1000000), \
-	counts['arc'][inarc], \
-	trunc(sizes['arc'][inarcunc]/1000000), \
-	trunc(sizes['arc'][inarccomp]/1000000))
+    summary += row.format("Archives (exc. Jars)", \
+    counts['arc'][notinarc], \
+    trunc(sizes['arc'][notinarc]/1000000), \
+    counts['arc'][inarc], \
+    trunc(sizes['arc'][inarcunc]/1000000), \
+    trunc(sizes['arc'][inarccomp]/1000000))
 
-	summary += "====================  ==============   ==============   =============   =============   =============\n"
+    summary += "====================  ==============   ==============   =============   =============   =============\n"
 
-	summary += row.format("ALL FILES (Scan size)", counts['file'][notinarc]+counts['arc'][notinarc], \
-	trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000), \
-	counts['file'][inarc]+counts['arc'][inarc], \
-	trunc((sizes['file'][inarcunc]+sizes['arc'][inarcunc])/1000000), \
-	trunc((sizes['file'][inarccomp]+sizes['arc'][inarccomp])/1000000))
+    summary += row.format("ALL FILES (Scan size)", counts['file'][notinarc]+counts['arc'][notinarc], \
+    trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000), \
+    counts['file'][inarc]+counts['arc'][inarc], \
+    trunc((sizes['file'][inarcunc]+sizes['arc'][inarcunc])/1000000), \
+    trunc((sizes['file'][inarccomp]+sizes['arc'][inarccomp])/1000000))
 
-	summary += "====================  ==============   ==============   =============   =============   =============\n"
+    summary += "====================  ==============   ==============   =============   =============   =============\n"
 
-	summary += "{:25} {:>10,d}              N/A      {:>10,d}             N/A             N/A   \n".format("Folders", \
-	counts['dir'][notinarc], \
-	counts['dir'][inarc])
+    summary += "{:25} {:>10,d}              N/A      {:>10,d}             N/A             N/A   \n".format("Folders", \
+    counts['dir'][notinarc], \
+    counts['dir'][inarc])
 
-	summary += row.format("Ignored Folders", \
-	counts['ignoredir'][notinarc], \
-	trunc(sizes['ignoredir'][notinarc]/1000000), \
-	counts['ignoredir'][inarc], \
-	trunc(sizes['ignoredir'][inarcunc]/1000000), \
-	trunc(sizes['ignoredir'][inarccomp]/1000000))
+    summary += row.format("Ignored Folders", \
+    counts['ignoredir'][notinarc], \
+    trunc(sizes['ignoredir'][notinarc]/1000000), \
+    counts['ignoredir'][inarc], \
+    trunc(sizes['ignoredir'][inarcunc]/1000000), \
+    trunc(sizes['ignoredir'][inarccomp]/1000000))
 
-	summary += row.format("Source Files", \
-	counts['src'][notinarc], \
-	trunc(sizes['src'][notinarc]/1000000), \
-	counts['src'][inarc], \
-	trunc(sizes['src'][inarcunc]/1000000), \
-	trunc(sizes['src'][inarccomp]/1000000))
+    summary += row.format("Source Files", \
+    counts['src'][notinarc], \
+    trunc(sizes['src'][notinarc]/1000000), \
+    counts['src'][inarc], \
+    trunc(sizes['src'][inarcunc]/1000000), \
+    trunc(sizes['src'][inarccomp]/1000000))
 
-	summary += row.format("JAR Archives", \
-	counts['jar'][notinarc], \
-	trunc(sizes['jar'][notinarc]/1000000), \
-	counts['jar'][inarc], \
-	trunc(sizes['jar'][inarcunc]/1000000), \
-	trunc(sizes['jar'][inarccomp]/1000000))
+    summary += row.format("JAR Archives", \
+    counts['jar'][notinarc], \
+    trunc(sizes['jar'][notinarc]/1000000), \
+    counts['jar'][inarc], \
+    trunc(sizes['jar'][inarcunc]/1000000), \
+    trunc(sizes['jar'][inarccomp]/1000000))
 
-	summary += row.format("Binary Files", \
-	counts['bin'][notinarc], \
-	trunc(sizes['bin'][notinarc]/1000000), \
-	counts['bin'][inarc], \
-	trunc(sizes['bin'][inarcunc]/1000000), \
-	trunc(sizes['bin'][inarccomp]/1000000))
+    summary += row.format("Binary Files", \
+    counts['bin'][notinarc], \
+    trunc(sizes['bin'][notinarc]/1000000), \
+    counts['bin'][inarc], \
+    trunc(sizes['bin'][inarcunc]/1000000), \
+    trunc(sizes['bin'][inarccomp]/1000000))
 
-	summary += row.format("Other Files", \
-	counts['other'][notinarc], \
-	trunc(sizes['other'][notinarc]/1000000), \
-	counts['other'][inarc], \
-	trunc(sizes['other'][inarcunc]/1000000), \
-	trunc(sizes['other'][inarccomp]/1000000))
+    summary += row.format("Other Files", \
+    counts['other'][notinarc], \
+    trunc(sizes['other'][notinarc]/1000000), \
+    counts['other'][inarc], \
+    trunc(sizes['other'][inarcunc]/1000000), \
+    trunc(sizes['other'][inarccomp]/1000000))
 
-	summary += row.format("Package Mgr Files", \
-	counts['det'][notinarc], \
-	trunc(sizes['det'][notinarc]/1000000), \
-	counts['det'][inarc], \
-	trunc(sizes['det'][inarcunc]/1000000), \
-	trunc(sizes['det'][inarccomp]/1000000))
+    summary += row.format("Package Mgr Files", \
+    counts['det'][notinarc], \
+    trunc(sizes['det'][notinarc]/1000000), \
+    counts['det'][inarc], \
+    trunc(sizes['det'][inarcunc]/1000000), \
+    trunc(sizes['det'][inarccomp]/1000000))
 
-	summary += row.format("OS Package Files", \
-	counts['pkg'][notinarc], \
-	trunc(sizes['pkg'][notinarc]/1000000), \
-	counts['pkg'][inarc], \
-	trunc(sizes['pkg'][inarcunc]/1000000), \
-	trunc(sizes['pkg'][inarccomp]/1000000))
+    summary += row.format("OS Package Files", \
+    counts['pkg'][notinarc], \
+    trunc(sizes['pkg'][notinarc]/1000000), \
+    counts['pkg'][inarc], \
+    trunc(sizes['pkg'][inarcunc]/1000000), \
+    trunc(sizes['pkg'][inarccomp]/1000000))
 
-	summary += "--------------------  --------------   --------------   -------------   -------------   -------------\n"
+    summary += "--------------------  --------------   --------------   -------------   -------------   -------------\n"
 
-	summary += row.format("Large Files (>{:1d}MB)".format(trunc(largesize/1000000)), \
-	counts['large'][notinarc], \
-	trunc(sizes['large'][notinarc]/1000000), \
-	counts['large'][inarc], \
-	trunc(sizes['large'][inarcunc]/1000000), \
-	trunc(sizes['large'][inarccomp]/1000000))
+    summary += row.format("Large Files (>{:1d}MB)".format(trunc(largesize/1000000)), \
+    counts['large'][notinarc], \
+    trunc(sizes['large'][notinarc]/1000000), \
+    counts['large'][inarc], \
+    trunc(sizes['large'][inarcunc]/1000000), \
+    trunc(sizes['large'][inarccomp]/1000000))
 
-	summary += row.format("Huge Files (>{:2d}MB)".format(trunc(hugesize/1000000)), \
-	counts['huge'][notinarc], \
-	trunc(sizes['huge'][notinarc]/1000000), \
-	counts['huge'][inarc], \
-	trunc(sizes['huge'][inarcunc]/1000000), \
-	trunc(sizes['huge'][inarccomp]/1000000))
+    summary += row.format("Huge Files (>{:2d}MB)".format(trunc(hugesize/1000000)), \
+    counts['huge'][notinarc], \
+    trunc(sizes['huge'][notinarc]/1000000), \
+    counts['huge'][inarc], \
+    trunc(sizes['huge'][inarcunc]/1000000), \
+    trunc(sizes['huge'][inarccomp]/1000000))
 
-	summary += "--------------------  --------------   --------------   -------------   -------------   -------------\n"
+    summary += "--------------------  --------------   --------------   -------------   -------------   -------------\n"
 
-	summary += rep + "\n"
+    summary += rep + "\n"
 
-	if not critical_only:
-		print(summary)
-	if f:
-		f.write(summary)
+    if not critical_only:
+        print(summary)
+    if f:
+        f.write(summary)
 
 def signature_process(folder, f):
 
-	#print("SIGNATURE SCAN ANALYSIS:")
+    #print("SIGNATURE SCAN ANALYSIS:")
 
-	# Find duplicates without expanding archives - to avoid processing dups
-	print("- Processing folders         ", end="", flush=True)
-	num_dirdups, size_dirdups = process_dirdups(f)
-	print(" Done")
+    # Find duplicates without expanding archives - to avoid processing dups
+    print("- Processing folders         ", end="", flush=True)
+    num_dirdups, size_dirdups = process_dirdups(f)
+    print(" Done")
 
-	print("- Processing large files     ", end="", flush=True)
-	num_dups, size_dups = process_largefiledups(f)
-	print(" Done")
+    print("- Processing large files     ", end="", flush=True)
+    num_dups, size_dups = process_largefiledups(f)
+    print(" Done")
 
-	print("- Processing Signature Scan  .....", end="", flush=True)
+    print("- Processing Signature Scan  .....", end="", flush=True)
 
-	# Produce Recommendations
-	if sizes['file'][notinarc]+sizes['arc'][notinarc] > 5000000000:
-		recs_msgs_dict['crit'] += "- CRITICAL: Overall scan size ({:>,d} MB) is too large\n".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000)) + \
-		"    Impact:  Scan will fail\n" + \
-		"    Action:  Ignore folders, remove large files or use repeated scans of sub-folders (Also consider detect_advisor -b option to create multiple .bdignore files to ignore duplicate folders)\n\n"
-	elif sizes['file'][notinarc]+sizes['arc'][notinarc] > 2000000000:
-		recs_msgs_dict['imp'] += "- IMPORTANT: Overall scan size ({:>,d} MB) is large\n".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000)) + \
-		"    Impact:  Will impact Capacity license usage\n" + \
-		"    Action:  Ignore folders, remove large files or use repeated scans of sub-folders (Also consider detect_advisor -b option to create multiple .bdignore files to ignore duplicate folders)\n\n"
+    # Produce Recommendations
+    if sizes['file'][notinarc]+sizes['arc'][notinarc] > 5000000000:
+        recs_msgs_dict['crit'] += "- CRITICAL: Overall scan size ({:>,d} MB) is too large\n".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000)) + \
+        "    Impact:  Scan will fail\n" + \
+        "    Action:  Ignore folders, remove large files or use repeated scans of sub-folders (Also consider detect_advisor -b option to create multiple .bdignore files to ignore duplicate folders)\n\n"
+    elif sizes['file'][notinarc]+sizes['arc'][notinarc] > 2000000000:
+        recs_msgs_dict['imp'] += "- IMPORTANT: Overall scan size ({:>,d} MB) is large\n".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000)) + \
+        "    Impact:  Will impact Capacity license usage\n" + \
+        "    Action:  Ignore folders, remove large files or use repeated scans of sub-folders (Also consider detect_advisor -b option to create multiple .bdignore files to ignore duplicate folders)\n\n"
 
-	if counts['file'][notinarc]+counts['file'][inarc] > 1000000:
-		recs_msgs_dict['imp'] += "- IMPORTANT: Overall number of files ({:>,d}) is very large\n".format(trunc((counts['file'][notinarc]+counts['file'][inarc]))) + \
-		"    Impact:  Scan time could be VERY long\n" + \
-		"    Action:  Ignore folders or split project (scan sub-projects or consider detect_advisor -b option to create multiple .bdignore files to ignore duplicate folders)\n\n"
-	elif counts['file'][notinarc]+counts['file'][inarc] > 200000:
-		recs_msgs_dict['info'] += "- INFORMATION: Overall number of files ({:>,d}) is large\n".format(trunc((counts['file'][notinarc]+counts['file'][inarc]))) + \
-		"    Impact:  Scan time could be long\n" + \
-		"    Action:  Ignore folders or split project (scan sub-projects or consider detect_advisor -b option to create multiple .bdignore files to ignore duplicate folders)\n\n"
+    if counts['file'][notinarc]+counts['file'][inarc] > 1000000:
+        recs_msgs_dict['imp'] += "- IMPORTANT: Overall number of files ({:>,d}) is very large\n".format(trunc((counts['file'][notinarc]+counts['file'][inarc]))) + \
+        "    Impact:  Scan time could be VERY long\n" + \
+        "    Action:  Ignore folders or split project (scan sub-projects or consider detect_advisor -b option to create multiple .bdignore files to ignore duplicate folders)\n\n"
+    elif counts['file'][notinarc]+counts['file'][inarc] > 200000:
+        recs_msgs_dict['info'] += "- INFORMATION: Overall number of files ({:>,d}) is large\n".format(trunc((counts['file'][notinarc]+counts['file'][inarc]))) + \
+        "    Impact:  Scan time could be long\n" + \
+        "    Action:  Ignore folders or split project (scan sub-projects or consider detect_advisor -b option to create multiple .bdignore files to ignore duplicate folders)\n\n"
 
-	#
-	# Need to add check for nothing to scan (no supported scan files)
-	if counts['src'][notinarc]+counts['src'][inarc]+counts['jar'][notinarc]+counts['jar'][inarc]+counts['other'][notinarc]+counts['other'][inarc] == 0:
-		recs_msgs_dict['info'] += "- INFORMATION: No source, jar or other files found\n".format(trunc((counts['file'][notinarc]+sizes['file'][inarc]))) + \
-		"    Impact:  Scan may not detect any OSS from files (dependencies only)\n" + \
-		"    Action:  Check scan location is correct\n"
+    #
+    # Need to add check for nothing to scan (no supported scan files)
+    if counts['src'][notinarc]+counts['src'][inarc]+counts['jar'][notinarc]+counts['jar'][inarc]+counts['other'][notinarc]+counts['other'][inarc] == 0:
+        recs_msgs_dict['info'] += "- INFORMATION: No source, jar or other files found\n".format(trunc((counts['file'][notinarc]+sizes['file'][inarc]))) + \
+        "    Impact:  Scan may not detect any OSS from files (dependencies only)\n" + \
+        "    Action:  Check scan location is correct\n"
 
-	if sizes['bin'][notinarc]+sizes['bin'][inarc] > 20000000:
-		recs_msgs_dict['imp'] += "- IMPORTANT: Large amount of data ({:>,d} MB) in {} binary files found\n".format(trunc((sizes['bin'][notinarc]+sizes['bin'][inarc])/1000000), len(bin_list)) + \
-		"    Impact:  Binary files not analysed by standard scan, will impact Capacity license usage\n" + \
-		"    Action:  Remove files or ignore folders (using .bdignore files), also consider zipping\n" + \
-		"             files and using Binary scan (See report file produced with -r option)\n\n"
-		cli_msgs_dict['scan'] += "--detect.binary.scan.file.path=binary_files.zip\n" + \
-		"    (See report file produced with -r option for how to zip binary files; binary scan license required)\n"
-		if f and len(bin_large_dict) > 0:
-			f.write("\nLARGE BINARY FILES:\n")
-			for bin in bin_large_dict.keys():
-				f.write("    {} (Size {:d}MB)\n".format(bin, int(bin_large_dict[bin]/1000000)))
-			f.write("\nConsider using the following command to zip binary files and send to binary scan (subject to license):\n    zip binary_files.zip \\\n")
-			binzip_list = []
-			for bin in bin_large_dict.keys():
-				if bin.find("##") < 0:
-					binzip_list.append(bin)
-				elif bin.split("##")[0] not in binzip_list:
-					binzip_list.append(bin.split("##")[0])
-			num = 0
-			for bin in binzip_list:
-				if num > 0:
-					f.write(" \\\n")
-				f.write("    {}".format(bin))
-				num += 1
-			f.write("\n\nThen run Detect with the following options to send the archive for binary scan:\n    --detect.tools=BINARY_SCAN --detect.binary.scan.file.path=binary_files.zip\n\n")
+    if sizes['bin'][notinarc]+sizes['bin'][inarc] > 20000000:
+        recs_msgs_dict['imp'] += "- IMPORTANT: Large amount of data ({:>,d} MB) in {} binary files found\n".format(trunc((sizes['bin'][notinarc]+sizes['bin'][inarc])/1000000), len(bin_list)) + \
+        "    Impact:  Binary files not analysed by standard scan, will impact Capacity license usage\n" + \
+        "    Action:  Remove files or ignore folders (using .bdignore files), also consider zipping\n" + \
+        "             files and using Binary scan (See report file produced with -r option)\n\n"
+        cli_msgs_dict['scan'] += "--detect.binary.scan.file.path=binary_files.zip\n" + \
+        "    (See report file produced with -r option for how to zip binary files; binary scan license required)\n"
+        if f and len(bin_large_dict) > 0:
+            f.write("\nLARGE BINARY FILES:\n")
+            for bin in bin_large_dict.keys():
+                f.write("    {} (Size {:d}MB)\n".format(bin, int(bin_large_dict[bin]/1000000)))
+            f.write("\nConsider using the following command to zip binary files and send to binary scan (subject to license):\n    zip binary_files.zip \\\n")
+            binzip_list = []
+            for bin in bin_large_dict.keys():
+                if bin.find("##") < 0:
+                    binzip_list.append(bin)
+                elif bin.split("##")[0] not in binzip_list:
+                    binzip_list.append(bin.split("##")[0])
+            num = 0
+            for bin in binzip_list:
+                if num > 0:
+                    f.write(" \\\n")
+                f.write("    {}".format(bin))
+                num += 1
+            f.write("\n\nThen run Detect with the following options to send the archive for binary scan:\n    --detect.tools=BINARY_SCAN --detect.binary.scan.file.path=binary_files.zip\n\n")
 
-	if size_dirdups > 20000000:
-		recs_msgs_dict['imp'] += "- IMPORTANT: Large amount of data ({:,d} MB) in {:,d} duplicate folders\n".format(trunc(size_dirdups/1000000), len(dup_dir_dict)) + \
-		"    Impact:  Scan capacity potentially utilised without detecting additional\n" + \
-		"             components, will impact Capacity license usage\n" + \
-		"    Action:  Remove or ignore duplicate folders (Consider detect_advisor -b option to create multiple .bdignore files)\n\n"
-		for apath, bpath in dup_dir_dict.items():
-			if bpath.find("##") < 0:
-				bdignore_list.append(bpath)
+    if size_dirdups > 20000000:
+        recs_msgs_dict['imp'] += "- IMPORTANT: Large amount of data ({:,d} MB) in {:,d} duplicate folders\n".format(trunc(size_dirdups/1000000), len(dup_dir_dict)) + \
+        "    Impact:  Scan capacity potentially utilised without detecting additional\n" + \
+        "             components, will impact Capacity license usage\n" + \
+        "    Action:  Remove or ignore duplicate folders (Consider detect_advisor -b option to create multiple .bdignore files)\n\n"
+        for apath, bpath in dup_dir_dict.items():
+            if bpath.find("##") < 0:
+                bdignore_list.append(bpath)
 
-	if size_dups > 20000000:
-		recs_msgs_dict['imp'] += "- IMPORTANT: Large amount of data ({:,d} MB) in {:,d} duplicate files\n".format(trunc(size_dups/1000000), len(dup_large_dict)) + \
-		"    Impact:  Scan capacity potentially utilised without detecting additional\n" + \
-		"             components, will impact Capacity license usage\n" + \
-		"    Action:  Remove duplicate files or ignore folders (Consider detect_advisor -b option to create multiple .bdignore files)\n\n"
-		#for apath, bpath in dup_large_dict.items():
-		#	if dup_dir_dict.get(os.path.dirname(apath)) == None and dup_dir_dict.get(os.path.dirname(bpath)) == None:
-		#		print("    {}".format(bpath))
-		#print("")
+    if size_dups > 20000000:
+        recs_msgs_dict['imp'] += "- IMPORTANT: Large amount of data ({:,d} MB) in {:,d} duplicate files\n".format(trunc(size_dups/1000000), len(dup_large_dict)) + \
+        "    Impact:  Scan capacity potentially utilised without detecting additional\n" + \
+        "             components, will impact Capacity license usage\n" + \
+        "    Action:  Remove duplicate files or ignore folders (Consider detect_advisor -b option to create multiple .bdignore files)\n\n"
+        #for apath, bpath in dup_large_dict.items():
+        #    if dup_dir_dict.get(os.path.dirname(apath)) == None and dup_dir_dict.get(os.path.dirname(bpath)) == None:
+        #        print("    {}".format(bpath))
+        #print("")
 
-	if counts['lic'][notinarc] > 10:
-		recs_msgs_dict['info'] += "- INFORMATION: License or notices files found\n" + \
-		"    Impact:  Local license text may need to be scanned\n" + \
-		"    Action:  Add options --detect.blackduck.signature.scanner.license.search=true\n" + \
-		"             and optionally --detect.blackduck.signature.scanner.upload.source.mode=true\n\n"
-		cli_msgs_dict['lic'] += "--detect.blackduck.signature.scanner.license.search=true\n" + \
-		"    (To perform client-side scanning for license files and references)\n"
-		if cli_msgs_dict['lic'].find("upload.source.mode") < 0:
-			cli_msgs_dict['lic'] += "--detect.blackduck.signature.scanner.upload.source.mode=true\n" + \
-			"    (CAUTION - will upload local source files)\n"
+    if counts['lic'][notinarc] > 10:
+        recs_msgs_dict['info'] += "- INFORMATION: License or notices files found\n" + \
+        "    Impact:  Local license text may need to be scanned\n" + \
+        "    Action:  Add options --detect.blackduck.signature.scanner.license.search=true\n" + \
+        "             and optionally --detect.blackduck.signature.scanner.upload.source.mode=true\n\n"
+        cli_msgs_dict['lic'] += "--detect.blackduck.signature.scanner.license.search=true\n" + \
+        "    (To perform client-side scanning for license files and references)\n"
+        if cli_msgs_dict['lic'].find("upload.source.mode") < 0:
+            cli_msgs_dict['lic'] += "--detect.blackduck.signature.scanner.upload.source.mode=true\n" + \
+            "    (CAUTION - will upload local source files)\n"
 
-	if counts['src'][notinarc]+counts['src'][inarc] > 10:
-		recs_msgs_dict['info'] += "- INFORMATION: Source files found for which Snippet analysis supported\n" + \
-		"    Impact:  Snippet analysis can discover copied OSS source files and functions\n" + \
-		"    Action:  Add options --detect.blackduck.signature.scanner.snippet.matching=SNIPPET_MATCHING\n\n"
-		cli_msgs_dict['lic'] += "--detect.blackduck.signature.scanner.snippet.matching=SNIPPET_MATCHING\n" + \
-		"    (To search for copied OSS source files and functions within source files)\n"
-		if cli_msgs_dict['lic'].find("upload.source.mode") < 0:
-			cli_msgs_dict['lic'] += "--detect.blackduck.signature.scanner.upload.source.mode=true\n" + \
-			"    (CAUTION - will upload local source files)\n"
+    if counts['src'][notinarc]+counts['src'][inarc] > 10:
+        recs_msgs_dict['info'] += "- INFORMATION: Source files found for which Snippet analysis supported\n" + \
+        "    Impact:  Snippet analysis can discover copied OSS source files and functions\n" + \
+        "    Action:  Add options --detect.blackduck.signature.scanner.snippet.matching=SNIPPET_MATCHING\n\n"
+        cli_msgs_dict['lic'] += "--detect.blackduck.signature.scanner.snippet.matching=SNIPPET_MATCHING\n" + \
+        "    (To search for copied OSS source files and functions within source files)\n"
+        if cli_msgs_dict['lic'].find("upload.source.mode") < 0:
+            cli_msgs_dict['lic'] += "--detect.blackduck.signature.scanner.upload.source.mode=true\n" + \
+            "    (CAUTION - will upload local source files)\n"
 
-	check_singlefiles(f)
-	print(" Done")
-	print("")
+    check_singlefiles(f)
+    print(" Done")
+    print("")
 
 def detector_process(folder, f):
-	import shutil
+    import shutil
 
-	global rep
+    global rep
 
-	print("- Processing Dependency Scan .....", end="", flush=True)
+    print("- Processing Dependency Scan .....", end="", flush=True)
 
-	if f:
-		f.write("PROJECT FILES FOUND:\n")
+    if f:
+        f.write("PROJECT FILES FOUND:\n")
 
-	count = 0
-	det_depth1 = 0
-	det_other = 0
-	cmds_missing1 = ""
-	cmds_missingother = ""
-	cmds_missing_list = []
-	det_max_depth = 0
-	det_min_depth = 100
-	det_in_arc = 0
-	if len(det_dict) > 0:
-		for detpath, depth in det_dict.items():
-			command_exists = False
-			if detpath.find("##") > 0:
-				# in archive
-				det_in_arc += 1
-			else:
-				if depth == 1:
-					det_depth1 += 1
-				elif depth > 1:
-					det_other += 1
-				if depth > det_max_depth:
-					det_max_depth = depth
-				if depth < det_min_depth:
-					det_min_depth = depth
-				fname = os.path.basename(detpath)
-				exes = ""
-				if fname in detectors_file_dict.keys():
-					exes = detectors_file_dict[fname]
-				elif os.path.splitext(fname)[1] in detectors_ext_dict.keys():
-					exes = detectors_ext_dict[os.path.splitext(fname)[1]]
-				missing_cmds = ""
-				for exe in exes:
-					if exe not in detectors_list:
-						detectors_list.append(exe)
-						if platform.system() != "Linux" and exe in linux_only_detectors:
-							if depth == 1:
-								recs_msgs_dict['crit'] += "- CRITICAL: Package manager '{}' requires scanning on a Linux platform\n".format(exe) + \
-								"    Impact:  Scan will fail\n" + \
-								"    Action:  Re-run Detect scan on Linux\n\n"
-							else:
-								recs_msgs_dict['imp'] += "- IMPORTANT: Package manager '{}' requires scanning on a Linux platform\n".format(exe) + \
-								"    Impact:  Scan may fail if detector depth changed from default value 0\n" + \
-								"    Action:  Re-run Detect scan on Linux\n\n"
-					if shutil.which(exe) is not None:
-						command_exists = True
-					else:
-						if exe not in cmds_missing_list:
-							cmds_missing_list.append(exe)
-							if missing_cmds:
-								missing_cmds += " OR " + exe
-							else:
-								missing_cmds = exe
-				if f:
-					f.write("{}\n".format(detpath))
-					count += 1
+    count = 0
+    det_depth1 = 0
+    det_other = 0
+    cmds_missing1 = ""
+    cmds_missingother = ""
+    cmds_missing_list = []
+    det_max_depth = 0
+    det_min_depth = 100
+    det_in_arc = 0
+    if len(det_dict) > 0:
+        for detpath, depth in det_dict.items():
+            command_exists = False
+            if detpath.find("##") > 0:
+                # in archive
+                det_in_arc += 1
+            else:
+                if depth == 1:
+                    det_depth1 += 1
+                elif depth > 1:
+                    det_other += 1
+                if depth > det_max_depth:
+                    det_max_depth = depth
+                if depth < det_min_depth:
+                    det_min_depth = depth
+                fname = os.path.basename(detpath)
+                exes = ""
+                if fname in detectors_file_dict.keys():
+                    exes = detectors_file_dict[fname]
+                elif os.path.splitext(fname)[1] in detectors_ext_dict.keys():
+                    exes = detectors_ext_dict[os.path.splitext(fname)[1]]
+                missing_cmds = ""
+                for exe in exes:
+                    if exe not in detectors_list:
+                        detectors_list.append(exe)
+                        if platform.system() != "Linux" and exe in linux_only_detectors:
+                            if depth == 1:
+                                recs_msgs_dict['crit'] += "- CRITICAL: Package manager '{}' requires scanning on a Linux platform\n".format(exe) + \
+                                "    Impact:  Scan will fail\n" + \
+                                "    Action:  Re-run Detect scan on Linux\n\n"
+                            else:
+                                recs_msgs_dict['imp'] += "- IMPORTANT: Package manager '{}' requires scanning on a Linux platform\n".format(exe) + \
+                                "    Impact:  Scan may fail if detector depth changed from default value 0\n" + \
+                                "    Action:  Re-run Detect scan on Linux\n\n"
+                    if shutil.which(exe) is not None:
+                        command_exists = True
+                    else:
+                        if exe not in cmds_missing_list:
+                            cmds_missing_list.append(exe)
+                            if missing_cmds:
+                                missing_cmds += " OR " + exe
+                            else:
+                                missing_cmds = exe
+                if f:
+                    f.write("{}\n".format(detpath))
+                    count += 1
 
-				if not command_exists and missing_cmds:
-					if missing_cmds.find(" OR ") > 0:
-						missing_cmds = "(" + missing_cmds + ")"
-					if depth == 1:
-						if cmds_missing1:
-							cmds_missing1 += " AND " + missing_cmds
-						else:
-							cmds_missing1 = missing_cmds
-					else:
-						if cmds_missingother:
-							cmds_missingother += " AND " + missing_cmds
-						else:
-							cmds_missingother = missing_cmds
+                if not command_exists and missing_cmds:
+                    if missing_cmds.find(" OR ") > 0:
+                        missing_cmds = "(" + missing_cmds + ")"
+                    if depth == 1:
+                        if cmds_missing1:
+                            cmds_missing1 += " AND " + missing_cmds
+                        else:
+                            cmds_missing1 = missing_cmds
+                    else:
+                        if cmds_missingother:
+                            cmds_missingother += " AND " + missing_cmds
+                        else:
+                            cmds_missingother = missing_cmds
 
-		rep = "\nPACKAGE MANAGER CONFIG FILES:\n" + \
-		"- In invocation folder:   {}\n".format(det_depth1) + \
-		"- In sub-folders:         {}\n".format(det_other) + \
-		"- In archives:            {}\n".format(det_in_arc) + \
-		"- Minimum folder depth:   {}\n".format(det_min_depth) + \
-		"- Maximum folder depth:   {}\n".format(det_max_depth) + \
-		"---------------------------------\n" + \
-		"- Total discovered:       {}\n\n".format(len(det_dict)) + \
-		"Config files for the following Package Managers found: {}\n".format(', '.join(detectors_list))
+        rep = "\nPACKAGE MANAGER CONFIG FILES:\n" + \
+        "- In invocation folder:   {}\n".format(det_depth1) + \
+        "- In sub-folders:         {}\n".format(det_other) + \
+        "- In archives:            {}\n".format(det_in_arc) + \
+        "- Minimum folder depth:   {}\n".format(det_min_depth) + \
+        "- Maximum folder depth:   {}\n".format(det_max_depth) + \
+        "---------------------------------\n" + \
+        "- Total discovered:       {}\n\n".format(len(det_dict)) + \
+        "Config files for the following Package Managers found: {}\n".format(', '.join(detectors_list))
 
-	if f and count == 0:
-		f.write("    None\n")
+    if f and count == 0:
+        f.write("    None\n")
 
-	if det_depth1 == 0 and det_other > 0:
-		recs_msgs_dict['imp'] += "- IMPORTANT: No package manager files found in invocation folder but do exist in sub-folders\n" + \
-		"    Impact:  Dependency scan will not be run\n" + \
-		"    Action:  Specify --detect.detector.search.depth={} (although depth could be up to {})\n".format(det_min_depth, det_max_depth) + \
-		"             optionally with -detect.detector.search.continue=true or scan sub-folders separately.\n\n"
-		if cli_msgs_dict['scan'].find("detector.search.depth") < 0:
-			cli_msgs_dict['scan'] += "--detect.detector.search.depth={}\n".format(det_min_depth) + \
-			"    optionally with optionally with -detect.detector.search.continue=true\n" + \
-			"    (To find package manager files within sub-folders; note depth {} would find\n".format(det_max_depth) + \
-			"    all PM files in sub-folders but higher level projects may already include these)\n"
+    if det_depth1 == 0 and det_other > 0:
+        recs_msgs_dict['imp'] += "- IMPORTANT: No package manager files found in invocation folder but do exist in sub-folders\n" + \
+        "    Impact:  Dependency scan will not be run\n" + \
+        "    Action:  Specify --detect.detector.search.depth={} (although depth could be up to {})\n".format(det_min_depth, det_max_depth) + \
+        "             optionally with --detect.detector.search.continue=true or scan sub-folders separately.\n\n"
+        if cli_msgs_dict['scan'].find("detector.search.depth") < 0:
+            cli_msgs_dict['scan'] += "--detect.detector.search.depth={}\n".format(det_min_depth) + \
+            "    optionally with optionally with -detect.detector.search.continue=true\n" + \
+            "    (To find package manager files within sub-folders; note depth {} would find\n".format(det_max_depth) + \
+            "    all PM files in sub-folders but higher level projects may already include these)\n"
 
-	if det_depth1 == 0 and det_other == 0:
-		recs_msgs_dict['info'] += "- INFORMATION: No package manager files found in project at all\n" + \
-		"    Impact:  No dependency scan will be performed\n" + \
-		"    Action:  This may be expected, but ensure you are scanning the correct location\n\n"
+    if det_depth1 == 0 and det_other == 0:
+        recs_msgs_dict['info'] += "- INFORMATION: No package manager files found in project at all\n" + \
+        "    Impact:  No dependency scan will be performed\n" + \
+        "    Action:  This may be expected, but ensure you are scanning the correct location\n\n"
 
-	if cmds_missing1:
-		package_managers_missing.append(cmds_missing1)
-		recs_msgs_dict['crit'] += "- CRITICAL: Package manager programs ({}) missing for package files in invocation folder\n".format(cmds_missing1) + \
-		"    Impact:  Scan will fail\n" + \
-		"    Action:  Either install package manager programs or\n" + \
-		"             consider specifying --detect.detector.buildless=true\n\n"
-		cli_msgs_dict['reqd'] += "--detect.detector.buildless=true\n" + \
-		"    (OR specify --detect.XXXX.path=<LOCATION> where XXX is package manager\n" + \
-		"    OR install package managers '{}')\n".format(cmds_missing1)
+    if cmds_missing1:
+        package_managers_missing.append(cmds_missing1)
+        recs_msgs_dict['crit'] += "- CRITICAL: Package manager programs ({}) missing for package files in invocation folder\n".format(cmds_missing1) + \
+        "    Impact:  Scan will fail\n" + \
+        "    Action:  Either install package manager programs or\n" + \
+        "             consider specifying --detect.detector.buildless=true\n\n"
+        cli_msgs_dict['reqd'] += "--detect.detector.buildless=true\n" + \
+        "    (OR specify --detect.XXXX.path=<LOCATION> where XXX is package manager\n" + \
+        "    OR install package managers '{}')\n".format(cmds_missing1)
 
-	if cmds_missingother:
-		package_managers_missing.append(cmds_missingother)
-		recs_msgs_dict['imp'] += "- IMPORTANT: Package manager programs ({}) missing for package files in sub-folders\n".format(cmds_missingother) + \
-		"    Impact:  The scan will fail if the scan depth is modified from the default\n" + \
-		"    Action:  Install package manager programs\n" + \
-		"             (OR specify --detect.XXXX.path=<LOCATION> where XXX is package manager\n" + \
-		"             OR specify --detect.detector.buildless=true)\n\n"
-		if cli_msgs_dict['scan'].find("detector.buildless") < 0:
-			cli_msgs_dict['scan'] += "--detect.detector.buildless=true\n" + \
-			"    (OR install package managers '{}'\n".format(cmds_missingother) + \
-			"    (OR use --detect.XXXX.path=<LOCATION> where XXX is package manager)\n"
+    if cmds_missingother:
+        package_managers_missing.append(cmds_missingother)
+        recs_msgs_dict['imp'] += "- IMPORTANT: Package manager programs ({}) missing for package files in sub-folders\n".format(cmds_missingother) + \
+        "    Impact:  The scan will fail if the scan depth is modified from the default\n" + \
+        "    Action:  Install package manager programs\n" + \
+        "             (OR specify --detect.XXXX.path=<LOCATION> where XXX is package manager\n" + \
+        "             OR specify --detect.detector.buildless=true)\n\n"
+        if cli_msgs_dict['scan'].find("detector.buildless") < 0:
+            cli_msgs_dict['scan'] += "--detect.detector.buildless=true\n" + \
+            "    (OR install package managers '{}'\n".format(cmds_missingother) + \
+            "    (OR use --detect.XXXX.path=<LOCATION> where XXX is package manager)\n"
 
-	if counts['det'][inarc] > 0:
-		recs_msgs_dict['imp'] += "- IMPORTANT: Package manager files found in archives\n" + \
-		"    Impact:  Dependency scan not performed for projects in archives\n" + \
-		"    Action:  Extract zip archives and rescan\n\n"
+    if counts['det'][inarc] > 0:
+        recs_msgs_dict['imp'] += "- IMPORTANT: Package manager files found in archives\n" + \
+        "    Impact:  Dependency scan not performed for projects in archives\n" + \
+        "    Action:  Extract zip archives and rescan\n\n"
 
-	for cmd in detectors_list:
-		if cmd in detector_cli_options_dict.keys():
-			cli_msgs_dict['dep'] += " For {}:\n".format(cmd) + detector_cli_options_dict[cmd]
-		if cmd in detector_cli_required_dict.keys():
-			cli_msgs_dict['crit'] += " For {}:\n".format(cmd) + detector_cli_required_dict[cmd]
+    for cmd in detectors_list:
+        if cmd in detector_cli_options_dict.keys():
+            cli_msgs_dict['dep'] += " For {}:\n".format(cmd) + detector_cli_options_dict[cmd]
+        if cmd in detector_cli_required_dict.keys():
+            cli_msgs_dict['crit'] += " For {}:\n".format(cmd) + detector_cli_required_dict[cmd]
 
-	print(" Done")
+    print(" Done")
 
-	return
+    return
 
 def output_recs(critical_only, f):
-	global messages
+    global messages
 
-	if f:
-		f.write(messages + "\n")
+    if f:
+        f.write(messages + "\n")
 
-	print("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\nRECOMMENDATIONS:\n")
-	if f:
-		f.write("\nRECOMMENDATIONS:\n")
+    print("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\nRECOMMENDATIONS:\n")
+    if f:
+        f.write("\nRECOMMENDATIONS:\n")
 
-	if recs_msgs_dict['crit']:
-		print(recs_msgs_dict['crit'])
-		if f:
-			f.write(recs_msgs_dict['crit'] + "\n")
+    if recs_msgs_dict['crit']:
+        print(recs_msgs_dict['crit'])
+        if f:
+            f.write(recs_msgs_dict['crit'] + "\n")
 
-	if recs_msgs_dict['imp']:
-		if not critical_only:
-			if recs_msgs_dict['crit']:
-				print("-----------------------------------------------------------------------------------------------------")
-			print(recs_msgs_dict['imp'])
-		if f:
-			if recs_msgs_dict['crit']:
-				f.write("-----------------------------------------------------------------------------------------------------\n")
-			f.write(recs_msgs_dict['imp'] + "\n")
+    if recs_msgs_dict['imp']:
+        if not critical_only:
+            if recs_msgs_dict['crit']:
+                print("-----------------------------------------------------------------------------------------------------")
+            print(recs_msgs_dict['imp'])
+        if f:
+            if recs_msgs_dict['crit']:
+                f.write("-----------------------------------------------------------------------------------------------------\n")
+            f.write(recs_msgs_dict['imp'] + "\n")
 
-	if recs_msgs_dict['info']:
-		if not critical_only:
-			if recs_msgs_dict['crit'] or recs_msgs_dict['imp']:
-				print("-----------------------------------------------------------------------------------------------------")
-			print(recs_msgs_dict['info'])
-		if f:
-			if recs_msgs_dict['crit'] or recs_msgs_dict['imp']:
-				f.write("-----------------------------------------------------------------------------------------------------\n")
-			f.write(recs_msgs_dict['info'] + "\n")
+    if recs_msgs_dict['info']:
+        if not critical_only:
+            if recs_msgs_dict['crit'] or recs_msgs_dict['imp']:
+                print("-----------------------------------------------------------------------------------------------------")
+            print(recs_msgs_dict['info'])
+        if f:
+            if recs_msgs_dict['crit'] or recs_msgs_dict['imp']:
+                f.write("-----------------------------------------------------------------------------------------------------\n")
+            f.write(recs_msgs_dict['info'] + "\n")
 
-	if (not recs_msgs_dict['crit'] and not recs_msgs_dict['imp'] and not recs_msgs_dict['info']):
-		print("- None\n")
-		if f:
-			f.write("None\n")
+    if (not recs_msgs_dict['crit'] and not recs_msgs_dict['imp'] and not recs_msgs_dict['info']):
+        print("- None\n")
+        if f:
+            f.write("None\n")
 
-	if (critical_only and not recs_msgs_dict['crit']):
-		print("- No Critical Recommendations\n")
+    if (critical_only and not recs_msgs_dict['crit']):
+        print("- No Critical Recommendations\n")
 
-	if len(bdignore_list)> 0 and f:
-		f.write("\nFOLDERS WHICH COULD BE IGNORED:\n(Multiple .bdignore files must be created in sub-folders - folder names must use /folder/ pattern)\n\n")
-		for bpath in bdignore_list:
-			f.write(bpath)
+    if len(bdignore_list)> 0 and f:
+        f.write("\nFOLDERS WHICH COULD BE IGNORED:\n(Multiple .bdignore files must be created in sub-folders - folder names must use /folder/ pattern)\n\n")
+        for bpath in bdignore_list:
+            f.write(bpath)
 
 def check_prereqs():
-	import subprocess
-	import shutil
+    import subprocess
+    import shutil
 
-	global rep
+    global rep
 
-	global messages
+    global messages
 
-	# Check java
-	try:
-		if shutil.which("java") is None:
-			recs_msgs_dict['crit'] += "- CRITICAL: Java is not installed or on the PATH\n" + \
-			"    Impact:  Detect program will fail\n" + \
-			"    Action:  Install OpenJDK 1.8 or 1.11\n\n"
-# 			if cli_msgs_dict['reqd'].find("detect.java.path") < 0:
-# 				cli_msgs_dict['reqd'] += ""    --detect.java.path=<PATH_TO_JAVA>\n" + \
-# 				"    (If Java installed, specify path to java executable if not on PATH)\n"
-		else:
-			try:
-				javaoutput = subprocess.check_output(['java', '-version'], stderr=subprocess.STDOUT)
-				#javaoutput = 'openjdk version "13.0.1" 2019-10-15'
-				#javaoutput = 'java version "1.8.0_181"'
-				crit = True
-				if javaoutput:
-					line0 = javaoutput.decode("utf-8").splitlines()[0]
-					prog = line0.split(" ")[0].lower()
-					if prog:
-						version_string = line0.split('"')[1]
-						if version_string:
-							major, minor, _ = version_string.split('.')
-							if prog == "openjdk":
-								crit = False
-								if major == "8" or major == "11":
-									rec = "none"
-								else:
-									recs_msgs_dict['imp'] += "- IMPORTANT: OpenJDK version {} is not documented as supported by Detect\n".format(version_string) + \
-									"    Impact:  Scan may fail\n" + \
-									"    Action:  Check that Detect operates correctly\n\n"
-							elif prog == "java":
-								crit = False
-								if major == "1" and (minor == "8" or minor == "11"):
-									rec = "none"
-								else:
-									recs_msgs_dict['imp'] += "- IMPORTANT: Java version {} is not documented as supported by Detect\n".format(version_string) + \
-									"    Impact:  Scan may fail\n" + \
-									"    Action:  Check that Detect operates correctly\n\n"
-			except:
-				crit = True
+    # Check java
+    try:
+        if shutil.which("java") is None:
+            recs_msgs_dict['crit'] += "- CRITICAL: Java is not installed or on the PATH\n" + \
+            "    Impact:  Detect program will fail\n" + \
+            "    Action:  Install OpenJDK 1.8 or 1.11\n\n"
+#             if cli_msgs_dict['reqd'].find("detect.java.path") < 0:
+#                 cli_msgs_dict['reqd'] += ""    --detect.java.path=<PATH_TO_JAVA>\n" + \
+#                 "    (If Java installed, specify path to java executable if not on PATH)\n"
+        else:
+            try:
+                javaoutput = subprocess.check_output(['java', '-version'], stderr=subprocess.STDOUT)
+                #javaoutput = 'openjdk version "13.0.1" 2019-10-15'
+                #javaoutput = 'java version "1.8.0_181"'
+                crit = True
+                if javaoutput:
+                    line0 = javaoutput.decode("utf-8").splitlines()[0]
+                    prog = line0.split(" ")[0].lower()
+                    if prog:
+                        version_string = line0.split('"')[1]
+                        if version_string:
+                            major, minor, _ = version_string.split('.')
+                            if prog == "openjdk":
+                                crit = False
+                                if major == "8" or major == "11":
+                                    rec = "none"
+                                else:
+                                    recs_msgs_dict['imp'] += "- IMPORTANT: OpenJDK version {} is not documented as supported by Detect\n".format(version_string) + \
+                                    "    Impact:  Scan may fail\n" + \
+                                    "    Action:  Check that Detect operates correctly\n\n"
+                            elif prog == "java":
+                                crit = False
+                                if major == "1" and (minor == "8" or minor == "11"):
+                                    rec = "none"
+                                else:
+                                    recs_msgs_dict['imp'] += "- IMPORTANT: Java version {} is not documented as supported by Detect\n".format(version_string) + \
+                                    "    Impact:  Scan may fail\n" + \
+                                    "    Action:  Check that Detect operates correctly\n\n"
+            except:
+                crit = True
 
-			if crit:
-				recs_msgs_dict['crit'] += "- CRITICAL: Java program version cannot be determined\n" + \
-				"    Impact:  Scan may fail\n" + \
-				"    Action:  Check Java or OpenJDK version 1.8 or 1.11 is installed\n\n"
-# 				if cli_msgs_dict['reqd'].find("detect.java.path") < 0:
-# 					cli_msgs_dict['reqd'] += "--detect.java.path=<PATH_TO_JAVA>\n" + \
-# 					"    (If Java installed, specify path to java executable if not on PATH)\n"
+            if crit:
+                recs_msgs_dict['crit'] += "- CRITICAL: Java program version cannot be determined\n" + \
+                "    Impact:  Scan may fail\n" + \
+                "    Action:  Check Java or OpenJDK version 1.8 or 1.11 is installed\n\n"
+#                 if cli_msgs_dict['reqd'].find("detect.java.path") < 0:
+#                     cli_msgs_dict['reqd'] += "--detect.java.path=<PATH_TO_JAVA>\n" + \
+#                     "    (If Java installed, specify path to java executable if not on PATH)\n"
 
-	except:
-		recs_msgs_dict['crit'] += "- CRITICAL: Java is not installed or on the PATH\n" + \
-		"    Impact:  Detect program will fail\n" + \
-		"    Action:  Install OpenJDK 1.8 or 1.11\n\n"
-# 		if cli_msgs_dict['reqd'].find("detect.java.path") < 0:
-# 			cli_msgs_dict['reqd'] += "--detect.java.path=<PATH_TO_JAVA>\n" + \
-# 			"    (If Java installed, specify path to java executable if not on PATH)\n"
+    except:
+        recs_msgs_dict['crit'] += "- CRITICAL: Java is not installed or on the PATH\n" + \
+        "    Impact:  Detect program will fail\n" + \
+        "    Action:  Install OpenJDK 1.8 or 1.11\n\n"
+#         if cli_msgs_dict['reqd'].find("detect.java.path") < 0:
+#             cli_msgs_dict['reqd'] += "--detect.java.path=<PATH_TO_JAVA>\n" + \
+#             "    (If Java installed, specify path to java executable if not on PATH)\n"
 
-	os_platform = ""
-	if platform.system() == "Linux" or platform.system() == "Darwin":
-		os_platform = "linux"
-		# check for bash and curl
-		if shutil.which("bash") is None:
-			recs_msgs_dict['crit'] += "- CRITICAL: Bash is not installed or on the PATH\n" + \
-			"    Impact:  Detect program will fail\n" + \
-			"    Action:  Install Bash or add to PATH\n\n"
-	else:
-		os_platform = "win"
+    os_platform = ""
+    if platform.system() == "Linux" or platform.system() == "Darwin":
+        os_platform = "linux"
+        # check for bash and curl
+        if shutil.which("bash") is None:
+            recs_msgs_dict['crit'] += "- CRITICAL: Bash is not installed or on the PATH\n" + \
+            "    Impact:  Detect program will fail\n" + \
+            "    Action:  Install Bash or add to PATH\n\n"
+    else:
+        os_platform = "win"
 
-	if shutil.which("curl") is None:
-		recs_msgs_dict['crit'] += "- CRITICAL: Curl is not installed or on the PATH\n" + \
-		"    Impact:  Detect program will fail\n" + \
-		"    Action:  Install Curl or add to PATH\n\n"
-	else:
-		if not check_connection("https://detect.synopsys.com"):
-			recs_msgs_dict['crit'] += "- CRITICAL: No connection to https://detect.synopsys.com\n" + \
-			"    Impact:  Detect wrapper script cannot be downloaded, Detect cannot be started\n" + \
-			"    Action:  Either configure proxy (See CLI section) or download Detect manually and run offline (see docs)\n\n"
-			cli_msgs_dict['detect'] = cli_msgs_dict["detect_" + os_platform + "_proxy"]
-		else:
-			cli_msgs_dict['detect'] = cli_msgs_dict["detect_" + os_platform]
-			if not check_connection("https://sig-repo.synopsys.com"):
-				recs_msgs_dict['crit'] += "- CRITICAL: No connection to https://sig-repo.synopsys.com\n" + \
-				"    Impact:  Detect jar cannot be downloaded; Detect cannot run\n" + \
-				"    Action:  Either configure proxy (See CLI section) or download Detect manually and run offline (see docs)\n\n"
+    if shutil.which("curl") is None:
+        recs_msgs_dict['crit'] += "- CRITICAL: Curl is not installed or on the PATH\n" + \
+        "    Impact:  Detect program will fail\n" + \
+        "    Action:  Install Curl or add to PATH\n\n"
+    else:
+        if not check_connection("https://detect.synopsys.com"):
+            recs_msgs_dict['crit'] += "- CRITICAL: No connection to https://detect.synopsys.com\n" + \
+            "    Impact:  Detect wrapper script cannot be downloaded, Detect cannot be started\n" + \
+            "    Action:  Either configure proxy (See CLI section) or download Detect manually and run offline (see docs)\n\n"
+            cli_msgs_dict['detect'] = cli_msgs_dict["detect_" + os_platform + "_proxy"]
+        else:
+            cli_msgs_dict['detect'] = cli_msgs_dict["detect_" + os_platform]
+            if not check_connection("https://sig-repo.synopsys.com"):
+                recs_msgs_dict['crit'] += "- CRITICAL: No connection to https://sig-repo.synopsys.com\n" + \
+                "    Impact:  Detect jar cannot be downloaded; Detect cannot run\n" + \
+                "    Action:  Either configure proxy (See CLI section) or download Detect manually and run offline (see docs)\n\n"
 
 def check_connection(url):
-	import subprocess
+    import subprocess
 
-	try:
-		output = subprocess.check_output(['curl', '-s', '-m', '5', url], stderr=subprocess.STDOUT)
-		return True
-	except:
-		return False
+    try:
+        output = subprocess.check_output(['curl', '-s', '-m', '5', url], stderr=subprocess.STDOUT)
+        return True
+    except:
+        return False
 
 def check_docker_prereqs():
-	import shutil
-	import subprocess
+    import shutil
+    import subprocess
 
-	if platform.system() != "Linux" and platform.system() != "Darwin":
-		recs_msgs_dict['crit'] += "- CRITICAL: Docker image scanning only supported on Linux or MacOS\n" + \
-		"    Impact:  Docker image scan will fail\n" + \
-		"    Action:  Perform scan Docker on Linux or MacOS\n\n"
-	else:
-		if shutil.which("docker") is None:
-			recs_msgs_dict['crit'] += "- CRITICAL: Docker not installed - required for Docker image scanning\n" + \
-			"    Impact:  Docker image scan will fail\n" + \
-			"    Action:  Install docker\n\n"
-		else:
-			try:
-				output = subprocess.check_output(['docker', 'run', 'hello-world'], stderr=subprocess.STDOUT)
-			except:
-				recs_msgs_dict['crit'] += "- CRITICAL: Docker could not be started\n" + \
-				"    Impact:  Detect image scan will fail (docker inspector cannot be started)\n" + \
-				"    Action:  Check docker permissions OR not running within container\n\n"
+    if platform.system() != "Linux" and platform.system() != "Darwin":
+        recs_msgs_dict['crit'] += "- CRITICAL: Docker image scanning only supported on Linux or MacOS\n" + \
+        "    Impact:  Docker image scan will fail\n" + \
+        "    Action:  Perform scan Docker on Linux or MacOS\n\n"
+    else:
+        if shutil.which("docker") is None:
+            recs_msgs_dict['crit'] += "- CRITICAL: Docker not installed - required for Docker image scanning\n" + \
+            "    Impact:  Docker image scan will fail\n" + \
+            "    Action:  Install docker\n\n"
+        else:
+            try:
+                output = subprocess.check_output(['docker', 'run', 'hello-world'], stderr=subprocess.STDOUT)
+            except:
+                recs_msgs_dict['crit'] += "- CRITICAL: Docker could not be started\n" + \
+                "    Impact:  Detect image scan will fail (docker inspector cannot be started)\n" + \
+                "    Action:  Check docker permissions OR not running within container\n\n"
 
-		if shutil.which("curl") is not None:
-			if not check_connection("https://blackducksoftware.github.io"):
-				recs_msgs_dict['crit'] += "- CRITICAL: No connection to https://blackducksoftware.github.io\n" + \
-				"    Impact:  Detect docker inspector cannot be downloaded; online scan cannot be performed\n" + \
-				"    Action:  Download docker inspector manually and run offline (see docs)\n\n"
+        if shutil.which("curl") is not None:
+            if not check_connection("https://blackducksoftware.github.io"):
+                recs_msgs_dict['crit'] += "- CRITICAL: No connection to https://blackducksoftware.github.io\n" + \
+                "    Impact:  Detect docker inspector cannot be downloaded; online scan cannot be performed\n" + \
+                "    Action:  Download docker inspector manually and run offline (see docs)\n\n"
 
 def output_cli(critical_only, report, f):
 
-	output = "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\nDETECT CLI:\n\n"
-	if recs_msgs_dict['crit']:
-		output += "Note that scan will probably fail - see CRITICAL recommendations above\n\n"
+    output = "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\nDETECT CLI:\n\n"
+    if recs_msgs_dict['crit']:
+        output += "Note that scan will probably fail - see CRITICAL recommendations above\n\n"
 
-	output += "    DETECT COMMAND:\n"
-	output += re.sub(r"^", "    ", cli_msgs_dict['detect'], flags=re.MULTILINE)
-	output += "\n    MINIMUM REQUIRED OPTIONS:\n"
-	output += re.sub(r"^", "    ", cli_msgs_dict['reqd'], flags=re.MULTILINE)
+    output += "    DETECT COMMAND:\n"
+    output += re.sub(r"^", "    ", cli_msgs_dict['detect'], flags=re.MULTILINE)
+    output += "\n    MINIMUM REQUIRED OPTIONS:\n"
+    output += re.sub(r"^", "    ", cli_msgs_dict['reqd'], flags=re.MULTILINE)
 
-	print(output)
-	if len(bdignore_list) > 0:
-		if report:
-			print("        (Note that '.bdignore' exclude file is recommended - see the report file '{}' or use '-b' option\n" + \
-			"        to create '.bdignore' files in sub-folders)\n".format(report))
-		else:
-			print("        (Note that '.bdignore' exclude file is recommended - create a report file using '-r repfile' to\n" + \
-			"        see recommended folders to exclude or use '-b' option to create '.bdignore' files in sub-folders)\n")
-	if f:
-		f.write(output + "\n")
+    print(output)
+    if len(bdignore_list) > 0:
+        if report:
+            print("        (Note that '.bdignore' exclude file is recommended - see the report file '{}' or use '-b' option\n" + \
+            "        to create '.bdignore' files in sub-folders)\n".format(report))
+        else:
+            print("        (Note that '.bdignore' exclude file is recommended - create a report file using '-r repfile' to\n" + \
+            "        see recommended folders to exclude or use '-b' option to create '.bdignore' files in sub-folders)\n")
+    if f:
+        f.write(output + "\n")
 
-	output = ""
-	if cli_msgs_dict['scan'] != '':
-		output += "\nOPTIONS TO IMPROVE SCAN COVERAGE:\n" + cli_msgs_dict['scan'] + "\n"
+    output = ""
+    if cli_msgs_dict['scan'] != '':
+        output += "\nOPTIONS TO IMPROVE SCAN COVERAGE:\n" + cli_msgs_dict['scan'] + "\n"
 
-	if cli_msgs_dict['size'] != '':
-		output += "\nOPTIONS TO REDUCE SIGNATURE SCAN SIZE:\n" + cli_msgs_dict['size'] + "\n"
+    if cli_msgs_dict['size'] != '':
+        output += "\nOPTIONS TO REDUCE SIGNATURE SCAN SIZE:\n" + cli_msgs_dict['size'] + "\n"
 
-	if cli_msgs_dict['dep'] != '':
-		output += "\nOPTIONS TO OPTIMIZE DEPENDENCY SCAN:\n" + cli_msgs_dict['dep'] + "\n"
+    if cli_msgs_dict['dep'] != '':
+        output += "\nOPTIONS TO OPTIMIZE DEPENDENCY SCAN:\n" + cli_msgs_dict['dep'] + "\n"
 
-	if cli_msgs_dict['lic'] != '':
-		output += "\nOPTIONS TO IMPROVE LICENSE COMPLIANCE ANALYSIS:\n" + cli_msgs_dict['lic'] + "\n"
+    if cli_msgs_dict['lic'] != '':
+        output += "\nOPTIONS TO IMPROVE LICENSE COMPLIANCE ANALYSIS:\n" + cli_msgs_dict['lic'] + "\n"
 
-	if cli_msgs_dict['proj'] != '':
-		output += "\nPROJECT OPTIONS:\n" + cli_msgs_dict['proj'] + "\n"
+    if cli_msgs_dict['proj'] != '':
+        output += "\nPROJECT OPTIONS:\n" + cli_msgs_dict['proj'] + "\n"
 
-	if cli_msgs_dict['rep'] != '':
-		output += "\nREPORTING OPTIONS:\n" + cli_msgs_dict['rep'] + "\n"
+    if cli_msgs_dict['rep'] != '':
+        output += "\nREPORTING OPTIONS:\n" + cli_msgs_dict['rep'] + "\n"
 
-	if cli_msgs_dict['docker'] != '':
-		output += "\nDOCKER IMAGES TO SCAN:\n" + cli_msgs_dict['docker'] + "\n"
+    if cli_msgs_dict['docker'] != '':
+        output += "\nDOCKER IMAGES TO SCAN:\n" + cli_msgs_dict['docker'] + "\n"
 
-	output = re.sub(r"^", "    ", output, flags=re.MULTILINE)
+    output = re.sub(r"^", "    ", output, flags=re.MULTILINE)
 
-	if not critical_only:
-		print(output)
-	if f:
-		f.write(output + "\n")
+    if not critical_only:
+        print(output)
+    if f:
+        f.write(output + "\n")
 
-	if f:
-		print("INFO: Output report file '{}' created".format(report))
-	else:
-		print("INFO: Use '-r repfile' to produce report file with more information")
+    if f:
+        print("INFO: Output report file '{}' created".format(report))
+    else:
+        print("INFO: Use '-r repfile' to produce report file with more information")
 
 def create_bdignores():
-	filecount = 0
-	foldercount = 0
+    filecount = 0
+    foldercount = 0
 
-	for bdpath in bdignore_list:
-		bdignore_file = os.path.join(os.path.dirname(bdpath), ".bdignore")
-		if not os.path.exists(bdignore_file):
-			try:
-				b = open(bdignore_file, "a")
-				b.write("/" + os.path.basename(bdpath) + "/\n")
-				b.close()
-				#print("INFO: '.bdignore' file created in project folder")
-				filecount += 1
-			except Exception as e:
-				print('ERROR: Unable to create .bdignore file\n' + str(e))
-		else:
-			# Check whether entry exists
-			try:
-				b = open(bdignore_file, "r")
-				lines = b.readlines()
-				exists = False
-				for line in lines:
-					if line == "/" + os.path.basename(bdpath) + "/\n":
-						exists = True
-				b.close()
-				if not exists:
-					b = open(bdignore_file, "a")
-					b.write("/" + os.path.basename(bdpath) + "/\n")
-					b.close()
-			except Exception as e:
-				print('ERROR: Unable to update .bdignore file\n' + str(e))
-		foldercount += 1
-	print("INFO: Created/updated {} .bdignore files to ignore {} folders\n".format(filecount, foldercount))
+    for bdpath in bdignore_list:
+        bdignore_file = os.path.join(os.path.dirname(bdpath), ".bdignore")
+        if not os.path.exists(bdignore_file):
+            try:
+                b = open(bdignore_file, "a")
+                b.write("/" + os.path.basename(bdpath) + "/\n")
+                b.close()
+                #print("INFO: '.bdignore' file created in project folder")
+                filecount += 1
+            except Exception as e:
+                print('ERROR: Unable to create .bdignore file\n' + str(e))
+        else:
+            # Check whether entry exists
+            try:
+                b = open(bdignore_file, "r")
+                lines = b.readlines()
+                exists = False
+                for line in lines:
+                    if line == "/" + os.path.basename(bdpath) + "/\n":
+                        exists = True
+                b.close()
+                if not exists:
+                    b = open(bdignore_file, "a")
+                    b.write("/" + os.path.basename(bdpath) + "/\n")
+                    b.close()
+            except Exception as e:
+                print('ERROR: Unable to update .bdignore file\n' + str(e))
+        foldercount += 1
+    print("INFO: Created/updated {} .bdignore files to ignore {} folders\n".format(filecount, foldercount))
 
 def output_config(projdir):
 
-	#config_file = os.path.join(projdir, "application-project.yml")
-	config_file = os.path.join(os.getcwd(), "application-project.yml")
-	#config_file = os.path "application-project.yml")
-	if not os.path.exists(config_file):
-		config = "#\n# EXAMPLE PROJECT CONFIG FILE\n" + \
-		"# Uncomment and update required options\n#\n#\n" + \
-		"# DETECT COMMAND TO RUN:\n#\n" + cli_msgs_dict['detect'] + "\n" + \
-		"# MINIMUM REQUIRED OPTIONS:\n#\n" + cli_msgs_dict['reqd'] + "\n" + \
-		"# OPTIONS TO IMPROVE SCAN COVERAGE:\n#\n" + cli_msgs_dict['scan'] + "\n" + \
-		"# OPTIONS TO REDUCE SIGNATURE SCAN SIZE:\n#\n" + cli_msgs_dict['size'] + "\n" + \
-		"# OPTIONS TO CONFIGURE DEPENDENCY SCAN:\n#\n" + cli_msgs_dict['dep'] + "\n" + \
-		"# OPTIONS TO IMPROVE LICENSE COMPLIANCE ANALYSIS:\n#\n" + cli_msgs_dict['lic'] + "\n" + \
-		"# PROJECT OPTIONS:\n#\n" + cli_msgs_dict['proj'] + "\n" + \
-		"# REPORTING OPTIONS:\n#\n" + cli_msgs_dict['rep'] + "\n" + \
-		"# DOCKER SCANNING:\n#\n" + cli_msgs_dict['docker'] + "\n"
+    #config_file = os.path.join(projdir, "application-project.yml")
+    config_file = os.path.join(os.getcwd(), "application-project.yml")
+    #config_file = os.path "application-project.yml")
+    if not os.path.exists(config_file):
+        config = "#\n# EXAMPLE PROJECT CONFIG FILE\n" + \
+        "# Uncomment and update required options\n#\n#\n" + \
+        "# DETECT COMMAND TO RUN:\n#\n" + cli_msgs_dict['detect'] + "\n" + \
+        "# MINIMUM REQUIRED OPTIONS:\n#\n" + cli_msgs_dict['reqd'] + "\n" + \
+        "# OPTIONS TO IMPROVE SCAN COVERAGE:\n#\n" + cli_msgs_dict['scan'] + "\n" + \
+        "# OPTIONS TO REDUCE SIGNATURE SCAN SIZE:\n#\n" + cli_msgs_dict['size'] + "\n" + \
+        "# OPTIONS TO CONFIGURE DEPENDENCY SCAN:\n#\n" + cli_msgs_dict['dep'] + "\n" + \
+        "# OPTIONS TO IMPROVE LICENSE COMPLIANCE ANALYSIS:\n#\n" + cli_msgs_dict['lic'] + "\n" + \
+        "# PROJECT OPTIONS:\n#\n" + cli_msgs_dict['proj'] + "\n" + \
+        "# REPORTING OPTIONS:\n#\n" + cli_msgs_dict['rep'] + "\n" + \
+        "# DOCKER SCANNING:\n#\n" + cli_msgs_dict['docker'] + "\n"
 
-		config = re.sub("=", ": ", config)
-		config = re.sub(r"\n ", r"\n#", config, flags=re.S)
-		config = re.sub(r"\n--", r"\n#", config, flags=re.S)
-		try:
-			c = open(config_file, "a")
-			c.write(config)
-			c.close()
-			print("INFO: Config file 'application-project.yml' file written to project folder (Edit to uncomment options)\n" + \
-			"      - Use '--spring.profiles.active=project' to specify this configuration")
-		except Exception as e:
-			print('ERROR: Unable to create project config file ' + str(e))
-	else:
-		print("INFO: Project config file 'application-project.yml' already exists - not updated")
+        config = re.sub("=", ": ", config)
+        config = re.sub(r"\n ", r"\n#", config, flags=re.S)
+        config = re.sub(r"\n--", r"\n#", config, flags=re.S)
+        try:
+            c = open(config_file, "a")
+            c.write(config)
+            c.close()
+            print("INFO: Config file 'application-project.yml' file written to project folder (Edit to uncomment options)\n" + \
+            "      - Use '--spring.profiles.active=project' to specify this configuration")
+        except Exception as e:
+            print('ERROR: Unable to create project config file ' + str(e))
+    else:
+        print("INFO: Project config file 'application-project.yml' already exists - not updated")
 
 def check_input_options(prompt, accepted_values):
-	value = input(prompt)
-	if value == "":
-		return(0)
-	ret = value[0].lower()
-	if ret == "q":
-		raise Exception("quit")
-	ind = 0
-	for val in accepted_values:
-		if ret == val[0].lower():
-			return(ind)
-		ind += 1
-	raise Exception("quit")
+    value = input(prompt)
+    if value == "":
+        return(0)
+    ret = value[0].lower()
+    if ret == "q":
+        raise Exception("quit")
+    ind = 0
+    for val in accepted_values:
+        if ret == val[0].lower():
+            return(ind)
+        ind += 1
+    raise Exception("quit")
 
 def check_input_yn(prompt, default):
-	if default:
-		prompt += " [y]:"
-	else:
-		prompt += " [n]:"
+    if default:
+        prompt += " [y]:"
+    else:
+        prompt += " [n]:"
 
-	value = input(prompt)
-	if value == "":
-		return(default)
-	ret = value[0].lower()
-	if ret == "q":
-		raise Exception("quit")
-		print("GOT HERE")
-	if ret == "y":
-		return(True)
-	elif ret == "n":
-		return(False)
-	raise Exception("quit")
+    value = input(prompt)
+    if value == "":
+        return(default)
+    ret = value[0].lower()
+    if ret == "q":
+        raise Exception("quit")
+        print("GOT HERE")
+    if ret == "y":
+        return(True)
+    elif ret == "n":
+        return(False)
+    raise Exception("quit")
 
 def backup_repfile(filename):
-	import os, shutil
+    import os, shutil
 
-	if os.path.isfile(filename):
-		# Determine root filename so the extension doesn't get longer
-		n, e = os.path.splitext(filename)
+    if os.path.isfile(filename):
+        # Determine root filename so the extension doesn't get longer
+        n, e = os.path.splitext(filename)
 
-		# Is e an integer?
-		try:
-			num = int(e)
-			root = n
-		except ValueError:
-			root = filename
+        # Is e an integer?
+        try:
+            num = int(e)
+            root = n
+        except ValueError:
+            root = filename
 
-		# Find next available file version
-		for i in range(1000):
-			new_file = "{}.{:03d}".format(root, i)
-			if not os.path.isfile(new_file):
-				os.rename(filename, new_file)
-				print("INFO: Moved old report file '{}' to '{}'\n".format(filename, new_file))
-				return(new_file)
-	return("")
+        # Find next available file version
+        for i in range(1000):
+            new_file = "{}.{:03d}".format(root, i)
+            if not os.path.isfile(new_file):
+                os.rename(filename, new_file)
+                print("INFO: Moved old report file '{}' to '{}'\n".format(filename, new_file))
+                return(new_file)
+    return("")
 
 def interactive(scanfolder, scantype, docker, critical_only, report, output_config, bdignore):
-	if scanfolder == "" or scanfolder == None:
-		scanfolder = os.getcwd()
+    if scanfolder == "" or scanfolder == None:
+        scanfolder = os.getcwd()
 
-	# @@@ remove code
-	scanfolder = "/Users/damonw/bds/problems/trailheads/strange_debian_postgres"
-	try:
-		folder = input("Enter project folder to scan (default current folder '{}'):".format(scanfolder))
-	except:
-		print("Exiting")
-		raise("quit")
-		return("", "", False, False, "", False)
-	if folder == "":
-		folder = scanfolder
-	elif not os.path.isdir(folder):
-		print("Scan location '{}' does not exist\nExiting".format(folder))
-		raise("quit")
-		return("", "", False, False, "", False)
-	try:
-		if scantype == "d":
-			mylist = ['d','b','s']
-		elif scantype == "s":
-			mylist = ['s','d','b']
-		else:
-			mylist = ['b','d','s']
-		scantype = check_input_options("Types of scan to check? (b)oth, (d)ependency or (s)ignature] [{}]:".format(scantype), mylist)
-		docker_bool = check_input_yn("Docker scan check? (y/n)", docker)
-		critical_bool = check_input_yn("Critical recommendations only? (y/n)", critical_only)
-		if report != "":
-			rep_default = True
-		else:
-			rep_default = False
-			report = "report.txt"
-		report_bool = check_input_yn("Create output report file? (y/n)", rep_default)
-		if report_bool:
-			rep = input("Report file name [{}]:".format(report))
-			if rep != "":
-				report = rep
-		bdignore_bool = check_input_yn("Create .bdignore files within sub-folders to exclude folders from scan (USE WITH CAUTION)? (y/n)", bdignore)
-		config_bool = check_input_yn("Create application-project.yml file? (y/n)", output_config)
-	except:
-		print("Exiting")
-		raise("quit")
-		return("", "", False, False, "", False)
-	return(folder, scantype, docker_bool, critical_bool, report, config_bool, bdignore_bool)
+    # @@@ remove code
+    scanfolder = "/Users/damonw/bds/problems/trailheads/strange_debian_postgres"
+    try:
+        folder = input("Enter project folder to scan (default current folder '{}'):".format(scanfolder))
+    except:
+        print("Exiting")
+        raise("quit")
+        return("", "", False, False, "", False)
+    if folder == "":
+        folder = scanfolder
+    elif not os.path.isdir(folder):
+        print("Scan location '{}' does not exist\nExiting".format(folder))
+        raise("quit")
+        return("", "", False, False, "", False)
+    try:
+        if scantype == "d":
+            mylist = ['d','b','s']
+        elif scantype == "s":
+            mylist = ['s','d','b']
+        else:
+            mylist = ['b','d','s']
+        scantype = check_input_options("Types of scan to check? (b)oth, (d)ependency or (s)ignature] [{}]:".format(scantype), mylist)
+        docker_bool = check_input_yn("Docker scan check? (y/n)", docker)
+        critical_bool = check_input_yn("Critical recommendations only? (y/n)", critical_only)
+        if report != "":
+            rep_default = True
+        else:
+            rep_default = False
+            report = "report.txt"
+        report_bool = check_input_yn("Create output report file? (y/n)", rep_default)
+        if report_bool:
+            rep = input("Report file name [{}]:".format(report))
+            if rep != "":
+                report = rep
+        bdignore_bool = check_input_yn("Create .bdignore files within sub-folders to exclude folders from scan (USE WITH CAUTION)? (y/n)", bdignore)
+        config_bool = check_input_yn("Create application-project.yml file? (y/n)", output_config)
+    except:
+        print("Exiting")
+        raise("quit")
+        return("", "", False, False, "", False)
+    return(folder, scantype, docker_bool, critical_bool, report, config_bool, bdignore_bool)
 
 
-def get_detector_search_depth_args():
-	search_depth_args = ['detect.detector.search.continue: true'] # always use
+def get_detector_search_depth():
+    if coverage < 3:
+        search_depth = det_min_depth if not None else 0  # distance to package manager
+    if 3 < coverage < 7:
+        search_depth = int(det_max_depth/2) if (det_max_depth and int(det_max_depth/2) > 0) else 1
+    if coverage > 6:
+        search_depth = det_max_depth if det_max_depth else 1
 
-	if coverage < 3:
-		search_depth = det_min_depth if not None else 0  # distance to package manager
-	if 3 < coverage < 7:
-		search_depth = int(det_max_depth/2) if (det_max_depth and int(det_max_depth/2) > 0) else 1
-	if coverage > 6:
-		search_depth = det_max_depth if det_max_depth else 1
-
-	search_depth_args.append('detect.detector.search.depth: {}'.format(search_depth))
-
-	return search_depth_args
+    return search_depth
 
 
 def get_detector_exclusion_args():
-	detector_exclusion_args = []
-	if coverage < 4:
-		detector_exclusion_args.append('detect.detector.search.exclusion: test,samples,examples')
-	if coverage > 8:
-		detector_exclusion_args.append('detect.detector.search.exclusion.defaults: false')
-	#'detect.detector.search.exclusion.patterns'
-	#'detect.detector.search.exclusion.paths'
-	#'detect.detector.search.exclusion.files' # meant for package manager dependency files to prevent them from being found and applying a particular package manager to the scan
-	return detector_exclusion_args
-
-
-def get_detector_dev_dependeny_args():
-	return
-
-
-def get_detector_package_manager_args():
-	detector_package_manager_args = []
-	if package_managers_missing:
-		if coverage > 3:
-			detector_package_manager_args.append('detect.detector.buildless: true')
-		if coverage <= 3:
-			detector_package_manager_args.append('detect.tools.excluded: DETECTOR')
-
-	return detector_package_manager_args
+    detector_exclusion_args = []
+    if coverage < 4:
+        detector_exclusion_args.append('detect.detector.search.exclusion: test,samples,examples')
+    if coverage > 8:
+        detector_exclusion_args.append('detect.detector.search.exclusion.defaults: false')
+    #'detect.detector.search.exclusion.patterns'
+    #'detect.detector.search.exclusion.paths'
+    #'detect.detector.search.exclusion.files' # meant for package manager dependency files to prevent them from being found and applying a particular package manager to the scan
+    return detector_exclusion_args
 
 
 def get_detector_args():
-	detector_args = []
-	for item in get_detector_search_depth_args():
-		detector_args.append(item)
+    detector_args = []
+    for item in get_detector_exclusion_args():
+        detector_args.append(item)
 
-	for item in get_detector_exclusion_args():
-		detector_args.append(item)
+    return detector_args
 
-	#for item in get_detector_dev_dependeny_args():
-	#	detector_args.append(item)
 
-	for item in get_detector_package_manager_args():
-		detector_args.append(item)
+def uncomment_min_required_options(data, start_index, end_index):
 
-	return detector_args
+    for line in data [start_index:end_index]:
+        data[data.index(line)] = uncomment_line(line, "blackduck.url")
+        data[data.index(line)] = uncomment_line(line, "detect.source.path")
+        # @@@ This is only for the case where we don't have the package manager
+        """
+        if coverage > 3:
+                data[data.index(line)] = uncomment_line(line, "detect.detector.buildless")
+        else:
+            data[data.index(line)] = ('detect.tools.excluded: DETECTOR\n')
+        """
+        if 'blackduck.api.token' in line:
+            data[data.index(line)] = line.replace('#', '').replace('YOURTOKEN', api_token)
+        elif 'OR' not in line:
+            data[data.index(line)]= line.replace('#', '')
+    return data
+
+
+def uncomment_improve_scan_coverage_options(data, start_index, end_index):
+    for line in data [start_index:end_index]:
+        if 'detect.detector.search.depth' in line:
+            data[data.index(line)] = 'detect.detector.search.depth: {}'.format(get_detector_search_depth())
+            data.append('detect.detector.search.continue: true')
+
+    return data
+
 
 def uncomment_line(line, key):
-	if key in line:
-		return line.replace('#', '')
-	else:
-		return line
+    if key in line:
+        return line.replace('#', '')
+    else:
+        return line
+
+def uncomment_line_from_data(data, key):
+    for line in data:
+        data[data.index(line)] = uncomment_line(line, "detect.docker.tar")
 
 def uncomment_detect_commands():
-	print("opening file")
-	config_file = os.path.join(args.scanfolder, "application-project.yml")
-	with open('application-project.yml', 'r+') as f:
-		data = f.readlines()
+    print("opening file")
+    config_file = os.path.join(args.scanfolder, "application-project.yml")
+    with open('application-project.yml', 'r+') as f:
+        data = f.readlines()
 
-	detector_args = get_detector_args()
+    detector_args = get_detector_args()
 
-	for line in data:
-		data[data.index(line)] = uncomment_line(line, "blackduck.url")
-		data[data.index(line)] = uncomment_line(line, "detect.source.path")
-		data[data.index(line)] = uncomment_line(line, "detect.docker.tar")
-		if 'blackduck.api.token' in line:
-			data[data.index(line)] = line.replace('#', '').replace('YOURTOKEN', api_token)
-		for arg in detector_args:
-			if arg in line:
-				data[data.index(line)] = line.replace('#', '')
-				detector_args.remove(arg)
+    min_req_idx = [idx for idx, s in enumerate(data) if 'MINIMUM REQUIRED OPTIONS' in s][0]
+    improve_scan_coverage_idx = [idx for idx, s in enumerate(data) if 'OPTIONS TO IMPROVE SCAN COVERAGE' in s][0] #if cli_msgs_dict['scan'] else None
+    reduce_signature_size_idx = [idx for idx, s in enumerate(data) if 'OPTIONS TO REDUCE SIGNATURE SCAN SIZE' in s][0] #if cli_msgs_dict['size'] else None
+    optimize_dependency_scan_idx = [idx for idx, s in enumerate(data) if 'DEPENDENCY SCAN' in s][0] #if cli_msgs_dict['dep'] else None
+    improve_license_compliance_idx = [idx for idx, s in enumerate(data) if 'OPTIONS TO IMPROVE LICENSE COMPLIANCE ANALYSIS' in s][0] #if cli_msgs_dict['lic'] else None
+    project_options_idx = [idx for idx, s in enumerate(data) if 'PROJECT OPTIONS' in s][0] #if cli_msgs_dict['proj'] else None
+    reporting_options_idx = [idx for idx, s in enumerate(data) if 'REPORTING OPTIONS' in s][0] #if cli_msgs_dict['rep'] else None
 
-	for arg in detector_args:
-		data.append(arg + '\n')
+    indices = [improve_scan_coverage_idx, reduce_signature_size_idx, optimize_dependency_scan_idx, improve_license_compliance_idx, project_options_idx, reporting_options_idx, -1]
 
-	with open(config_file, 'w') as f:
-		f.writelines(data)
+    data = uncomment_min_required_options(data, min_req_idx+1, next(item for item in indices if item is not None)-1)
+    if coverage > 4:
+        uncomment_line_from_data(data, "detect.docker.tar")
+
+    if improve_scan_coverage_idx:
+        indices.remove(improve_scan_coverage_idx)
+        data = uncomment_improve_scan_coverage_options(data, improve_scan_coverage_idx+1, next(item for item in indices if item is not None)-1)
+
+    for arg in detector_args: # additional args not accounted for by reccomendations
+        data.append(arg + '\n')
+
+    with open(config_file, 'w') as f:
+        f.writelines(data)
 
 def run_detect():
-	uncomment_detect_commands()
-	detect_command = cli_msgs_dict['detect'].strip() + ' ' + '--spring.profiles.active=project' + ' ' + ' --blackduck.trust.cert=true'
-	print("Running command: {}\n".format(detect_command))
-	p = subprocess.Popen(detect_command, shell=True, executable='/bin/bash',
-						 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-	stdout, stderr = p.communicate()
-	out_file = 'latest_detect_run.txt'
-	err_file = 'latest_detect_errors.txt'
-	out = open(out_file, 'w')
-	err = open(err_file, 'w')
+    uncomment_detect_commands()
+    detect_command = cli_msgs_dict['detect'].strip() + ' ' + '--spring.profiles.active=project' + ' ' + ' --blackduck.trust.cert=true'
+    print("Running command: {}\n".format(detect_command))
+    p = subprocess.Popen(detect_command, shell=True, executable='/bin/bash',
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stdout, stderr = p.communicate()
+    out_file = 'latest_detect_run.txt'
+    err_file = 'latest_detect_errors.txt'
+    out = open(out_file, 'w')
+    err = open(err_file, 'w')
 
-	out.write(stdout.decode('utf-8'))
-	err.write(stderr.decode('utf-8'))
+    out.write(stdout.decode('utf-8'))
+    err.write(stderr.decode('utf-8'))
 
-	print("Detect logs written to: {}".format(out_file))
+    print("Detect logs written to: {}".format(out_file))
 
 
 parser = argparse.ArgumentParser(description='Check prerequisites for Detect, scan folders, provide recommendations and example CLI options', prog='detect_advisor')
@@ -1663,28 +1675,28 @@ parser.add_argument("--docker_only", help="Only check docker prerequisites",acti
 args = parser.parse_args()
 
 if args.scanfolder == "" or args.interactive:
-# 	try:
-		if args.detector_only:
-			scantype = "d"
-		elif args.signature_only:
-			scantype = "s"
-		else:
-			scantype = "b"
-		args.scanfolder, scantype, args.docker, args.critical_only, args.report, args.output_config, args.bdignore = interactive(args.scanfolder, scantype, args.docker, args.critical_only, args.report, args.output_config, args.bdignore)
-		if scantype == "d":
-			args.detector_only = True
-		elif scantype == "s":
-			args.signature_only = True
-# 	except:
-# 		sys.exit(1)
+#     try:
+        if args.detector_only:
+            scantype = "d"
+        elif args.signature_only:
+            scantype = "s"
+        else:
+            scantype = "b"
+        args.scanfolder, scantype, args.docker, args.critical_only, args.report, args.output_config, args.bdignore = interactive(args.scanfolder, scantype, args.docker, args.critical_only, args.report, args.output_config, args.bdignore)
+        if scantype == "d":
+            args.detector_only = True
+        elif scantype == "s":
+            args.signature_only = True
+#     except:
+#         sys.exit(1)
 
 if not os.path.isdir(args.scanfolder):
-	print("Scan location '{}' does not exist\nExiting".format(args.scanfolder))
-	sys.exit(1)
+    print("Scan location '{}' does not exist\nExiting".format(args.scanfolder))
+    sys.exit(1)
 
 if args.report and os.path.exists(args.report):
-	backup = backup_repfile(args.report)
-	print("Report file '{}' already existed - backed up to {}".format(args.report, backup))
+    backup = backup_repfile(args.report)
+    print("Report file '{}' already existed - backed up to {}".format(args.report, backup))
 
 rep = ""
 
@@ -1695,63 +1707,63 @@ print("\nDETECT ADVISOR v{} - for use with Synopsys Detect versions up to v{}\n"
 print("PROCESSING:")
 
 if os.path.isabs(args.scanfolder):
-	print("Working on project folder '{}'\n".format(args.scanfolder))
+    print("Working on project folder '{}'\n".format(args.scanfolder))
 else:
-	print("Working on project folder '{}' (Absolute path '{}')\n".format(args.scanfolder, os.path.abspath(args.scanfolder)))
+    print("Working on project folder '{}' (Absolute path '{}')\n".format(args.scanfolder, os.path.abspath(args.scanfolder)))
 
 print("- Reading hierarchy          .....", end="", flush=True)
 process_dir(args.scanfolder, 0, False)
 print(" Done")
 
 if args.report:
-	try:
-		f = open(args.report, "a")
-	except Exception as e:
-		print('ERROR: Unable to create output report file \n' + str(e))
-		sys.exit(3)
+    try:
+        f = open(args.report, "a")
+    except Exception as e:
+        print('ERROR: Unable to create output report file \n' + str(e))
+        sys.exit(3)
 else:
-	f = None
+    f = None
 
 if not (args.signature_only or args.docker_only):
-#	if args.full:
-	if True:
-		detector_process(args.scanfolder, f)
-	else:
-		detector_process(args.scanfolder, None)
+#    if args.full:
+    if True:
+        detector_process(args.scanfolder, f)
+    else:
+        detector_process(args.scanfolder, None)
 if args.signature_only:
-	cli_msgs_dict['reqd'] += "--detect.tools=SIGNATURE_SCAN\n"
+    cli_msgs_dict['reqd'] += "--detect.tools=SIGNATURE_SCAN\n"
 
 if not args.detector_only and not args.docker_only:
-#	if args.full:
-	if True:
-			signature_process(args.scanfolder, f)
-	else:
-		signature_process(args.scanfolder, None)
+#    if args.full:
+    if True:
+            signature_process(args.scanfolder, f)
+    else:
+        signature_process(args.scanfolder, None)
 if args.detector_only:
-	cli_msgs_dict['reqd'] += "--detect.tools=DETECTOR\n"
+    cli_msgs_dict['reqd'] += "--detect.tools=DETECTOR\n"
 
 print_summary(args.critical_only, f)
 
 check_prereqs()
 
 if args.docker or args.docker_only:
-	check_docker_prereqs()
+    check_docker_prereqs()
 if args.docker_only:
-	cli_msgs_dict['reqd'] += "--detect.tools=DOCKER\n"
+    cli_msgs_dict['reqd'] += "--detect.tools=DOCKER\n"
 
 output_recs(args.critical_only, f)
 
 output_cli(args.critical_only, args.report, f)
 
 if args.output_config:
-	output_config(args.scanfolder)
-	run_detect()
+    output_config(args.scanfolder)
+    run_detect()
 
 if args.bdignore:
-	create_bdignores()
+    create_bdignores()
 
 print("")
 if f:
-	f.write("\n")
-	f.close()
+    f.write("\n")
+    f.close()
 
