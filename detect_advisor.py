@@ -1068,7 +1068,7 @@ def detector_process(folder, f):
 		recs_msgs_dict['imp'] += "- IMPORTANT: No package manager files found in invocation folder but do exist in sub-folders\n" + \
 		"    Impact:  Dependency scan will not be run\n" + \
 		"    Action:  Specify --detect.detector.search.depth={} (although depth could be up to {})\n".format(det_min_depth, det_max_depth) + \
-		"             optionally with -detect.detector.search.continue=true or scan sub-folders separately.\n\n"
+		"             optionally with --detect.detector.search.continue=true or scan sub-folders separately.\n\n"
 		if cli_msgs_dict['scan'].find("detector.search.depth") < 0:
 			cli_msgs_dict['scan'] += "--detect.detector.search.depth={}\n".format(det_min_depth) + \
 			"    optionally with optionally with -detect.detector.search.continue=true\n" + \
@@ -1513,9 +1513,7 @@ def interactive(scanfolder, scantype, docker, critical_only, report, output_conf
 	return(folder, scantype, docker_bool, critical_bool, report, config_bool, bdignore_bool)
 
 
-def get_detector_search_depth_args():
-	search_depth_args = ['detect.detector.search.continue: true'] # always use
-
+def get_detector_search_depth():
 	if coverage < 3:
 		search_depth = det_min_depth if not None else 0  # distance to package manager
 	if 3 < coverage < 7:
@@ -1523,9 +1521,7 @@ def get_detector_search_depth_args():
 	if coverage > 6:
 		search_depth = det_max_depth if det_max_depth else 1
 
-	search_depth_args.append('detect.detector.search.depth: {}'.format(search_depth))
-
-	return search_depth_args
+	return search_depth
 
 
 def get_detector_exclusion_args():
@@ -1540,55 +1536,72 @@ def get_detector_exclusion_args():
 	return detector_exclusion_args
 
 
-def get_detector_dev_dependeny_args():
-	return
-
-
-def get_detector_package_manager_args():
-	detector_package_manager_args = []
-	if package_managers_missing:
-		if coverage > 3:
-			detector_package_manager_args.append('detect.detector.buildless: true')
-		if coverage <= 3:
-			detector_package_manager_args.append('detect.tools.excluded: DETECTOR')
-
-	return detector_package_manager_args
-
-
 def get_detector_args():
 	detector_args = []
-	for item in get_detector_search_depth_args():
-		detector_args.append(item)
-
 	for item in get_detector_exclusion_args():
-		detector_args.append(item)
-
-	#for item in get_detector_dev_dependeny_args():
-	#	detector_args.append(item)
-
-	for item in get_detector_package_manager_args():
 		detector_args.append(item)
 
 	return detector_args
 
+
+def uncomment_min_required_options(data, start_index, end_index):
+	for line in data [start_index:end_index]:
+		if 'blackduck.api.token' in line:
+			data[data.index(line)] = line.replace('#', '').replace('YOURTOKEN', api_token)
+		elif 'detect.detector.buildless' in line:
+			if coverage > 3:
+				data[data.index(line)] = line.replace('#', '')
+			else:
+				data[data.index(line)] = ('detect.tools.excluded: DETECTOR\n')
+		elif 'OR' not in line:
+			data[data.index(line)]= line.replace('#', '')
+	return data
+
+
+def uncomment_improve_scan_coverage_options(data, start_index, end_index):
+	for line in data [start_index:end_index]:
+		if 'detect.detector.search.depth' in line:
+			data[data.index(line)] = 'detect.detector.search.depth: {}'.format(get_detector_search_depth())
+			data.append('detect.detector.search.continue: true')
+
+	return data
+
+
 def uncomment_detect_commands():
-	print("opening file")
 	with open('application-project.yml', 'r+') as f:
 		data = f.readlines()
 
 	detector_args = get_detector_args()
 
-	for line in data:
-		if "blackduck.url" in line or 'detect.source.path' in line:
-			data[data.index(line)]= line.replace('#', '')
-		if 'blackduck.api.token' in line:
-			data[data.index(line)] = line.replace('#', '').replace('YOURTOKEN', api_token)
-		for arg in detector_args:
-			if arg in line:
-				data[data.index(line)] = line.replace('#', '')
-				detector_args.remove(arg)
+	min_req_idx = [idx for idx, s in enumerate(data) if 'MINIMUM REQUIRED OPTIONS' in s][0]
+	improve_scan_coverage_idx = [idx for idx, s in enumerate(data) if 'OPTIONS TO IMPROVE SCAN COVERAGE' in s][0] #if cli_msgs_dict['scan'] else None
+	reduce_signature_size_idx = [idx for idx, s in enumerate(data) if 'OPTIONS TO REDUCE SIGNATURE SCAN SIZE' in s][0] #if cli_msgs_dict['size'] else None
+	optimize_dependency_scan_idx = [idx for idx, s in enumerate(data) if 'DEPENDENCY SCAN' in s][0] #if cli_msgs_dict['dep'] else None
+	improve_license_compliance_idx = [idx for idx, s in enumerate(data) if 'OPTIONS TO IMPROVE LICENSE COMPLIANCE ANALYSIS' in s][0] #if cli_msgs_dict['lic'] else None
+	project_options_idx = [idx for idx, s in enumerate(data) if 'PROJECT OPTIONS' in s][0] #if cli_msgs_dict['proj'] else None
+	reporting_options_idx = [idx for idx, s in enumerate(data) if 'REPORTING OPTIONS' in s][0] #if cli_msgs_dict['rep'] else None
 
-	for arg in detector_args:
+	indices = [improve_scan_coverage_idx, reduce_signature_size_idx, optimize_dependency_scan_idx, improve_license_compliance_idx, project_options_idx, reporting_options_idx, -1]
+
+	data = uncomment_min_required_options(data, min_req_idx+1, next(item for item in indices if item is not None)-1)
+
+	if improve_scan_coverage_idx:
+		indices.remove(improve_scan_coverage_idx)
+		data = uncomment_improve_scan_coverage_options(data, improve_scan_coverage_idx+1, next(item for item in indices if item is not None)-1)
+
+	#if reduce_signature_size_idx:
+	#	data = uncomment_reduce_signature_size_options(data, reduce_signature_size_idx, next(item for item in indices if item is not None))
+	#    indices.remove(reduce_signature_size_idx)
+
+	#if optimize_dependency_scan_idx:
+	#	data = uncomment_optimize_dependency_scan(data, optimize_dependency_scan_idx, next(item for item in indices if item is not None))
+	#	indices.remove(optimize_dependency_scan_idx)
+
+	#if improve_license_compliance_idx:
+	#	data = uncomment_improve_license_compliance(data, improve_license_compliance_idx, next(item for item in indices if item is not None))
+	#	indices.remove(optimize_dependency_scan_idx)
+
+	for arg in detector_args: # additional args not accounted for by reccomendations
 		data.append(arg + '\n')
 
 	with open('application-project.yml', 'w') as f:
