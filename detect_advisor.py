@@ -1596,6 +1596,12 @@ def get_detector_args():
 
 	return detector_args
 
+def uncomment_line(line, key):
+	if key in line:
+		return line.replace('#', '')
+	else:
+		return line
+
 def uncomment_detect_commands():
 	print("opening file")
 	config_file = os.path.join(args.scanfolder, "application-project.yml")
@@ -1605,8 +1611,9 @@ def uncomment_detect_commands():
 	detector_args = get_detector_args()
 
 	for line in data:
-		if "blackduck.url" in line or 'detect.source.path' in line:
-			data[data.index(line)]= line.replace('#', '')
+		data[data.index(line)] = uncomment_line(line, "blackduck.url")
+		data[data.index(line)] = uncomment_line(line, "detect.source.path")
+		data[data.index(line)] = uncomment_line(line, "detect.docker.tar")
 		if 'blackduck.api.token' in line:
 			data[data.index(line)] = line.replace('#', '').replace('YOURTOKEN', api_token)
 		for arg in detector_args:
