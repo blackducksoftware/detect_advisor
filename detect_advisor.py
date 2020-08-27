@@ -1569,11 +1569,19 @@ def get_detector_args():
     return detector_args
 
 
+def uncomment_line(line, key):
+    if key in line:
+        return line.replace('#', '')
+    else:
+        return line
+
 def uncomment_min_required_options(data, start_index, end_index):
 
     for line in data [start_index:end_index]:
-        data[data.index(line)] = uncomment_line(line, "blackduck.url")
-        data[data.index(line)] = uncomment_line(line, "detect.source.path")
+        if "blackduck.url" in line or "detect.source.path" in line:
+            data[data.index(line)] = line.replace('#', '')
+            continue
+
         # @@@ This is only for the case where we don't have the package manager
         """
         if coverage > 3:
@@ -1596,20 +1604,12 @@ def uncomment_improve_scan_coverage_options(data, start_index, end_index):
 
     return data
 
-
-def uncomment_line(line, key):
-    if key in line:
-        return line.replace('#', '')
-    else:
-        return line
-
 def uncomment_line_from_data(data, key):
     for line in data:
-        data[data.index(line)] = uncomment_line(line, "detect.docker.tar")
+        data[data.index(line)] = uncomment_line(line, key)
 
-def uncomment_detect_commands():
+def uncomment_detect_commands(config_file):
     print("opening file")
-    config_file = os.path.join(args.scanfolder, "application-project.yml")
     with open('application-project.yml', 'r+') as f:
         data = f.readlines()
 
@@ -1640,8 +1640,9 @@ def uncomment_detect_commands():
         f.writelines(data)
 
 def run_detect():
-    uncomment_detect_commands()
-    detect_command = cli_msgs_dict['detect'].strip() + ' ' + '--spring.profiles.active=project' + ' ' + ' --blackduck.trust.cert=true'
+    config_file = os.path.join(args.scanfolder, "application-project.yml")
+    uncomment_detect_commands(config_file)
+    detect_command = cli_msgs_dict['detect'].strip() + ' ' + '--spring.profiles.active=project' + ' ' + ' --blackduck.trust.cert=true'  + ' ' + ' --spring.config.location=file:' + config_file
     print("Running command: {}\n".format(detect_command))
     p = subprocess.Popen(detect_command, shell=True, executable='/bin/bash',
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE)
