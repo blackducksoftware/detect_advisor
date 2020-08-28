@@ -1573,11 +1573,19 @@ def get_detector_args():
     return detector_args
 
 
+def uncomment_line(line, key):
+    if key in line:
+        return line.replace('#', '')
+    else:
+        return line
+
 def uncomment_min_required_options(data, start_index, end_index):
 
     for line in data [start_index:end_index]:
-        #data[data.index(line)] = uncomment_line(line, "blackduck.url")
-        #data[data.index(line)] = uncomment_line(line, "detect.source.path")
+        if "blackduck.url" in line or "detect.source.path" in line:
+            data[data.index(line)] = uncomment_line(line)
+            continue
+
         # @@@ This is only for the case where we don't have the package manager
         if 'detect.detector.buildless' in line:
             if coverage > 3:
@@ -1607,7 +1615,6 @@ def uncomment_optimize_dependency_options(data, start_index, end_index):
             data[data.index(line)] = uncomment_line(line, 'dev.dependencies: false')
     return data
 
-
 def uncomment_line(line, key=None):
     if key:
         if key in line:
@@ -1615,11 +1622,10 @@ def uncomment_line(line, key=None):
         else:
             return line
     return line.replace('#', '')
-
+5
 def uncomment_line_from_data(data, key):
     for line in data:
-        data[data.index(line)] = uncomment_line(line, "detect.docker.tar")
-
+        data[data.index(line)] = uncomment_line(line, key)
 
 def json_splitter(scan_path, maxNodeEntries=200000, maxScanSize=4500000000):
     """
@@ -1680,9 +1686,8 @@ def json_splitter(scan_path, maxNodeEntries=200000, maxScanSize=4500000000):
 
     return new_scan_files
 
-def uncomment_detect_commands():
+def uncomment_detect_commands(config_file):
     print("opening file")
-    config_file = "application-project.yml"
     with open(config_file, 'r+') as f:
         data = f.readlines()
 
@@ -1724,9 +1729,12 @@ def uncomment_detect_commands():
         f.writelines(data)
 
 def run_detect():
-    uncomment_detect_commands()
-    config_file = os.path.join(args.scanfolder, "application-project.yml")
+    #config_file = os.path.join(args.scanfolder, "application-project.yml")
+    config_file = "application-project.yml"
+    uncomment_detect_commands(config_file)
+
     detect_command = cli_msgs_dict['detect'].strip() + ' ' + '--blackduck.trust.cert=true ' + '--spring.profiles.active=project' #'--detect.source.path={} '.format(args.scanfolder) ' ' 'spring.config.location=file:{} '.format(config_file) +
+
     print("Running command: {}\n".format(detect_command))
 
     p = subprocess.Popen(detect_command, shell=True, executable='/bin/bash',
