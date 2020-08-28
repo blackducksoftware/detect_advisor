@@ -11,17 +11,14 @@ import math
 from datetime import datetime
 from TarExaminer import is_tar_docker
 import re, glob
-
-# TODO: remove constants and take these fields as args
-coverage = 2
-blackduck_url = 'https://eng-spider-hub04.dc1.lan'
-api_token = 'ZDBhN2Q1YjctNWMyMS00YTIwLTg5NjUtMjY1ZmNhMmViNmQxOjE4ZWU3MWE0LTg0YzItNDc0OS1hZTQxLTExZjczNWQ5ODRmYg=='
+from blackduck.HubRestApi import HubInstance
 
 # Constants
-advisor_version = "0.9 Beta"
+advisor_version = "0.95 Beta"
 detect_version = "6.4.0"
 from pydoc import cli
 
+from TarExaminer import is_tar_docker
 
 srcext_list = ['.R','.actionscript','.ada','.adb','.ads','.aidl','.as','.asm','.asp',\
 '.aspx','.awk','.bas','.bat','.bms','.c','.c++','.cbl','.cc','.cfc','.cfm','.cgi','.cls',\
@@ -324,8 +321,7 @@ cli_msgs_dict['detect_win_proxy'] = " (You may need to configure a proxy to down
 "    ${Env:blackduck.proxy.username} = PROXYPASSWORD\n" + \
 "    powershell \"[Net.ServicePointManager]::SecurityProtocol = 'tls12'; irm https://detect.synopsys.com/detect.ps1?$(Get-Random) | iex; detect\"\n"
 cli_msgs_dict['detect'] = ""
-cli_msgs_dict['reqd'] = "--blackduck.url={}\n".format(blackduck_url) + \
-"--blackduck.api.token=YOURTOKEN\n"
+cli_msgs_dict['reqd'] = ""
 cli_msgs_dict['proj'] = "--detect.project.name=PROJECT_NAME\n" + \
 "--detect.project.version.name=VERSION_NAME\n" + \
 "    (OPTIONAL Specify project and version names)\n" + \
@@ -358,6 +354,27 @@ cli_msgs_dict['rep'] = "--detect.wait.for.results=true\n" + \
 "    (OPTIONAL Amount of time in seconds Detect will wait for scans to finish and to generate reports (default 300).\n" + \
 "    300 seconds may be sufficient, but very large scans can take up to 20 minutes (1200 seconds) or longer)\n"
 
+parser = argparse.ArgumentParser(description='Check prerequisites for Detect, scan folders, provide recommendations and example CLI options', prog='detect_advisor')
+
+parser.add_argument("scanfolder", nargs="?", help="Project folder to analyse", default="")
+
+parser.add_argument("-r", "--report", help="Output report file (must not exist already)")
+#parser.add_argument("-d", "--detector_only", help="Check for detector files and prerequisites only",action='store_true')
+#parser.add_argument("-s", "--signature_only", help="Check for files and folders for signature scan only",action='store_true')
+#parser.add_argument("-c", "--critical_only", help="Only show critical issues which will causes detect to fail",action='store_true')
+#parser.add_argument("-f", "--full", help="Output full information to report file if specified",action='store_true')
+#parser.add_argument("-o", "--output_config", help="Create .yml config file in project folder",action='store_true')
+parser.add_argument("-b", "--bdignore", help="Create .bdignore files in sub-folders to exclude folders from scan",action='store_true')
+parser.add_argument("-D", "--docker", help="Check docker prerequisites",action='store_true')
+parser.add_argument("-i", "--interactive", help="Use interactive mode to review/set options",action='store_true')
+parser.add_argument("--docker_only", help="Only check docker prerequisites",action='store_true')
+
+parser.add_argument("-s", "--sensitivity", help="Coverage/sensitivity - 1 = dependency scan only & limited FPs, 10 = all scan types including all potential matches")
+parser.add_argument("-u", "--url", help="Black Duck Server URL")
+parser.add_argument("-a", "--api_token", help="Black Duck Server API Token")
+parser.add_argument("-n", "--no_scan", help="Do not run Detect scan - only create .yml project config file",action='store_true')
+
+args = parser.parse_args()
 
 def process_nested_zip(z, zippath, zipdepth, dirdepth):
     global max_arc_depth
@@ -1407,72 +1424,70 @@ def create_bdignores():
         foldercount += 1
     print("INFO: Created/updated {} .bdignore files to ignore {} folders\n".format(filecount, foldercount))
 
-def output_config(projdir):
+def output_config(conffile):
 
     #config_file = os.path.join(projdir, "application-project.yml")
-    config_file = os.path.join(os.getcwd(), "application-project.yml")
+    #config_file = os.path.join(os.getcwd(), conffile)
     #config_file = os.path "application-project.yml")
-    if os.path.exists(config_file):
-        print("Deleting existing application-project.yml file")
-        os.remove(config_file)
-    config = "#\n# EXAMPLE PROJECT CONFIG FILE\n" + \
-    "# Uncomment and update required options\n#\n#\n" + \
-    "# DETECT COMMAND TO RUN:\n#\n" + cli_msgs_dict['detect'] + "\n" + \
-    "# MINIMUM REQUIRED OPTIONS:\n#\n" + cli_msgs_dict['reqd'] + "\n" + \
-    "# OPTIONS TO IMPROVE SCAN COVERAGE:\n#\n" + cli_msgs_dict['scan'] + "\n" + \
-    "# OPTIONS TO REDUCE SIGNATURE SCAN SIZE:\n#\n" + cli_msgs_dict['size'] + "\n" + \
-    "# OPTIONS TO CONFIGURE DEPENDENCY SCAN:\n#\n" + cli_msgs_dict['dep'] + "\n" + \
-    "# OPTIONS TO IMPROVE LICENSE COMPLIANCE ANALYSIS:\n#\n" + cli_msgs_dict['lic'] + "\n" + \
-    "# PROJECT OPTIONS:\n#\n" + cli_msgs_dict['proj'] + "\n" + \
-    "# REPORTING OPTIONS:\n#\n" + cli_msgs_dict['rep'] + "\n" + \
-    "# DOCKER SCANNING:\n#\n" + cli_msgs_dict['docker'] + "\n"
+    if not os.path.exists(conffile):
+        config = "#\n# EXAMPLE PROJECT CONFIG FILE\n" + \
+        "# Uncomment and update required options\n#\n#\n" + \
+        "# DETECT COMMAND TO RUN:\n#\n" + cli_msgs_dict['detect'] + "\n" + \
+        "# MINIMUM REQUIRED OPTIONS:\n#\n" + cli_msgs_dict['reqd'] + "\n" + \
+        "# OPTIONS TO IMPROVE SCAN COVERAGE:\n#\n" + cli_msgs_dict['scan'] + "\n" + \
+        "# OPTIONS TO REDUCE SIGNATURE SCAN SIZE:\n#\n" + cli_msgs_dict['size'] + "\n" + \
+        "# OPTIONS TO CONFIGURE DEPENDENCY SCAN:\n#\n" + cli_msgs_dict['dep'] + "\n" + \
+        "# OPTIONS TO IMPROVE LICENSE COMPLIANCE ANALYSIS:\n#\n" + cli_msgs_dict['lic'] + "\n" + \
+        "# PROJECT OPTIONS:\n#\n" + cli_msgs_dict['proj'] + "\n" + \
+        "# REPORTING OPTIONS:\n#\n" + cli_msgs_dict['rep'] + "\n" + \
+        "# DOCKER SCANNING:\n#\n" + cli_msgs_dict['docker'] + "\n"
 
-    config = re.sub("=", ": ", config)
-    config = re.sub(r"\n ", r"\n#", config, flags=re.S)
-    config = re.sub(r"\n--", r"\n#", config, flags=re.S)
-    try:
-        c = open(config_file, "a")
-        c.write(config)
-        c.close()
-        print("INFO: Config file 'application-project.yml' file written to project folder (Edit to uncomment options)\n" + \
-        "      - Use '--spring.profiles.active=project' to specify this configuration")
-    except Exception as e:
-        print('ERROR: Unable to create project config file ' + str(e))
-
-def check_input_options(prompt, accepted_values):
-    value = input(prompt)
-    if value == "":
-        return(0)
-    ret = value[0].lower()
-    if ret == "q":
-        raise Exception("quit")
-    ind = 0
-    for val in accepted_values:
-        if ret == val[0].lower():
-            return(ind)
-        ind += 1
-    raise Exception("quit")
-
-def check_input_yn(prompt, default):
-    if default:
-        prompt += " [y]:"
+        config = re.sub("=", ": ", config)
+        config = re.sub(r"\n ", r"\n#", config, flags=re.S)
+        config = re.sub(r"\n--", r"\n#", config, flags=re.S)
+        try:
+            c = open(conffile, "a")
+            c.write(config)
+            c.close()
+#             print("INFO: Config file 'application-project.yml' file written to project folder (Edit to uncomment options)\n" + \
+#             "      - Use '--spring.profiles.active=project' to specify this configuration")
+        except Exception as e:
+            print('ERROR: Unable to create project config file ' + str(e))
     else:
-        prompt += " [n]:"
+        print("INFO: Project config file 'application-project.yml' already exists - not updated")
 
+# def check_input_options(prompt, accepted_values):
+#     value = input(prompt)
+#     if value == "":
+#         return(0)
+#     ret = value[0].lower()
+#     if ret == "q":
+#         raise Exception("quit")
+#     ind = 0
+#     for val in accepted_values:
+#         if ret == val[0].lower():
+#             return(ind)
+#         ind += 1
+#     raise Exception("quit")
+
+def get_input_yn(prompt, default):
     value = input(prompt)
     if value == "":
         return(default)
     ret = value[0].lower()
-    if ret == "q":
-        raise Exception("quit")
-        print("GOT HERE")
+
     if ret == "y":
         return(True)
     elif ret == "n":
         return(False)
-    raise Exception("quit")
 
-def backup_repfile(filename):
+def get_input(prompt, default):
+    value = input(prompt)
+    if value == "":
+        return(default)
+    return(value)
+
+def backup_file(filename, filetype):
     import os, shutil
 
     if os.path.isfile(filename):
@@ -1491,77 +1506,84 @@ def backup_repfile(filename):
             new_file = "{}.{:03d}".format(root, i)
             if not os.path.isfile(new_file):
                 os.rename(filename, new_file)
-                print("INFO: Moved old report file '{}' to '{}'\n".format(filename, new_file))
+                print("INFO: Moved existing {} file '{}' to '{}'\n".format(filetype, filename, new_file))
                 return(new_file)
     return("")
 
-def interactive(scanfolder, scantype, docker, critical_only, report, output_config, bdignore):
+def interactive(scanfolder, url, api, sensitivity, no_scan, report):
     if scanfolder == "" or scanfolder == None:
         scanfolder = os.getcwd()
 
     # @@@ remove code
-    scanfolder = "/Users/damonw/bds/problems/trailheads/strange_debian_postgres"
+#    scanfolder = "/Users/damonw/bds/problems/trailheads/strange_debian_postgres"
     try:
-        folder = input("Enter project folder to scan (default current folder '{}'):".format(scanfolder))
+        scanfolder = get_input("Enter project folder to scan (default current folder '{}'):".format(scanfolder), scanfolder)
     except:
         print("Exiting")
-        raise("quit")
-        return("", "", False, False, "", False)
-    if folder == "":
-        folder = scanfolder
-    elif not os.path.isdir(folder):
-        print("Scan location '{}' does not exist\nExiting".format(folder))
-        raise("quit")
-        return("", "", False, False, "", False)
+        return("", "", "", 0, False, "")
+#     if folder == "":
+#         folder = scanfolder
+    if not os.path.isdir(scanfolder):
+        print("Scan location '{}' does not exist\nExiting".format(scanfolder))
+        return("", "", "", 0, False, "")
     try:
-        if scantype == "d":
-            mylist = ['d','b','s']
-        elif scantype == "s":
-            mylist = ['s','d','b']
-        else:
-            mylist = ['b','d','s']
-        scantype = check_input_options("Types of scan to check? (b)oth, (d)ependency or (s)ignature] [{}]:".format(scantype), mylist)
-        docker_bool = check_input_yn("Docker scan check? (y/n)", docker)
-        critical_bool = check_input_yn("Critical recommendations only? (y/n)", critical_only)
-        if report != "":
-            rep_default = True
-        else:
-            rep_default = False
+        url = get_input("Black Duck Server URL [{}]: ".format(url), url)
+        api = get_input("Black Duck API Token [{}]: ".format(api), api)
+        sensitivity = int(get_input("Scan sensitivity/coverage (1-10) where 1 = dependency scan only, 10 = all scan types including all potential matches [{}]: ".format(sensitivity), sensitivity))
+
+#         if scantype == "d":
+#             mylist = ['d','b','s']
+#         elif scantype == "s":
+#             mylist = ['s','d','b']
+#         else:
+#             mylist = ['b','d','s']
+#         scantype = check_input_options("Types of scan to check? (b)oth, (d)ependency or (s)ignature] [{}]:".format(scantype), mylist)
+#         docker_bool = check_input_yn("Docker scan check? (y/n)", docker)
+#         critical_bool = check_input_yn("Critical recommendations only? (y/n)", critical_only)
+#         if report != "":
+#             rep_default = True
+#         else:
+#             rep_default = False
+#             report = "report.txt"
+#         report_bool = check_input_yn("Create output report file? (y/n)", rep_default)
+#         if report_bool:
+
+        if report == None:
             report = "report.txt"
-        report_bool = check_input_yn("Create output report file? (y/n)", rep_default)
-        if report_bool:
-            rep = input("Report file name [{}]:".format(report))
-            if rep != "":
-                report = rep
-        bdignore_bool = check_input_yn("Create .bdignore files within sub-folders to exclude folders from scan (USE WITH CAUTION)? (y/n)", bdignore)
-        config_bool = check_input_yn("Create application-project.yml file? (y/n)", output_config)
+        report = get_input("Report file name [{}]: ".format(report), report)
+        if no_scan:
+            scandef = "n"
+        else:
+            scandef = "y"
+        no_scan = not get_input_yn("Run Detect scan (y/n) [{}]: ".format(scandef), scandef)
+#         bdignore_bool = check_input_yn("Create .bdignore files within sub-folders to exclude folders from scan (USE WITH CAUTION)? (y/n)", bdignore)
+#         config_bool = check_input_yn("Create application-project.yml file? (y/n)", output_config)
     except:
         print("Exiting")
-        raise("quit")
-        return("", "", False, False, "", False)
-    return(folder, scantype, docker_bool, critical_bool, report, config_bool, bdignore_bool)
+        return("", "", "", 0, False, "")
+    return(scanfolder, url, api, sensitivity, no_scan, report)
 
 
 def get_detector_search_depth():
-    if coverage < 3:
+    global args
+
+    if args.sensitivity < 3:
         search_depth = det_min_depth if not None else 0  # distance to package manager
-    if 3 < coverage < 7:
+    if 3 < args.sensitivity < 7:
         search_depth = int(det_max_depth/2) if (det_max_depth and int(det_max_depth/2) > 0) else 1
-    if coverage > 6:
+    if args.sensitivity > 6:
         search_depth = det_max_depth if det_max_depth else 1
 
     return search_depth
 
 
 def get_detector_exclusion_args():
+
     detector_exclusion_args = []
-    if coverage < 4:
-        detector_exclusion_args.append('detect.detector.search.patterns: test*,samples*,examples*')
-    #if coverage > 8:
-    #    detector_exclusion_args.append('detect.detector.search.exclusion.defaults: false')
-    #'detect.detector.search.exclusion.patterns'
-    #'detect.detector.search.exclusion.paths'
-    #'detect.detector.search.exclusion.files' # meant for package manager dependency files to prevent them from being found and applying a particular package manager to the scan
+    if args.sensitivity < 4:
+        detector_exclusion_args.append('detect.detector.search.exclusion.patterns: test,samples,examples')
+    if args.sensitivity > 8:
+        detector_exclusion_args.append('detect.detector.search.exclusion.defaults: false')
     return detector_exclusion_args
 
 
@@ -1580,22 +1602,23 @@ def uncomment_line(line, key):
         return line
 
 def uncomment_min_required_options(data, start_index, end_index):
+    global args
 
     for line in data [start_index:end_index]:
         if "blackduck.url" in line or "detect.source.path" in line:
             data[data.index(line)] = uncomment_line(line)
             continue
-
-        # @@@ This is only for the case where we don't have the package manager
         if 'detect.detector.buildless' in line:
-            if coverage > 3:
+            if args.sensitivity > 3:
                 data[data.index(line)] = uncomment_line(line, "detect.detector.buildless")
             else:
                 data.append('detect.tools.excluded: DETECTOR\n')
-        elif 'blackduck.api.token' in line:
-            data[data.index(line)] = line.replace('#', '').replace('YOURTOKEN', api_token)
+        if 'blackduck.api.token' in line:
+            data[data.index(line)] = line.replace('#', '').replace('API_TOKEN', args.api_token)
+        elif 'blackduck.url' in line:
+            data[data.index(line)] = line.replace('#', '').replace('BLACKDUCK_URL', args.url)
         elif line.strip().startswith('#blackduck') or line.strip().startswith('#detect'):
-            data[data.index(line)]= uncomment_line(line)
+            data[data.index(line)] = uncomment_line(line)
     return data
 
 
@@ -1609,9 +1632,9 @@ def uncomment_improve_scan_coverage_options(data, start_index, end_index):
 
 def uncomment_optimize_dependency_options(data, start_index, end_index):
     for line in data [start_index:end_index]:
-        if coverage > 2:
+        if args.sensitivity > 2:
             data[data.index(line)] = uncomment_line(line, 'dev.dependencies: true')
-        elif coverage < 3:
+        elif args.sensitivity < 3:
             data[data.index(line)] = uncomment_line(line, 'dev.dependencies: false')
     return data
 
@@ -1622,10 +1645,11 @@ def uncomment_line(line, key=None):
         else:
             return line
     return line.replace('#', '')
-5
+
 def uncomment_line_from_data(data, key):
     for line in data:
         data[data.index(line)] = uncomment_line(line, key)
+
 
 def json_splitter(scan_path, maxNodeEntries=200000, maxScanSize=4500000000):
     """
@@ -1687,7 +1711,7 @@ def json_splitter(scan_path, maxNodeEntries=200000, maxScanSize=4500000000):
     return new_scan_files
 
 def uncomment_detect_commands(config_file):
-    print("opening file")
+    #print("opening file")
     with open(config_file, 'r+') as f:
         data = f.readlines()
 
@@ -1704,7 +1728,7 @@ def uncomment_detect_commands(config_file):
     indices = [improve_scan_coverage_idx, reduce_signature_size_idx, optimize_dependency_scan_idx, improve_license_compliance_idx, project_options_idx, reporting_options_idx, -1]
 
     data = uncomment_min_required_options(data, min_req_idx+1, next(item for item in indices if item is not None)-1)
-    if coverage > 4:
+    if args.sensitivity > 4:
         uncomment_line_from_data(data, "detect.docker.tar")
 
     if improve_scan_coverage_idx:
@@ -1712,11 +1736,12 @@ def uncomment_detect_commands(config_file):
         data = uncomment_improve_scan_coverage_options(data, improve_scan_coverage_idx+1, next(item for item in indices if item is not None)-1)
 
     if reduce_signature_size_idx:
-        indices.remove(reduce_signature_size_idx)
+       indices.remove(reduce_signature_size_idx)
 
     if optimize_dependency_scan_idx:
         indices.remove(optimize_dependency_scan_idx)
-        data = uncomment_optimize_dependency_options(data, optimize_dependency_scan_idx+1, next(item for item in indices if item is not None)-1)
+        data = uncomment_optimize_dependency_options(data, optimize_dependency_scan_idx + 1,
+                                                          next(item for item in indices if item is not None) - 1)
 
     for arg in detector_args: # additional args not accounted for by reccomendations
         data.append(arg + '\n')
@@ -1728,33 +1753,32 @@ def uncomment_detect_commands(config_file):
     with open(config_file, 'w') as f:
         f.writelines(data)
 
-def run_detect():
-    #config_file = os.path.join(args.scanfolder, "application-project.yml")
-    config_file = "application-project.yml"
+def run_detect(config_file):
+#    config_file = os.path.join(args.scanfolder, "application-project.yml")
     uncomment_detect_commands(config_file)
-
-    detect_command = cli_msgs_dict['detect'].strip() + ' ' + '--blackduck.trust.cert=true ' + '--spring.profiles.active=project' #'--detect.source.path={} '.format(args.scanfolder) ' ' 'spring.config.location=file:{} '.format(config_file) +
-
+    config_file = config_file.replace(" ", "\ ")
+    detect_command = cli_msgs_dict['detect'].strip() + ' ' + '--spring.profiles.active=project' + ' ' + ' --blackduck.trust.cert=true'  + ' ' + ' --spring.config.location="file:' + config_file + '"'
     print("Running command: {}\n".format(detect_command))
-
     p = subprocess.Popen(detect_command, shell=True, executable='/bin/bash',
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdout, stderr = p.communicate()
     out_file = 'latest_detect_run.txt'
     err_file = 'latest_detect_errors.txt'
+    out = open(out_file, 'w')
+    err = open(err_file, 'w')
+
     with open(out_file, 'w') as out:
         out.write(stdout.decode('utf-8'))
     with open(err_file, 'w') as err:
         err.write(stderr.decode('utf-8'))
 
-    print("Detect logs written to: {}".format(out_file))
-
     with open(out_file, 'r+') as f:
         file_contents = f.read()
 
     detect_status = re.search(r'Overall Status: (.*)\n', file_contents)
+    bom_location = re.search(r'Black Duck Project BOM: (.*)\n', file_contents)
 
-    if use_json_splitter:
+    if use_json_splitter and args.sensitivity > 2:
         print("Using JSON splitter")
         # upload scan files
 
@@ -1766,16 +1790,18 @@ def run_detect():
             bdio_files = glob.glob('{}/bdio/*.jsonld'.format(output_directory))
             if bdio_files:
                 bdio_file = bdio_files[0]
-                print(bdio_file)
+                #print(bdio_file)
             if json_files:
                 json_file = json_files[0]
-                print(json_file)
+                #print(json_file)
 
             json_lst = json_splitter(json_file)
 
-            from blackduck.HubRestApi import HubInstance
-            hub = HubInstance(blackduck_url, 'sysadmin', 'blackduck', insecure=True)
-            print("Will upload 1 bdio file and {} json files".format(len(json_lst)))
+            with open('.restconfig.json', 'w') as f:
+                json_data = {"baseurl": args.url, "api_token": args.api_token, "insecure": True, "debug": False}
+                json.dump(json_data, f)
+            hub = HubInstance()
+            print("Will upload 1 bdio file and {} json files".format(str(len(json_lst))))
             hub.upload_scan(bdio_file)
             print("Uploaded bdio file: {}".format(bdio_file))
 
@@ -1788,55 +1814,54 @@ def run_detect():
         if not output_directory:
             print("Output directory could not be located. Dry run and BDIO files were not uploaded.")
 
+
+    print("Detect logs written to: {}".format(out_file))
+    print("Detect erros written to: {}".format(err_file))
     if detect_status:
         print("Detect run complete. Overall status: {}".format(detect_status.group(1)))
     else:
         print("Detect run complete. Status could not be found. Please check logs for potential errors.")
 
+    if bom_location:
+        print("BOM location: {}".format(bom_location.group(1)))
 
+if os.environ.get('BLACKDUCK_URL') != "" and args.url == None:
+    args.url = os.environ.get('BLACKDUCK_URL')
+if os.environ.get('BLACKDUCK_API_TOKEN') != "" and args.api_token == None:
+    args.api_token = os.environ.get('BLACKDUCK_API_TOKEN')
+if args.sensitivity == None:
+    args.sensitivity = 5
+else:
+    args.sensitivity = int(args.sensitivity)
+if args.no_scan == None:
+    args.no_scan = False
 
-
-
-parser = argparse.ArgumentParser(description='Check prerequisites for Detect, scan folders, provide recommendations and example CLI options', prog='detect_advisor')
-
-parser.add_argument("scanfolder", nargs="?", help="Project folder to analyse", default="")
-
-parser.add_argument("-r", "--report", help="Output report file (must not exist already)")
-parser.add_argument("-d", "--detector_only", help="Check for detector files and prerequisites only",action='store_true')
-parser.add_argument("-s", "--signature_only", help="Check for files and folders for signature scan only",action='store_true')
-parser.add_argument("-c", "--critical_only", help="Only show critical issues which will causes detect to fail",action='store_true')
-#parser.add_argument("-f", "--full", help="Output full information to report file if specified",action='store_true')
-parser.add_argument("-o", "--output_config", help="Create .yml config file in project folder",action='store_true')
-parser.add_argument("-b", "--bdignore", help="Create .bdignore files in sub-folders to exclude folders from scan",action='store_true')
-parser.add_argument("-D", "--docker", help="Check docker prerequisites",action='store_true')
-parser.add_argument("-i", "--interactive", help="Use interactive mode to review/set options",action='store_true')
-parser.add_argument("--docker_only", help="Only check docker prerequisites",action='store_true')
-
-args = parser.parse_args()
+# Remove this
+#args.url = 'https://eng-spider-hub04.dc1.lan'
+#args.api_token = 'ZDBhN2Q1YjctNWMyMS00YTIwLTg5NjUtMjY1ZmNhMmViNmQxOjE4ZWU3MWE0LTg0YzItNDc0OS1hZTQxLTExZjczNWQ5ODRmYg=='
 
 if args.scanfolder == "" or args.interactive:
 #     try:
-        if args.detector_only:
-            scantype = "d"
-        elif args.signature_only:
-            scantype = "s"
-        else:
-            scantype = "b"
-        args.scanfolder, scantype, args.docker, args.critical_only, args.report, args.output_config, args.bdignore = interactive(args.scanfolder, scantype, args.docker, args.critical_only, args.report, args.output_config, args.bdignore)
-        if scantype == "d":
-            args.detector_only = True
-        elif scantype == "s":
-            args.signature_only = True
+#         if args.detector_only:
+#             scantype = "d"
+#         elif args.signature_only:
+#             scantype = "s"
+#         else:
+#             scantype = "b"
+        args.scanfolder, args.url, args.api_token, args.sensitivity, args.no_scan, args.report = interactive(args.scanfolder, args.url, args.api_token, args.sensitivity, args.no_scan, args.report)
+#         if scantype == "d":
+#             args.detector_only = True
+#         elif scantype == "s":
+#             args.signature_only = True
 #     except:
 #         sys.exit(1)
+
+cli_msgs_dict['reqd'] = "--blackduck.url={}\n".format(args.url) + \
+"--blackduck.api.token=API_TOKEN\n"
 
 if not os.path.isdir(args.scanfolder):
     print("Scan location '{}' does not exist\nExiting".format(args.scanfolder))
     sys.exit(1)
-
-if args.report and os.path.exists(args.report):
-    backup = backup_repfile(args.report)
-    print("Report file '{}' already existed - backed up to {}".format(args.report, backup))
 
 rep = ""
 
@@ -1856,6 +1881,10 @@ process_dir(args.scanfolder, 0, False)
 print(" Done")
 
 if args.report:
+    if os.path.exists(args.report):
+        backup = backup_file(args.report, "report")
+#    print("Report file '{}' already existed - backed up to {}".format(args.report, backup))
+
     try:
         f = open(args.report, "a")
     except Exception as e:
@@ -1864,26 +1893,28 @@ if args.report:
 else:
     f = None
 
-if not (args.signature_only or args.docker_only):
+#if not (args.signature_only or args.docker_only):
+if not args.docker_only:
 #    if args.full:
     if True:
         detector_process(args.scanfolder, f)
     else:
         detector_process(args.scanfolder, None)
-if args.signature_only:
-    cli_msgs_dict['reqd'] += "--detect.tools=SIGNATURE_SCAN\n"
+# if args.signature_only:
+#     cli_msgs_dict['reqd'] += "--detect.tools=SIGNATURE_SCAN\n"
 
-if not args.detector_only and not args.docker_only:
+#if not args.detector_only and not args.docker_only:
+if not args.docker_only:
 #    if args.full:
     if True:
             use_json_splitter = signature_process(args.scanfolder, f)
-            print(use_json_splitter)
     else:
         signature_process(args.scanfolder, None)
-if args.detector_only:
-    cli_msgs_dict['reqd'] += "--detect.tools=DETECTOR\n"
+# if args.detector_only:
+#     cli_msgs_dict['reqd'] += "--detect.tools=DETECTOR\n"
 
-print_summary(args.critical_only, f)
+#print_summary(args.critical_only, f)
+print_summary(False, f)
 
 check_prereqs()
 
@@ -1892,19 +1923,27 @@ if args.docker or args.docker_only:
 if args.docker_only:
     cli_msgs_dict['reqd'] += "--detect.tools=DOCKER\n"
 
-output_recs(args.critical_only, f)
+#output_recs(args.critical_only, f)
+output_recs(True, f)
 
-output_cli(args.critical_only, args.report, f)
+#output_cli(args.critical_only, args.report, f)
+#output_cli(False, args.report, f)
 
-if args.output_config:
-    output_config(args.scanfolder)
-    run_detect()
+#if args.output_config:
+if True:
+    conffile = os.path.join(args.scanfolder, "application-project.yml")
+    backup = backup_file(conffile, "project config")
+    output_config(conffile)
+    if not args.no_scan:
+        import shutil
+        shutil.copyfile(conffile, conffile + "_copy")
+        run_detect(conffile)
 
-if args.bdignore:
+#if args.bdignore:
+if False:
     create_bdignores()
 
 print("")
 if f:
     f.write("\n")
     f.close()
-
