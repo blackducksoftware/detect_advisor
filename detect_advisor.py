@@ -6,6 +6,11 @@ import io, re
 import argparse
 import platform, sys
 import subprocess
+import json
+import math
+from datetime import datetime
+from TarExaminer import is_tar_docker
+import re, glob
 
 # TODO: remove constants and take these fields as args
 coverage = 2
@@ -17,10 +22,6 @@ advisor_version = "0.9 Beta"
 detect_version = "6.4.0"
 from pydoc import cli
 
-from TarExaminer import is_tar_docker
-
-advisor_version = "0.71 Beta"
-detect_version = "6.3.0"
 
 srcext_list = ['.R','.actionscript','.ada','.adb','.ads','.aidl','.as','.asm','.asp',\
 '.aspx','.awk','.bas','.bat','.bms','.c','.c++','.cbl','.cc','.cfc','.cfm','.cgi','.cls',\
@@ -38,7 +39,6 @@ supported_zipext_list = ['.jar', '.ear', '.war', '.zip']
 dockerext_list = ['.tar', '.gz']
 pkgext_list = ['.rpm', '.deb', '.dmg']
 lic_list = ['LICENSE', 'LICENSE.txt', 'notice.txt', 'license.txt', 'license.html', 'NOTICE', 'NOTICE.txt']
-coverage = 8
 
 detectors_file_dict = {
 'build.env': ['bitbake'],
@@ -263,6 +263,7 @@ sizes = {
 det_min_depth=None
 det_max_depth = None
 package_managers_missing = []
+use_json_splitter = False
 
 src_list = []
 bin_list = []
@@ -880,6 +881,7 @@ def print_summary(critical_only, f):
         f.write(summary)
 
 def signature_process(folder, f):
+    use_json_splitter = False
 
     #print("SIGNATURE SCAN ANALYSIS:")
 
@@ -899,6 +901,7 @@ def signature_process(folder, f):
         recs_msgs_dict['crit'] += "- CRITICAL: Overall scan size ({:>,d} MB) is too large\n".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000)) + \
         "    Impact:  Scan will fail\n" + \
         "    Action:  Ignore folders, remove large files or use repeated scans of sub-folders (Also consider detect_advisor -b option to create multiple .bdignore files to ignore duplicate folders)\n\n"
+        use_json_splitter = True
     elif sizes['file'][notinarc]+sizes['arc'][notinarc] > 2000000000:
         recs_msgs_dict['imp'] += "- IMPORTANT: Overall scan size ({:>,d} MB) is large\n".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000)) + \
         "    Impact:  Will impact Capacity license usage\n" + \
@@ -989,6 +992,7 @@ def signature_process(folder, f):
     check_singlefiles(f)
     print(" Done")
     print("")
+    return use_json_splitter
 
 def detector_process(folder, f):
     import shutil
@@ -1408,32 +1412,32 @@ def output_config(projdir):
     #config_file = os.path.join(projdir, "application-project.yml")
     config_file = os.path.join(os.getcwd(), "application-project.yml")
     #config_file = os.path "application-project.yml")
-    if not os.path.exists(config_file):
-        config = "#\n# EXAMPLE PROJECT CONFIG FILE\n" + \
-        "# Uncomment and update required options\n#\n#\n" + \
-        "# DETECT COMMAND TO RUN:\n#\n" + cli_msgs_dict['detect'] + "\n" + \
-        "# MINIMUM REQUIRED OPTIONS:\n#\n" + cli_msgs_dict['reqd'] + "\n" + \
-        "# OPTIONS TO IMPROVE SCAN COVERAGE:\n#\n" + cli_msgs_dict['scan'] + "\n" + \
-        "# OPTIONS TO REDUCE SIGNATURE SCAN SIZE:\n#\n" + cli_msgs_dict['size'] + "\n" + \
-        "# OPTIONS TO CONFIGURE DEPENDENCY SCAN:\n#\n" + cli_msgs_dict['dep'] + "\n" + \
-        "# OPTIONS TO IMPROVE LICENSE COMPLIANCE ANALYSIS:\n#\n" + cli_msgs_dict['lic'] + "\n" + \
-        "# PROJECT OPTIONS:\n#\n" + cli_msgs_dict['proj'] + "\n" + \
-        "# REPORTING OPTIONS:\n#\n" + cli_msgs_dict['rep'] + "\n" + \
-        "# DOCKER SCANNING:\n#\n" + cli_msgs_dict['docker'] + "\n"
+    if os.path.exists(config_file):
+        print("Deleting existing application-project.yml file")
+        os.remove(config_file)
+    config = "#\n# EXAMPLE PROJECT CONFIG FILE\n" + \
+    "# Uncomment and update required options\n#\n#\n" + \
+    "# DETECT COMMAND TO RUN:\n#\n" + cli_msgs_dict['detect'] + "\n" + \
+    "# MINIMUM REQUIRED OPTIONS:\n#\n" + cli_msgs_dict['reqd'] + "\n" + \
+    "# OPTIONS TO IMPROVE SCAN COVERAGE:\n#\n" + cli_msgs_dict['scan'] + "\n" + \
+    "# OPTIONS TO REDUCE SIGNATURE SCAN SIZE:\n#\n" + cli_msgs_dict['size'] + "\n" + \
+    "# OPTIONS TO CONFIGURE DEPENDENCY SCAN:\n#\n" + cli_msgs_dict['dep'] + "\n" + \
+    "# OPTIONS TO IMPROVE LICENSE COMPLIANCE ANALYSIS:\n#\n" + cli_msgs_dict['lic'] + "\n" + \
+    "# PROJECT OPTIONS:\n#\n" + cli_msgs_dict['proj'] + "\n" + \
+    "# REPORTING OPTIONS:\n#\n" + cli_msgs_dict['rep'] + "\n" + \
+    "# DOCKER SCANNING:\n#\n" + cli_msgs_dict['docker'] + "\n"
 
-        config = re.sub("=", ": ", config)
-        config = re.sub(r"\n ", r"\n#", config, flags=re.S)
-        config = re.sub(r"\n--", r"\n#", config, flags=re.S)
-        try:
-            c = open(config_file, "a")
-            c.write(config)
-            c.close()
-            print("INFO: Config file 'application-project.yml' file written to project folder (Edit to uncomment options)\n" + \
-            "      - Use '--spring.profiles.active=project' to specify this configuration")
-        except Exception as e:
-            print('ERROR: Unable to create project config file ' + str(e))
-    else:
-        print("INFO: Project config file 'application-project.yml' already exists - not updated")
+    config = re.sub("=", ": ", config)
+    config = re.sub(r"\n ", r"\n#", config, flags=re.S)
+    config = re.sub(r"\n--", r"\n#", config, flags=re.S)
+    try:
+        c = open(config_file, "a")
+        c.write(config)
+        c.close()
+        print("INFO: Config file 'application-project.yml' file written to project folder (Edit to uncomment options)\n" + \
+        "      - Use '--spring.profiles.active=project' to specify this configuration")
+    except Exception as e:
+        print('ERROR: Unable to create project config file ' + str(e))
 
 def check_input_options(prompt, accepted_values):
     value = input(prompt)
@@ -1552,9 +1556,9 @@ def get_detector_search_depth():
 def get_detector_exclusion_args():
     detector_exclusion_args = []
     if coverage < 4:
-        detector_exclusion_args.append('detect.detector.search.exclusion: test,samples,examples')
-    if coverage > 8:
-        detector_exclusion_args.append('detect.detector.search.exclusion.defaults: false')
+        detector_exclusion_args.append('detect.detector.search.patterns: test*,samples*,examples*')
+    #if coverage > 8:
+    #    detector_exclusion_args.append('detect.detector.search.exclusion.defaults: false')
     #'detect.detector.search.exclusion.patterns'
     #'detect.detector.search.exclusion.paths'
     #'detect.detector.search.exclusion.files' # meant for package manager dependency files to prevent them from being found and applying a particular package manager to the scan
@@ -1572,45 +1576,114 @@ def get_detector_args():
 def uncomment_min_required_options(data, start_index, end_index):
 
     for line in data [start_index:end_index]:
-        data[data.index(line)] = uncomment_line(line, "blackduck.url")
-        data[data.index(line)] = uncomment_line(line, "detect.source.path")
+        #data[data.index(line)] = uncomment_line(line, "blackduck.url")
+        #data[data.index(line)] = uncomment_line(line, "detect.source.path")
         # @@@ This is only for the case where we don't have the package manager
-        """
-        if coverage > 3:
+        if 'detect.detector.buildless' in line:
+            if coverage > 3:
                 data[data.index(line)] = uncomment_line(line, "detect.detector.buildless")
-        else:
-            data[data.index(line)] = ('detect.tools.excluded: DETECTOR\n')
-        """
-        if 'blackduck.api.token' in line:
+            else:
+                data.append('detect.tools.excluded: DETECTOR\n')
+        elif 'blackduck.api.token' in line:
             data[data.index(line)] = line.replace('#', '').replace('YOURTOKEN', api_token)
-        elif 'OR' not in line:
-            data[data.index(line)]= line.replace('#', '')
+        elif line.strip().startswith('#blackduck') or line.strip().startswith('#detect'):
+            data[data.index(line)]= uncomment_line(line)
     return data
 
 
 def uncomment_improve_scan_coverage_options(data, start_index, end_index):
     for line in data [start_index:end_index]:
         if 'detect.detector.search.depth' in line:
-            data[data.index(line)] = 'detect.detector.search.depth: {}'.format(get_detector_search_depth())
-            data.append('detect.detector.search.continue: true')
+            data[data.index(line)] = 'detect.detector.search.depth: {}\n'.format(get_detector_search_depth())
+            data.append('detect.detector.search.continue: true\n')
 
     return data
 
+def uncomment_optimize_dependency_options(data, start_index, end_index):
+    for line in data [start_index:end_index]:
+        if coverage > 2:
+            data[data.index(line)] = uncomment_line(line, 'dev.dependencies: true')
+        elif coverage < 3:
+            data[data.index(line)] = uncomment_line(line, 'dev.dependencies: false')
+    return data
 
-def uncomment_line(line, key):
-    if key in line:
-        return line.replace('#', '')
-    else:
-        return line
+
+def uncomment_line(line, key=None):
+    if key:
+        if key in line:
+            return line.replace('#', '')
+        else:
+            return line
+    return line.replace('#', '')
 
 def uncomment_line_from_data(data, key):
     for line in data:
         data[data.index(line)] = uncomment_line(line, "detect.docker.tar")
 
+
+def json_splitter(scan_path, maxNodeEntries=200000, maxScanSize=4500000000):
+    """
+    Splits a json file into multiple jsons so large scans can be broken up with multi-part uploads
+    Source:
+    """
+    new_scan_files = []
+
+    with open(scan_path, 'r') as f:
+        scanData = json.load(f)
+
+    dataLength = len(scanData['scanNodeList'])
+    scanSize = sum(node['size'] for node in scanData['scanNodeList'] if node['uri'].startswith("file://"))
+
+    #scanData['project'] = scanData['project'] + "-more"
+    scanName = scanData['name']
+    baseDir = scanData['baseDir']
+    scanNodeList = scanData.pop('scanNodeList')
+    scanData.pop('scanProblemList')
+    scanData['scanProblemList'] = []
+    base = scanNodeList[0]
+
+    # Computing split points for the file
+    #
+    scanChunkSize = 0
+    scanChunkNodes = 0
+    splitAt = [0]
+    for i in range(0, dataLength - 1):
+        if scanChunkSize + scanNodeList[i + 1]['size'] > maxScanSize or scanChunkNodes + 1 > maxNodeEntries:
+            scanChunkSize = 0
+            scanChunkNodes = 0
+            splitAt.append(i)
+        if scanNodeList[i]['uri'].startswith('file://'):
+            scanChunkSize = scanChunkSize + scanNodeList[i]['size']
+        scanChunkNodes += 1
+
+    # Create array of split points shifting by one position
+    splitTo = splitAt[1:]
+    splitTo.append(None)
+
+    # Splitting and writing the chunks
+    #
+
+    for i in range(len(splitAt)):
+        print("Processing range {}, {}".format(splitAt[i], splitTo[i]))
+        # for i in range(0, dataLength, maxNodeEntries):
+        nodeData = scanNodeList[splitAt[i]:splitTo[i]]
+        if i > 0:
+            nodeData.insert(0, base)
+        # scanData['baseDir'] = baseDir + "-" + str(i)
+        scanData['scanNodeList'] = nodeData
+        scanData['name'] = scanName + "-" + str(splitAt[i])
+        filename = scan_path + "-" + str(splitAt[i]) + '.json'
+        with open(filename, 'w') as outfile:
+            json.dump(scanData, outfile)
+        scanData.pop('scanNodeList')
+        new_scan_files.append(filename)
+
+    return new_scan_files
+
 def uncomment_detect_commands():
     print("opening file")
-    config_file = os.path.join(args.scanfolder, "application-project.yml")
-    with open('application-project.yml', 'r+') as f:
+    config_file = "application-project.yml"
+    with open(config_file, 'r+') as f:
         data = f.readlines()
 
     detector_args = get_detector_args()
@@ -1618,7 +1691,7 @@ def uncomment_detect_commands():
     min_req_idx = [idx for idx, s in enumerate(data) if 'MINIMUM REQUIRED OPTIONS' in s][0]
     improve_scan_coverage_idx = [idx for idx, s in enumerate(data) if 'OPTIONS TO IMPROVE SCAN COVERAGE' in s][0] #if cli_msgs_dict['scan'] else None
     reduce_signature_size_idx = [idx for idx, s in enumerate(data) if 'OPTIONS TO REDUCE SIGNATURE SCAN SIZE' in s][0] #if cli_msgs_dict['size'] else None
-    optimize_dependency_scan_idx = [idx for idx, s in enumerate(data) if 'DEPENDENCY SCAN' in s][0] #if cli_msgs_dict['dep'] else None
+    optimize_dependency_scan_idx = [idx for idx, s in enumerate(data) if 'OPTIONS TO CONFIGURE DEPENDENCY SCAN' in s][0] #if cli_msgs_dict['dep'] else None
     improve_license_compliance_idx = [idx for idx, s in enumerate(data) if 'OPTIONS TO IMPROVE LICENSE COMPLIANCE ANALYSIS' in s][0] #if cli_msgs_dict['lic'] else None
     project_options_idx = [idx for idx, s in enumerate(data) if 'PROJECT OPTIONS' in s][0] #if cli_msgs_dict['proj'] else None
     reporting_options_idx = [idx for idx, s in enumerate(data) if 'REPORTING OPTIONS' in s][0] #if cli_msgs_dict['rep'] else None
@@ -1633,28 +1706,87 @@ def uncomment_detect_commands():
         indices.remove(improve_scan_coverage_idx)
         data = uncomment_improve_scan_coverage_options(data, improve_scan_coverage_idx+1, next(item for item in indices if item is not None)-1)
 
+    if reduce_signature_size_idx:
+        indices.remove(reduce_signature_size_idx)
+
+    if optimize_dependency_scan_idx:
+        indices.remove(optimize_dependency_scan_idx)
+        data = uncomment_optimize_dependency_options(data, optimize_dependency_scan_idx+1, next(item for item in indices if item is not None)-1)
+
     for arg in detector_args: # additional args not accounted for by reccomendations
         data.append(arg + '\n')
+
+    if use_json_splitter:
+        data.append('blackduck.offline.mode: true\n')
+        data.append('detect.bom.aggregate.name: detect_advisor_run_{}\n'.format(datetime.now()))
 
     with open(config_file, 'w') as f:
         f.writelines(data)
 
 def run_detect():
     uncomment_detect_commands()
-    detect_command = cli_msgs_dict['detect'].strip() + ' ' + '--spring.profiles.active=project' + ' ' + ' --blackduck.trust.cert=true'
+    config_file = os.path.join(args.scanfolder, "application-project.yml")
+    detect_command = cli_msgs_dict['detect'].strip() + ' ' + '--blackduck.trust.cert=true ' + '--spring.profiles.active=project' #'--detect.source.path={} '.format(args.scanfolder) ' ' 'spring.config.location=file:{} '.format(config_file) +
     print("Running command: {}\n".format(detect_command))
+
     p = subprocess.Popen(detect_command, shell=True, executable='/bin/bash',
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdout, stderr = p.communicate()
     out_file = 'latest_detect_run.txt'
     err_file = 'latest_detect_errors.txt'
-    out = open(out_file, 'w')
-    err = open(err_file, 'w')
-
-    out.write(stdout.decode('utf-8'))
-    err.write(stderr.decode('utf-8'))
+    with open(out_file, 'w') as out:
+        out.write(stdout.decode('utf-8'))
+    with open(err_file, 'w') as err:
+        err.write(stderr.decode('utf-8'))
 
     print("Detect logs written to: {}".format(out_file))
+
+    with open(out_file, 'r+') as f:
+        file_contents = f.read()
+
+    detect_status = re.search(r'Overall Status: (.*)\n', file_contents)
+
+    if use_json_splitter:
+        print("Using JSON splitter")
+        # upload scan files
+
+        match = re.search(r'Run directory: (.*)\n', file_contents)
+
+        if match:
+            output_directory = match.group(1)
+            json_files = glob.glob('{}/scan/BlackDuckScanOutput/*/data/*.json'.format(output_directory))
+            bdio_files = glob.glob('{}/bdio/*.jsonld'.format(output_directory))
+            if bdio_files:
+                bdio_file = bdio_files[0]
+                print(bdio_file)
+            if json_files:
+                json_file = json_files[0]
+                print(json_file)
+
+            json_lst = json_splitter(json_file)
+
+            from blackduck.HubRestApi import HubInstance
+            hub = HubInstance(blackduck_url, 'sysadmin', 'blackduck', insecure=True)
+            print("Will upload 1 bdio file and {} json files".format(len(json_lst)))
+            hub.upload_scan(bdio_file)
+            print("Uploaded bdio file: {}".format(bdio_file))
+
+            for f in json_lst:
+                hub.upload_scan(f)
+                print("Uploaded json file {}".format(f))
+                os.remove(f) # don't keep a million jsons
+
+            print("All files have been uploaded")
+        if not output_directory:
+            print("Output directory could not be located. Dry run and BDIO files were not uploaded.")
+
+    if detect_status:
+        print("Detect run complete. Overall status: {}".format(detect_status.group(1)))
+    else:
+        print("Detect run complete. Status could not be found. Please check logs for potential errors.")
+
+
+
 
 
 parser = argparse.ArgumentParser(description='Check prerequisites for Detect, scan folders, provide recommendations and example CLI options', prog='detect_advisor')
@@ -1736,7 +1868,8 @@ if args.signature_only:
 if not args.detector_only and not args.docker_only:
 #    if args.full:
     if True:
-            signature_process(args.scanfolder, f)
+            use_json_splitter = signature_process(args.scanfolder, f)
+            print(use_json_splitter)
     else:
         signature_process(args.scanfolder, None)
 if args.detector_only:
