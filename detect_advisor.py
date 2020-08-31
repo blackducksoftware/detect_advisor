@@ -8,11 +8,13 @@ import platform, sys
 import subprocess
 import json
 import math
+import traceback
 from datetime import datetime
 from TarExaminer import is_tar_docker
 import re, glob
 from blackduck.HubRestApi import HubInstance
-
+import magic
+import shutil
 # Constants
 advisor_version = "0.95 Beta"
 detect_version = "6.4.0"
@@ -36,6 +38,15 @@ supported_zipext_list = ['.jar', '.ear', '.war', '.zip']
 dockerext_list = ['.tar', '.gz']
 pkgext_list = ['.rpm', '.deb', '.dmg']
 lic_list = ['LICENSE', 'LICENSE.txt', 'notice.txt', 'license.txt', 'license.html', 'NOTICE', 'NOTICE.txt']
+
+sig_scan_thresholds = {'enable_disable': lambda _: _ < 3,
+                       'individual_file_match': lambda _: _ > 7,
+                       'file_snippet_match': lambda _: _ > 9,
+                       'binary_matching': lambda _: _ > 7}
+
+def test_sensitivity(filter_func):
+    global args
+    return filter_func(args.sensitivity)
 
 detectors_file_dict = {
 'build.env': ['bitbake'],
@@ -385,7 +396,7 @@ def process_nested_zip(z, zippath, zipdepth, dirdepth):
         max_arc_depth = zipdepth
 
     #print("ZIP:{}:{}".format(zipdepth, zippath))
-    z2_filedata =  io.BytesIO(z.read())
+    z2_filedata = io.BytesIO(z.read())
     try:
         with zipfile.ZipFile(z2_filedata) as nz:
             for zinfo in nz.infolist():
@@ -395,7 +406,6 @@ def process_nested_zip(z, zippath, zipdepth, dirdepth):
                         process_nested_zip(z2, zippath + "##" + zinfo.filename, zipdepth, dirdepth)
     except:
         messages += "WARNING: Can't open nested zip {} (Skipped)\n".format(zippath)
-
 
 def process_zip_entry(zinfo, zippath, dirdepth):
     #print("ENTRY:" + zippath + "##" + zinfo.filename)
@@ -450,8 +460,9 @@ def process_zip(zippath, zipdepth, dirdepth):
         messages += "WARNING: Can't open zip {} (Skipped)\n".format(zippath)
 
 def checkfile(name, path, size, size_comp, dirdepth, in_archive):
+
     ext = os.path.splitext(name)[1]
-#    print(ext)
+    magic_result = magic.from_file(path, mime=True)
     if ext != ".zip":
         if not in_archive:
             counts['file'][notinarc] += 1
@@ -489,38 +500,38 @@ def checkfile(name, path, size, size_comp, dirdepth, in_archive):
         other_list.append(path)
         ftype = 'other'
         counts['lic'][notinarc] += 1
-    elif (ext != ""):
-        if ext in detectors_ext_dict.keys():
-            if not in_archive:
-                det_dict[path] = dirdepth
-            ftype = 'det'
-        elif ext in srcext_list:
-            src_list.append(path)
-            ftype = 'src'
-        elif ext in jarext_list:
-            jar_list.append(path)
-            ftype = 'jar'
-        elif ext in binext_list:
-            bin_list.append(path)
-            if size > largesize:
-                bin_large_dict[path] = size
-            ftype = 'bin'
-        elif ext in arcext_list:
-            if ext in dockerext_list:
-                if (is_tar_docker(path)):
-                    # we will invoke --detect.docker.tar on these
-                    cli_msgs_dict['docker'] += "--detect.docker.tar='{}'\n".format(os.path.abspath(path))
-            arc_list.append(path)
-            ftype = 'arc'
-        elif ext in pkgext_list:
-            pkg_list.append(path)
-            ftype = 'pkg'
-        else:
-            other_list.append(path)
-            ftype = 'other'
+
+    if ext in detectors_ext_dict.keys():
+        if not in_archive:
+            det_dict[path] = dirdepth
+        ftype = 'det'
+    elif ext in srcext_list:
+        src_list.append(path)
+        ftype = 'src'
+    elif ext in jarext_list:
+        jar_list.append(path)
+        ftype = 'jar'
+    elif ext in binext_list or magic_result in ['application/x-mach-binary',
+                                                'application/x-dosexec',
+                                                'application/x-executable']:
+        bin_list.append(path)
+        if size > largesize:
+            bin_large_dict[path] = size
+        ftype = 'bin'
+    elif ext in arcext_list:
+        if ext in dockerext_list:
+            if (is_tar_docker(path)):
+                # we will invoke --detect.docker.tar on these
+                cli_msgs_dict['docker'] += "--detect.docker.tar='{}'\n".format(os.path.abspath(path))
+        arc_list.append(path)
+        ftype = 'arc'
+    elif ext in pkgext_list:
+        pkg_list.append(path)
+        ftype = 'pkg'
     else:
         other_list.append(path)
         ftype = 'other'
+
     #print("path:{} type:{}, size_comp:{}, size:{}".format(path, ftype, size_comp, size))
     if not in_archive:
         counts[ftype][notinarc] += 1
@@ -897,28 +908,42 @@ def print_summary(critical_only, f):
     if f:
         f.write(summary)
 
+def pack_binaries(path_list, fname="binary_files.zip"):
+    global binpack
+    binpack = None
+    try:
+        with zipfile.ZipFile(os.path.join(os.getcwd(), fname), 'w') as binzip:
+            for bin_path in path_list:
+                binzip.write(os.path.relpath(bin_path, os.curdir))
+
+    except RuntimeError:
+        traceback.print_last(file=sys.stderr)
+    finally:
+        binpack = fname
+        return fname
+
 def signature_process(folder, f):
     use_json_splitter = False
 
     #print("SIGNATURE SCAN ANALYSIS:")
-
+    if test_sensitivity(sig_scan_thresholds['enable_disable']):
+        cli_msgs_dict['size'] += "--detect.tools.excluded=SIGNATURE_SCAN\n"
     # Find duplicates without expanding archives - to avoid processing dups
     print("- Processing folders         ", end="", flush=True)
-    num_dirdups, size_dirdups = process_dirdups(f)
+    #num_dirdups, size_dirdups = process_dirdups(f)
     print(" Done")
-
     print("- Processing large files     ", end="", flush=True)
-    num_dups, size_dups = process_largefiledups(f)
+    #num_dups, size_dups = process_largefiledups(f)
     print(" Done")
 
     print("- Processing Signature Scan  .....", end="", flush=True)
-
     # Produce Recommendations
     if sizes['file'][notinarc]+sizes['arc'][notinarc] > 5000000000:
         recs_msgs_dict['crit'] += "- CRITICAL: Overall scan size ({:>,d} MB) is too large\n".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000)) + \
         "    Impact:  Scan will fail\n" + \
         "    Action:  Ignore folders, remove large files or use repeated scans of sub-folders (Also consider detect_advisor -b option to create multiple .bdignore files to ignore duplicate folders)\n\n"
         use_json_splitter = True
+
     elif sizes['file'][notinarc]+sizes['arc'][notinarc] > 2000000000:
         recs_msgs_dict['imp'] += "- IMPORTANT: Overall scan size ({:>,d} MB) is large\n".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000)) + \
         "    Impact:  Will impact Capacity license usage\n" + \
@@ -928,6 +953,7 @@ def signature_process(folder, f):
         recs_msgs_dict['imp'] += "- IMPORTANT: Overall number of files ({:>,d}) is very large\n".format(trunc((counts['file'][notinarc]+counts['file'][inarc]))) + \
         "    Impact:  Scan time could be VERY long\n" + \
         "    Action:  Ignore folders or split project (scan sub-projects or consider detect_advisor -b option to create multiple .bdignore files to ignore duplicate folders)\n\n"
+
     elif counts['file'][notinarc]+counts['file'][inarc] > 200000:
         recs_msgs_dict['info'] += "- INFORMATION: Overall number of files ({:>,d}) is large\n".format(trunc((counts['file'][notinarc]+counts['file'][inarc]))) + \
         "    Impact:  Scan time could be long\n" + \
@@ -945,27 +971,21 @@ def signature_process(folder, f):
         "    Impact:  Binary files not analysed by standard scan, will impact Capacity license usage\n" + \
         "    Action:  Remove files or ignore folders (using .bdignore files), also consider zipping\n" + \
         "             files and using Binary scan (See report file produced with -r option)\n\n"
-        cli_msgs_dict['scan'] += "--detect.binary.scan.file.path=binary_files.zip\n" + \
-        "    (See report file produced with -r option for how to zip binary files; binary scan license required)\n"
+
+    if test_sensitivity(sig_scan_thresholds['binary_matching']):
+        global bin_pack_name
+        binzip_list = {bin.split("##")[0] for bin in
+                       bin_list}  # if '##' isn't found, the whole string is still in idx 0 of output
+        bin_pack_name = pack_binaries(binzip_list)
+        cli_msgs_dict['scan'] += "--detect.binary.scan.file.path={}\n".format(bin_pack_name) + \
+        "    (binary scan license required)\n"
+
         if f and len(bin_large_dict) > 0:
             f.write("\nLARGE BINARY FILES:\n")
             for bin in bin_large_dict.keys():
                 f.write("    {} (Size {:d}MB)\n".format(bin, int(bin_large_dict[bin]/1000000)))
-            f.write("\nConsider using the following command to zip binary files and send to binary scan (subject to license):\n    zip binary_files.zip \\\n")
-            binzip_list = []
-            for bin in bin_large_dict.keys():
-                if bin.find("##") < 0:
-                    binzip_list.append(bin)
-                elif bin.split("##")[0] not in binzip_list:
-                    binzip_list.append(bin.split("##")[0])
-            num = 0
-            for bin in binzip_list:
-                if num > 0:
-                    f.write(" \\\n")
-                f.write("    {}".format(bin))
-                num += 1
-            f.write("\n\nThen run Detect with the following options to send the archive for binary scan:\n    --detect.tools=BINARY_SCAN --detect.binary.scan.file.path=binary_files.zip\n\n")
 
+    """
     if size_dirdups > 20000000:
         recs_msgs_dict['imp'] += "- IMPORTANT: Large amount of data ({:,d} MB) in {:,d} duplicate folders\n".format(trunc(size_dirdups/1000000), len(dup_dir_dict)) + \
         "    Impact:  Scan capacity potentially utilised without detecting additional\n" + \
@@ -984,6 +1004,7 @@ def signature_process(folder, f):
         #    if dup_dir_dict.get(os.path.dirname(apath)) == None and dup_dir_dict.get(os.path.dirname(bpath)) == None:
         #        print("    {}".format(bpath))
         #print("")
+    """
 
     if counts['lic'][notinarc] > 10:
         recs_msgs_dict['info'] += "- INFORMATION: License or notices files found\n" + \
@@ -1007,6 +1028,11 @@ def signature_process(folder, f):
             "    (CAUTION - will upload local source files)\n"
 
     check_singlefiles(f)
+    if test_sensitivity(sig_scan_thresholds['individual_file_match']):
+        cli_msgs_dict['scan'] += "--detect.blackduck.signature.scanner.individual.file.matching=SOURCE\n"
+    if test_sensitivity(sig_scan_thresholds['file_snippet_match']):
+        cli_msgs_dict['scan'] += "--detect.blackduck.signature.scanner.snippet.matching=SNIPPET_MATCHING\n"
+
     print(" Done")
     print("")
     return use_json_splitter
@@ -1563,7 +1589,6 @@ def interactive(scanfolder, url, api, sensitivity, no_scan, report):
         return("", "", "", 0, False, "")
     return(scanfolder, url, api, sensitivity, no_scan, report)
 
-
 def get_detector_search_depth():
     global args
 
@@ -1576,16 +1601,14 @@ def get_detector_search_depth():
 
     return search_depth
 
-
 def get_detector_exclusion_args():
 
     detector_exclusion_args = []
     if args.sensitivity < 4:
-        detector_exclusion_args.append('detect.detector.search.exclusion.patterns: test,samples,examples')
+        detector_exclusion_args.append('detect.detector.search.exclusion.patterns: test*,samples*,examples*')
     if args.sensitivity > 8:
         detector_exclusion_args.append('detect.detector.search.exclusion.defaults: false')
     return detector_exclusion_args
-
 
 def get_detector_args():
     detector_args = []
@@ -1593,7 +1616,6 @@ def get_detector_args():
         detector_args.append(item)
 
     return detector_args
-
 
 def uncomment_line(line, key):
     if key in line:
@@ -1603,7 +1625,8 @@ def uncomment_line(line, key):
 
 def uncomment_min_required_options(data, start_index, end_index):
     global args
-
+    global exclude_detector
+    exclude_detector = False
     for line in data [start_index:end_index]:
         if "blackduck.url" in line or "detect.source.path" in line:
             data[data.index(line)] = uncomment_line(line)
@@ -1612,7 +1635,9 @@ def uncomment_min_required_options(data, start_index, end_index):
             if args.sensitivity > 3:
                 data[data.index(line)] = uncomment_line(line, "detect.detector.buildless")
             else:
+                exclude_detector = True
                 data.append('detect.tools.excluded: DETECTOR\n')
+
         if 'blackduck.api.token' in line:
             data[data.index(line)] = line.replace('#', '').replace('API_TOKEN', args.api_token)
         elif 'blackduck.url' in line:
@@ -1628,6 +1653,20 @@ def uncomment_improve_scan_coverage_options(data, start_index, end_index):
             data[data.index(line)] = 'detect.detector.search.depth: {}\n'.format(get_detector_search_depth())
             data.append('detect.detector.search.continue: true\n')
 
+        if 'detect.blackduck.signature.scanner.individual.file.matching' in line:
+            data[data.index(line)] = uncomment_line(line, 'detect.blackduck.signature.scanner.individual.file.matching: SOURCE')
+
+        if 'detect.blackduck.signature.scanner.snippet.matching' in line:
+            data[data.index(line)] = uncomment_line(line, 'detect.blackduck.signature.scanner.snippet.matching: SNIPPET_MATCHING')
+        if 'detect.binary.scan.file.path' in line:
+            data[data.index(line)] = uncomment_line(line, 'detect.binary.scan.file.path')
+
+    return data
+
+def uncomment_reduce_sig_scan_size_options(data, start_index, end_index):
+    for line in data[start_index:end_index]:
+         if 'detect.tools.excluded' in line:
+             data[data.index(line)] = uncomment_line(line, 'detect.tools.excluded')
     return data
 
 def uncomment_optimize_dependency_options(data, start_index, end_index):
@@ -1711,7 +1750,6 @@ def json_splitter(scan_path, maxNodeEntries=200000, maxScanSize=4500000000):
     return new_scan_files
 
 def uncomment_detect_commands(config_file):
-    #print("opening file")
     with open(config_file, 'r+') as f:
         data = f.readlines()
 
@@ -1731,12 +1769,14 @@ def uncomment_detect_commands(config_file):
     if args.sensitivity > 4:
         uncomment_line_from_data(data, "detect.docker.tar")
 
+
     if improve_scan_coverage_idx:
         indices.remove(improve_scan_coverage_idx)
         data = uncomment_improve_scan_coverage_options(data, improve_scan_coverage_idx+1, next(item for item in indices if item is not None)-1)
 
     if reduce_signature_size_idx:
-       indices.remove(reduce_signature_size_idx)
+        indices.remove(reduce_signature_size_idx)
+        data = uncomment_reduce_sig_scan_size_options(data, reduce_signature_size_idx+1, next(item for item in indices if item is not None) - 1)
 
     if optimize_dependency_scan_idx:
         indices.remove(optimize_dependency_scan_idx)
@@ -1749,6 +1789,8 @@ def uncomment_detect_commands(config_file):
     if use_json_splitter:
         data.append('blackduck.offline.mode: true\n')
         data.append('detect.bom.aggregate.name: detect_advisor_run_{}\n'.format(datetime.now()))
+
+
 
     with open(config_file, 'w') as f:
         f.writelines(data)
@@ -1764,8 +1806,6 @@ def run_detect(config_file):
     stdout, stderr = p.communicate()
     out_file = 'latest_detect_run.txt'
     err_file = 'latest_detect_errors.txt'
-    out = open(out_file, 'w')
-    err = open(err_file, 'w')
 
     with open(out_file, 'w') as out:
         out.write(stdout.decode('utf-8'))
@@ -1774,7 +1814,12 @@ def run_detect(config_file):
 
     with open(out_file, 'r+') as f:
         file_contents = f.read()
-
+    global binpack
+    try:
+        if binpack is not None:
+            os.remove(binpack) # clean up binary zip archive
+    except:
+        pass
     detect_status = re.search(r'Overall Status: (.*)\n', file_contents)
     bom_location = re.search(r'Black Duck Project BOM: (.*)\n', file_contents)
 
@@ -1783,6 +1828,7 @@ def run_detect(config_file):
         # upload scan files
 
         match = re.search(r'Run directory: (.*)\n', file_contents)
+        output_directory = None
 
         if match:
             output_directory = match.group(1)
