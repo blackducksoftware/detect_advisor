@@ -268,8 +268,7 @@ sizes = {
 'pkg' : [0,0,0]
 }
 
-det_min_depth=None
-det_max_depth = None
+#det_min_depth=det_max_depth=None
 package_managers_missing = []
 use_json_splitter = False
 
@@ -928,6 +927,7 @@ def signature_process(folder, f):
     #print("SIGNATURE SCAN ANALYSIS:")
     if test_sensitivity(sig_scan_thresholds['enable_disable']):
         cli_msgs_dict['size'] += "--detect.tools.excluded=SIGNATURE_SCAN\n"
+
     # Find duplicates without expanding archives - to avoid processing dups
     print("- Processing folders         ", end="", flush=True)
     #num_dirdups, size_dirdups = process_dirdups(f)
@@ -1041,6 +1041,8 @@ def detector_process(folder, f):
     import shutil
 
     global rep
+    global det_max_depth
+    global det_min_depth
 
     print("- Processing Dependency Scan .....", end="", flush=True)
 
@@ -1634,9 +1636,6 @@ def uncomment_min_required_options(data, start_index, end_index):
         if 'detect.detector.buildless' in line:
             if args.sensitivity > 3:
                 data[data.index(line)] = uncomment_line(line, "detect.detector.buildless")
-            else:
-                exclude_detector = True
-                data.append('detect.tools.excluded: DETECTOR\n')
 
         if 'blackduck.api.token' in line:
             data[data.index(line)] = line.replace('#', '').replace('API_TOKEN', args.api_token)
@@ -1648,13 +1647,15 @@ def uncomment_min_required_options(data, start_index, end_index):
 
 
 def uncomment_improve_scan_coverage_options(data, start_index, end_index):
+    individual_file_matching_uncommented = False
     for line in data [start_index:end_index]:
-        if 'detect.detector.search.depth' in line:
+        if 'detect.detector.search.depth' in line and get_detector_search_depth():
             data[data.index(line)] = 'detect.detector.search.depth: {}\n'.format(get_detector_search_depth())
             data.append('detect.detector.search.continue: true\n')
 
-        if 'detect.blackduck.signature.scanner.individual.file.matching' in line:
+        if 'detect.blackduck.signature.scanner.individual.file.matching' in line and not individual_file_matching_uncommented:
             data[data.index(line)] = uncomment_line(line, 'detect.blackduck.signature.scanner.individual.file.matching: SOURCE')
+            individual_file_matching_uncommented = True
 
         if 'detect.blackduck.signature.scanner.snippet.matching' in line:
             data[data.index(line)] = uncomment_line(line, 'detect.blackduck.signature.scanner.snippet.matching: SNIPPET_MATCHING')
