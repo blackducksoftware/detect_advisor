@@ -1,6 +1,0 @@
-README.md
-setup.py
-synopsys_detect_advisor.egg-info/PKG-INFO
-synopsys_detect_advisor.egg-info/SOURCES.txt
-synopsys_detect_advisor.egg-info/dependency_links.txt
-synopsys_detect_advisor.egg-info/top_level.txt
