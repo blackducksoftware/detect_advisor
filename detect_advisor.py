@@ -43,10 +43,10 @@ dockerext_list = ['.tar', '.gz']
 pkgext_list = ['.rpm', '.deb', '.dmg']
 lic_list = ['LICENSE', 'LICENSE.txt', 'notice.txt', 'license.txt', 'license.html', 'NOTICE', 'NOTICE.txt']
 
-sig_scan_thresholds = {'enable_disable': lambda _: _ < 3,
-                       'individual_file_match': lambda _: _ > 7,
-                       'file_snippet_match': lambda _: _ > 9,
-                       'binary_matching': lambda _: _ > 7}
+sig_scan_thresholds = {'enable_disable': ("<", 3),
+                       'individual_file_match': (">", 7),
+                       'file_snippet_match': (">", 9),
+                       'binary_matching': (">", 7)}
 
 def test_sensitivity(op_val_pair: tuple):
     global args
@@ -416,11 +416,11 @@ parser.add_argument("-n", "--no_scan", help="Do not run Detect scan - only creat
 
 args = parser.parse_args()
 
-def log_sensitivity_action(topic, msg, overwrite=True):
+def log_sensitivity_action(topic, conditionals, action, overwrite=True):
     if topic not in cli_msgs_dict['sense_log'] or overwrite:
-        cli_msgs_dict['sense_log'][topic] = [msg]
+        cli_msgs_dict['sense_log'][topic] = [(conditionals, action)]
     else:
-        cli_msgs_dict['sense_log'][topic].append(msg)
+        cli_msgs_dict['sense_log'][topic].append((conditionals, action))
 
 def process_tar_entry(tinfo: tarfile.TarInfo, tarpath, dirdepth, tar):
     print("ENTRY:" + tarpath + "##" + tinfo.name)
@@ -1058,13 +1058,14 @@ def pack_binaries(path_list, fname="binary_files.zip"):
 def signature_process(folder, f):
     use_json_splitter = False
 
-    #print("SIGNATURE SCAN ANALYSIS:")
     enable_disable_thresh = sig_scan_thresholds['enable_disable']
     if test_sensitivity(enable_disable_thresh):
-        log_sensitivity_action("Signature Scanning", "Signature Scan DISABLED - sensitivity {} {}".format(*enable_disable_thresh))
         cli_msgs_dict['reqd'] += "--detect.tools.excluded=SIGNATURE_SCAN\n"
+        log_sensitivity_action("Signature Scanning", ["sensitivity {} {}".format(*enable_disable_thresh)],
+                                 "Signature Scan is DISABLED")
     else:
-        log_sensitivity_action("Signature Scanning", "Signature Scan ENABLED - sensitivity {} {}".format(*invert_op(enable_disable_thresh)))
+        log_sensitivity_action("Signature Scanning", ["sensitivity {} {}".format(*invert_op(enable_disable_thresh))],
+                                 "Signature Scan is ENABLED")
     # Find duplicates without expanding archives - to avoid processing dups
     print("- Processing folders         ", end="", flush=True)
     #num_dirdups, size_dirdups = process_dirdups(f)
@@ -1088,13 +1089,11 @@ def signature_process(folder, f):
 
     # Log the use of json splitter
     if use_json_splitter:
-        log_sensitivity_action("Scan Subdivision", "Scan size ({:>,d}) is > 5g - scan WILL be split.".format(
-            trunc((sizes['file'][notinarc] + sizes['arc'][notinarc]) / 1000000))
-        )
+        log_sensitivity_action("Scan Subdivision", ["Scan size ({:>,d}) is > 5g".format(trunc((sizes['file'][notinarc] + sizes['arc'][notinarc]) / 1000000))],
+                                 "scan WILL be split")
     else:
-        log_sensitivity_action("Scan Subdivision", "Scan is within global size limits and WILL NOT be split.".format(
-            trunc((sizes['file'][notinarc] + sizes['arc'][notinarc]) / 1000000))
-        )
+        log_sensitivity_action("Scan Subdivision", ["Scan is within global size limit (5g)"],
+                                 "Scan file WILL NOT be split")
     if counts['file'][notinarc]+counts['file'][inarc] > 1000000:
         recs_msgs_dict['imp'] += "- IMPORTANT: Overall number of files ({:>,d}) is very large\n".format(trunc((counts['file'][notinarc]+counts['file'][inarc]))) + \
         "    Impact:  Scan time could be VERY long\n" + \
@@ -1132,12 +1131,15 @@ def signature_process(folder, f):
             for bin in bin_large_dict.keys():
                 f.write("    {} (Size {:d}MB)\n".format(bin, int(bin_large_dict[bin]/1000000)))
 
-        log_sensitivity_action("Binary Matching", "Binaries have been packed into archive '{}' in scan folder, "
-                                                  "BDBA will be invoked - sensitivity {} {}"
-                                                  .format(bin_pack_name, *bdba_invoke_thresh))
+        log_sensitivity_action("Binary Matching",
+                               ["({}) binaries found in scan folder".format(len(binzip_list)),
+                                                "sensitivity {} {}".format(*bdba_invoke_thresh)],
+                                                  "Binaries have been packed into zipfile '{}' - BDBA will be invoked"
+                               .format(bin_pack_name))
     else:
-        log_sensitivity_action("Binary Matching", "Binaries have not been packed, nor will BDBA be invoked - "
-                                                  "sensitivity {} {}".format(*invert_op(bdba_invoke_thresh)))
+        log_sensitivity_action("Binary Matching",
+                               ["sensitivity {} {}".format(*invert_op(bdba_invoke_thresh))],
+                                 "Binaries have not been packed; BDBA will NOT be invoked")
     """
     if size_dirdups > 20000000:
         recs_msgs_dict['imp'] += "- IMPORTANT: Large amount of data ({:,d} MB) in {:,d} duplicate folders\n".format(trunc(size_dirdups/1000000), len(dup_dir_dict)) + \
@@ -1184,20 +1186,20 @@ def signature_process(folder, f):
     indiv_file_thresh = sig_scan_thresholds['individual_file_match']
     if test_sensitivity(indiv_file_thresh):
         cli_msgs_dict['scan'] += "--detect.blackduck.signature.scanner.individual.file.matching=SOURCE\n"
-        log_sensitivity_action("Individual File Matching", "Individual File Matching (SOURCE) is ENABLED - "
-                                                           "sensitivity {} {}".format(*indiv_file_thresh))
+        log_sensitivity_action("Individual File Matching", ["sensitivity {} {}".format(*indiv_file_thresh)],
+                                 "Individual File Matching (SOURCE) is ENABLED")
     else:
-        log_sensitivity_action("Individual File Matching", "Individual File Matching (SOURCE) is DISABLED - "
-                                                           "sensitivity {} {}".format(*invert_op(indiv_file_thresh)))
+        log_sensitivity_action("Individual File Matching", ["sensitivity {} {}".format(*invert_op(indiv_file_thresh))],
+                                 "Individual File Matching (SOURCE) is DISABLED")
 
     snippet_thresh = sig_scan_thresholds['file_snippet_match']
     if test_sensitivity(snippet_thresh):
         cli_msgs_dict['scan'] += "--detect.blackduck.signature.scanner.snippet.matching=SNIPPET_MATCHING\n"
-        log_sensitivity_action("Snippet Matching", "Snippet Matching is ENABLED - "
-                                                           "sensitivity {} {}".format(*snippet_thresh))
+        log_sensitivity_action("Snippet Matching", ["sensitivity {} {}".format(*snippet_thresh)],
+                               "Snippet Matching is ENABLED")
     else:
-        log_sensitivity_action("Snippet Matching", "Snippet Matching is DISABLED - "
-                                                   "sensitivity {} {}".format(*invert_op(snippet_thresh)))
+        log_sensitivity_action("Snippet Matching", ["sensitivity {} {}".format(*invert_op(snippet_thresh))],
+                               "Snippet Matching is DISABLED")
 
     print(" Done")
     print("")
@@ -1763,13 +1765,17 @@ def get_detector_search_depth():
     # TODO: we need defined behaviour for all sensitivities for detector search depth
     if args.sensitivity < 3:
         search_depth = det_min_depth if not None else 0  # distance to package manager
-        log_sensitivity_action("Detector Search Depth", "Search depth set to {} - sensitivity < 3".format(search_depth), overwrite=False)
+        log_sensitivity_action("Detector Search Depth", ["sensitivity < 3"],
+                               "Search depth set to {}".format(search_depth),
+                               overwrite=False)
     if 3 < args.sensitivity < 7:
         search_depth = int(det_max_depth/2) if (det_max_depth and int(det_max_depth/2) > 0) else 1
-        log_sensitivity_action("Detector Search Depth", "Search depth set to {} - 3 < sensitivity < 7".format(search_depth), overwrite=False)
+        log_sensitivity_action("Detector Search Depth", ["3 < sensitivity < 7"],
+                              "Search depth set to {}".format(search_depth), overwrite=False)
     if args.sensitivity > 6:
         search_depth = det_max_depth if det_max_depth else 1
-        log_sensitivity_action("Detector Search Depth", "Search depth set to {} - sensitivity > 6".format(search_depth), overwrite=False)
+        log_sensitivity_action("Detector Search Depth", ["sensitivity > 6"],
+                                 "Search depth set to {}".format(search_depth), overwrite=False)
     return search_depth
 
 def get_detector_exclusion_args():
@@ -1777,13 +1783,14 @@ def get_detector_exclusion_args():
     detector_exclusion_args = []
     if args.sensitivity < 4:
         detector_exclusion_args.append('detect.detector.search.exclusion.patterns: test*,samples*,examples*')
-        log_sensitivity_action("Detector Search Exclusions", "Search Exclusion Patters set to 'test*,samples*examples*' "
-                                                             "- sensitivity < 4", overwrite=False)
+        log_sensitivity_action("Detector Search Exclusions", ["sensitivity < 4"],
+                                 "Search Exclusion Patters set to 'test*,samples*,examples*'",
+                               overwrite=False)
 
     if args.sensitivity > 8:
         detector_exclusion_args.append('detect.detector.search.exclusion.defaults: false')
-        log_sensitivity_action("Detector Search Exclusions", "Search exclusion defaults set to FALSE - "
-                                                             " > 8", overwrite=False)
+        log_sensitivity_action("Detector Search Exclusions", ["sensitivity > 8"],
+                                 "Search exclusion defaults set to FALSE", overwrite=False)
     return detector_exclusion_args
 
 def get_detector_args():
@@ -1810,9 +1817,11 @@ def uncomment_min_required_options(data, start_index, end_index):
         if 'detect.detector.buildless' in line:
             if args.sensitivity > 3:
                 data[data.index(line)] = uncomment_line(line, "detect.detector.buildless")
-                log_sensitivity_action("Buildless Mode", "Detect will run in buildless mode - sensitivity > 3")
+                log_sensitivity_action("Buildless Mode", ["sensitivity > 3", "detect.detector.buildless in config"],
+                                         "Detect will run in buildless mode")
             else :
-                log_sensitivity_action("Buildless Mode", "Detect will NOT run in buildless mode - sensitivity <= 3")
+                log_sensitivity_action("Buildless Mode", ["sensitivity <= 3"],
+                                         "Despite the option to, Detect will NOT run in buildless mode")
 
         if 'blackduck.api.token' in line:
             data[data.index(line)] = line.replace('#', '').replace('API_TOKEN', args.api_token)
@@ -1851,12 +1860,12 @@ def uncomment_optimize_dependency_options(data, start_index, end_index):
     for line in data [start_index:end_index]:
         if args.sensitivity > 2:
             data[data.index(line)] = uncomment_line(line, 'dev.dependencies: true')
-            log_sensitivity_action("Dev Dependencies", "Dev dependencies will be a part of the detect run - "
-                                                       "sensitivity > 2", overwrite=False)
+            log_sensitivity_action("Dev Dependencies", ["sensitivity > 2"],
+                                     "Dev dependencies will be a part of the detect run", overwrite=False)
         elif args.sensitivity < 3:
             data[data.index(line)] = uncomment_line(line, 'dev.dependencies: false')
-            log_sensitivity_action("Dev Dependencies", "Dev dependencies will NOT be a part of the detect run - "
-                                                       "sensitivity < 3", overwrite=False)
+            log_sensitivity_action("Dev Dependencies", ["sensitivity < 3"],
+                                     "Dev dependencies will NOT be a part of the detect run", overwrite=False)
     return data
 
 def uncomment_line(line, key=None):
@@ -1950,11 +1959,11 @@ def uncomment_detect_commands(config_file):
     data = uncomment_min_required_options(data, min_req_idx+1, next(item for item in indices if item is not None)-1)
     if args.sensitivity > 4:
         uncomment_line_from_data(data, "detect.docker.tar")
-        log_sensitivity_action("Docker Layer Detection",
-                               "If present, docker '.tar' files will be scanned specially. - sensitivity > 4")
+        log_sensitivity_action("Docker Layer Detection", ['sensitivity > 4'],
+                               "If present, docker '.tar' files will be scanned specially")
     else:
-        log_sensitivity_action("Docker Layer Detection",
-                               "Docker '.tar' files will not be scanned specially. - sensitivity <= 4")
+        log_sensitivity_action("Docker Layer Detection", ['sensitivity <= 4'],
+                               "Docker '.tar' files will not be scanned specially")
 
 
     if improve_scan_coverage_idx:
@@ -1986,16 +1995,21 @@ def run_detect(config_file):
 #    config_file = os.path.join(args.scanfolder, "application-project.yml")
 
     # print out information on what the sensitivity setting is doing
+    data_rows = []
+    for topic, reason_outcome_list in cli_msgs_dict['sense_log'].items():
+        for idx, (reasons, outcome) in enumerate(reason_outcome_list):
+            if idx == 0:
+                data_rows.append([topic, ', '.join(reasons), outcome])
+            else:
+                data_rows.append(["", ', '.join(reasons), outcome])
+    table = tabulate(data_rows, headers=("Actionable", "Cause/Condition", "Outcome"), tablefmt='pretty')
+
+    table_width = table.index('\n')
     title = " Sensitivity Manifest "
-    size = (80 - len(title)) // 2
+    size = (table_width - len(title)) // 2
     header_str = '-'*size + title + '-'*size
     print(header_str)
-    for topic, msgs in cli_msgs_dict['sense_log'].items():
-        topic_str = "--> {}".format(topic)
-        print(topic_str)
-        for msg in msgs:
-            print('    - {}'.format(msg))
-
+    print(table)
     print('-'*len(header_str) + "\n")
 
     uncomment_detect_commands(config_file)
