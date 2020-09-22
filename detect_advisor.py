@@ -16,7 +16,7 @@ from blackduck.HubRestApi import HubInstance
 import magic
 import shutil
 # Constants
-advisor_version = "0.95 Beta"
+advisor_version = "0.95-Beta"
 detect_version = "6.4.0"
 from pydoc import cli
 
@@ -1694,7 +1694,8 @@ def uncomment_line_from_data(data, key):
 def json_splitter(scan_path, maxNodeEntries=200000, maxScanSize=4500000000):
     """
     Splits a json file into multiple jsons so large scans can be broken up with multi-part uploads
-    Source:
+    Source: https://github.com/blackducksoftware/json-splitter/blob/master/src/split_scan_graph_json.py
+    original @author: kumykov
     """
     new_scan_files = []
 
@@ -1704,9 +1705,7 @@ def json_splitter(scan_path, maxNodeEntries=200000, maxScanSize=4500000000):
     dataLength = len(scanData['scanNodeList'])
     scanSize = sum(node['size'] for node in scanData['scanNodeList'] if node['uri'].startswith("file://"))
 
-    #scanData['project'] = scanData['project'] + "-more"
     scanName = scanData['name']
-    baseDir = scanData['baseDir']
     scanNodeList = scanData.pop('scanNodeList')
     scanData.pop('scanProblemList')
     scanData['scanProblemList'] = []
@@ -1837,17 +1836,12 @@ def run_detect(config_file):
             bdio_files = glob.glob('{}/bdio/*.jsonld'.format(output_directory))
             if bdio_files:
                 bdio_file = bdio_files[0]
-                #print(bdio_file)
             if json_files:
                 json_file = json_files[0]
-                #print(json_file)
 
             json_lst = json_splitter(json_file)
 
-            with open('.restconfig.json', 'w') as f:
-                json_data = {"baseurl": args.url, "api_token": args.api_token, "insecure": True, "debug": False}
-                json.dump(json_data, f)
-            hub = HubInstance()
+            hub = HubInstance(args.url, api_token=args.api_token, insecure=True)
             print("Will upload 1 bdio file and {} json files".format(str(len(json_lst))))
             hub.upload_scan(bdio_file)
             print("Uploaded bdio file: {}".format(bdio_file))
