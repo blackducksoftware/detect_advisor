@@ -15,6 +15,9 @@ import re, glob
 from blackduck.HubRestApi import HubInstance
 import magic
 import shutil
+import tarfile
+from tabulate import tabulate
+
 # Constants
 advisor_version = "0.95-Beta"
 detect_version = "6.4.0"
@@ -35,6 +38,7 @@ arcext_list = ['.zip', '.gz', '.tar', '.xz', '.lz', '.bz2', '.7z', '.rar', '.rar
 '.cpio', '.Z', '.lz4', '.lha', '.arj']
 jarext_list = ['.jar', '.ear', '.war']
 supported_zipext_list = ['.jar', '.ear', '.war', '.zip']
+supported_tar_list = ['.tar', '.tar.gz', '.tar.bz']
 dockerext_list = ['.tar', '.gz']
 pkgext_list = ['.rpm', '.deb', '.dmg']
 lic_list = ['LICENSE', 'LICENSE.txt', 'notice.txt', 'license.txt', 'license.html', 'NOTICE', 'NOTICE.txt']
@@ -44,9 +48,38 @@ sig_scan_thresholds = {'enable_disable': lambda _: _ < 3,
                        'file_snippet_match': lambda _: _ > 9,
                        'binary_matching': lambda _: _ > 7}
 
-def test_sensitivity(filter_func):
+def test_sensitivity(op_val_pair: tuple):
     global args
-    return filter_func(args.sensitivity)
+    cmp_op, val = op_val_pair
+    if cmp_op == '>':
+        return args.sensitivity > val
+    elif cmp_op == '<':
+        return args.sensitivity < val
+    elif cmp_op == '>=':
+        return args.sensitivity >= val
+    elif cmp_op == '<=':
+        return args.sensitivity <= val
+    elif cmp_op == "=" or cmp_op == "==":
+        return args.sensitivity == val
+    elif cmp_op == "!=":
+        return args.sensitivity != val
+    else:
+        raise ValueError("{} is not a valid value for sensitivity comparison".format(op_val_pair))
+
+def invert_op(op_val_pair: tuple):
+    op, val = op_val_pair
+    if op == "!=":
+        return "==", val
+    elif op == "==" or op == "=":
+        return "!=", val
+    elif op == "<=":
+        return ">", val
+    elif op == ">=":
+        return "<", val
+    elif op == ">":
+        return "<=", val
+    elif op == "<":
+        return ">=", val
 
 detectors_file_dict = {
 'build.env': ['bitbake'],
@@ -312,7 +345,7 @@ cli_msgs_dict = {
 'dep': '',
 'lic': '',
 'rep': '',
-
+'sense_log': {}
 }
 
 cli_msgs_dict['detect_linux'] = " bash <(curl -s -L https://detect.synopsys.com/detect.sh)\n"
@@ -365,9 +398,7 @@ cli_msgs_dict['rep'] = "--detect.wait.for.results=true\n" + \
 "    300 seconds may be sufficient, but very large scans can take up to 20 minutes (1200 seconds) or longer)\n"
 
 parser = argparse.ArgumentParser(description='Check prerequisites for Detect, scan folders, provide recommendations and example CLI options', prog='detect_advisor')
-
 parser.add_argument("scanfolder", nargs="?", help="Project folder to analyse", default="")
-
 parser.add_argument("-r", "--report", help="Output report file (must not exist already)")
 #parser.add_argument("-d", "--detector_only", help="Check for detector files and prerequisites only",action='store_true')
 #parser.add_argument("-s", "--signature_only", help="Check for files and folders for signature scan only",action='store_true')
@@ -378,13 +409,92 @@ parser.add_argument("-b", "--bdignore", help="Create .bdignore files in sub-fold
 parser.add_argument("-D", "--docker", help="Check docker prerequisites",action='store_true')
 parser.add_argument("-i", "--interactive", help="Use interactive mode to review/set options",action='store_true')
 parser.add_argument("--docker_only", help="Only check docker prerequisites",action='store_true')
-
 parser.add_argument("-s", "--sensitivity", help="Coverage/sensitivity - 1 = dependency scan only & limited FPs, 10 = all scan types including all potential matches")
 parser.add_argument("-u", "--url", help="Black Duck Server URL")
 parser.add_argument("-a", "--api_token", help="Black Duck Server API Token")
 parser.add_argument("-n", "--no_scan", help="Do not run Detect scan - only create .yml project config file",action='store_true')
 
 args = parser.parse_args()
+
+def log_sensitivity_action(topic, msg, overwrite=True):
+    if topic not in cli_msgs_dict['sense_log'] or overwrite:
+        cli_msgs_dict['sense_log'][topic] = [msg]
+    else:
+        cli_msgs_dict['sense_log'][topic].append(msg)
+
+def process_tar_entry(tinfo: tarfile.TarInfo, tarpath, dirdepth, tar):
+    print("ENTRY:" + tarpath + "##" + tinfo.name)
+    fullpath = tarpath + "##" + tinfo.name
+    odir = tinfo.name
+    dir = os.path.dirname(tinfo.name)
+    depthinzip = 0
+    while dir != odir:
+        depthinzip += 1
+        odir = dir
+        dir = os.path.dirname(dir)
+
+    dirdepth = dirdepth + depthinzip
+    tdir = tarpath + "##" + os.path.dirname(tinfo.name)
+    if tdir not in dir_dict.keys():
+        counts['dir'][inarc] += 1
+        dir_dict[tdir] = {}
+        dir_dict[tdir]['num_entries'] = 1
+        dir_dict[tdir]['size'] = tinfo.size
+        dir_dict[tdir]['depth'] = dirdepth
+        dir_dict[tdir]['filenamesstring'] = tinfo.name + ";"
+    else:
+        dir_dict[tdir]['num_entries'] += 1
+        dir_dict[tdir]['size'] += tinfo.size
+        dir_dict[tdir]['depth'] = dirdepth
+        dir_dict[tdir]['filenamesstring'] += tinfo.name + ";"
+    arc_files_dict[fullpath] = get_crc_file(tar.extractfile(tinfo.name))
+    #todo the two sizes won't work so well like that
+    checkfile(tinfo.name, fullpath, tinfo.size, tinfo.size, dirdepth, True,
+              filebuff=tar.extractfile(tinfo.name).read())
+    return dirdepth
+
+def process_tar(tarpath, tardepth, dirdepth):
+    global max_arc_depth
+    global messages
+
+    tardepth += 1
+    if tardepth > max_arc_depth:
+        max_arc_depth = tardepth
+
+    # print("ZIP:{}:{}".format(zipdepth, zippath))
+    try:
+        with tarfile.TarFile(tarpath) as t:
+            for tinfo in t.getmembers():
+                print("CHECKING FILE OUTER: {}".format(tinfo))
+                fullpath = tarpath + "##" + tinfo.name
+                if tinfo.isdir() and 'tar' not in tinfo.name:
+                    continue
+                process_tar_entry(tinfo, tarpath, dirdepth, t)
+                if os.path.splitext(tinfo.name)[1] in supported_tar_list or tinfo.isdir():
+                    with t.extractfile(tinfo.name) as t2:
+                        process_nested_tar(t2, fullpath, tardepth, dirdepth)
+    except:
+        messages += "WARNING: Can't open tar {} (Skipped)\n".format(tarpath)
+
+def process_nested_tar(t, tarpath, tardepth, dirdepth):
+
+    global max_arc_depth
+    global messages
+    tardepth += 1
+    if tardepth > max_arc_depth:
+        max_arc_depth = tardepth
+    try:
+        data = io.BytesIO(t.read())
+        with tarfile.TarFile(fileobj=data) as nt:
+            print(nt.getmembers())
+            for tinfo in nt.getmembers():
+                print("CHECKING FILE INNER: {}".format(tinfo.name))
+                dirdepth = process_tar_entry(tinfo, tarpath, dirdepth, nt)
+                if os.path.splitext(tinfo.name)[1] in supported_tar_list:
+                    with nt.extractfile(tinfo.name) as t2:
+                        process_nested_tar(t2, tarpath + "##" + tinfo.name, tardepth, dirdepth)
+    except:
+        messages += "WARNING: Can't open nested tar {} (Skipped)\n".format(tarpath)
 
 def process_nested_zip(z, zippath, zipdepth, dirdepth):
     global max_arc_depth
@@ -399,14 +509,14 @@ def process_nested_zip(z, zippath, zipdepth, dirdepth):
     try:
         with zipfile.ZipFile(z2_filedata) as nz:
             for zinfo in nz.infolist():
-                dirdepth = process_zip_entry(zinfo, zippath, dirdepth)
+                dirdepth = process_zip_entry(zinfo, zippath, dirdepth, nz)
                 if os.path.splitext(zinfo.filename)[1] in supported_zipext_list:
                     with nz.open(zinfo.filename) as z2:
                         process_nested_zip(z2, zippath + "##" + zinfo.filename, zipdepth, dirdepth)
     except:
         messages += "WARNING: Can't open nested zip {} (Skipped)\n".format(zippath)
 
-def process_zip_entry(zinfo, zippath, dirdepth):
+def process_zip_entry(zinfo, zippath, dirdepth, z):
     #print("ENTRY:" + zippath + "##" + zinfo.filename)
     fullpath = zippath + "##" + zinfo.filename
     odir = zinfo.filename
@@ -433,7 +543,8 @@ def process_zip_entry(zinfo, zippath, dirdepth):
         dir_dict[tdir]['filenamesstring'] += zinfo.filename + ";"
 
     arc_files_dict[fullpath] = zinfo.CRC
-    checkfile(zinfo.filename, fullpath, zinfo.file_size, zinfo.compress_size, dirdepth, True)
+    checkfile(zinfo.filename, fullpath, zinfo.file_size, zinfo.compress_size, dirdepth, True,
+              filebuff=z.open(zinfo.filename, 'rb').read())
     return dirdepth
 
 def process_zip(zippath, zipdepth, dirdepth):
@@ -458,10 +569,14 @@ def process_zip(zippath, zipdepth, dirdepth):
     except:
         messages += "WARNING: Can't open zip {} (Skipped)\n".format(zippath)
 
-def checkfile(name, path, size, size_comp, dirdepth, in_archive):
+def checkfile(name, path, size, size_comp, dirdepth, in_archive, filebuff=None):
 
     ext = os.path.splitext(name)[1]
-    magic_result = magic.from_file(path, mime=True)
+    if filebuff is not None:
+        magic_result = magic.from_buffer(filebuff, mime=True)
+    else:
+        magic_result = magic.from_file(path, mime=True)
+
     if ext != ".zip":
         if not in_archive:
             counts['file'][notinarc] += 1
@@ -512,7 +627,8 @@ def checkfile(name, path, size, size_comp, dirdepth, in_archive):
         ftype = 'jar'
     elif ext in binext_list or magic_result in ['application/x-mach-binary',
                                                 'application/x-dosexec',
-                                                'application/x-executable']:
+                                                'application/x-executable',
+                                                'application/octet-stream']:
         bin_list.append(path)
         if size > largesize:
             bin_large_dict[path] = size
@@ -593,6 +709,8 @@ def process_dir(path, dirdepth, ignore):
                     ext = os.path.splitext(entry.name)[1]
                     if ext in supported_zipext_list:
                         process_zip(entry.path, 0, dirdepth)
+                    if ext in supported_tar_list:
+                        process_tar(entry.path, 0, dirdepth)
 
                 dir_size += entry.stat(follow_symlinks=False).st_size
 
@@ -793,6 +911,22 @@ def get_crc(myfile):
         return(0)
     return(crcvalue)
 
+def get_crc_file(afile):
+    import zlib
+    buffersize = 65536
+
+    crcvalue = 0
+    try:
+
+        buffr = afile.read(buffersize)
+        while len(buffr) > 0:
+            crcvalue = zlib.crc32(buffr, crcvalue)
+            buffr = afile.read(buffersize)
+    except:
+        messages += "WARNING: Unable to open file to calculate CRC\n"
+        return (0)
+    return (crcvalue)
+
 def print_summary(critical_only, f):
     global rep
 
@@ -925,9 +1059,12 @@ def signature_process(folder, f):
     use_json_splitter = False
 
     #print("SIGNATURE SCAN ANALYSIS:")
-    if test_sensitivity(sig_scan_thresholds['enable_disable']):
-        cli_msgs_dict['size'] += "--detect.tools.excluded=SIGNATURE_SCAN\n"
-
+    enable_disable_thresh = sig_scan_thresholds['enable_disable']
+    if test_sensitivity(enable_disable_thresh):
+        log_sensitivity_action("Signature Scanning", "Signature Scan DISABLED - sensitivity {} {}".format(*enable_disable_thresh))
+        cli_msgs_dict['reqd'] += "--detect.tools.excluded=SIGNATURE_SCAN\n"
+    else:
+        log_sensitivity_action("Signature Scanning", "Signature Scan ENABLED - sensitivity {} {}".format(*invert_op(enable_disable_thresh)))
     # Find duplicates without expanding archives - to avoid processing dups
     print("- Processing folders         ", end="", flush=True)
     #num_dirdups, size_dirdups = process_dirdups(f)
@@ -949,6 +1086,15 @@ def signature_process(folder, f):
         "    Impact:  Will impact Capacity license usage\n" + \
         "    Action:  Ignore folders, remove large files or use repeated scans of sub-folders (Also consider detect_advisor -b option to create multiple .bdignore files to ignore duplicate folders)\n\n"
 
+    # Log the use of json splitter
+    if use_json_splitter:
+        log_sensitivity_action("Scan Subdivision", "Scan size ({:>,d}) is > 5g - scan WILL be split.".format(
+            trunc((sizes['file'][notinarc] + sizes['arc'][notinarc]) / 1000000))
+        )
+    else:
+        log_sensitivity_action("Scan Subdivision", "Scan is within global size limits and WILL NOT be split.".format(
+            trunc((sizes['file'][notinarc] + sizes['arc'][notinarc]) / 1000000))
+        )
     if counts['file'][notinarc]+counts['file'][inarc] > 1000000:
         recs_msgs_dict['imp'] += "- IMPORTANT: Overall number of files ({:>,d}) is very large\n".format(trunc((counts['file'][notinarc]+counts['file'][inarc]))) + \
         "    Impact:  Scan time could be VERY long\n" + \
@@ -972,7 +1118,8 @@ def signature_process(folder, f):
         "    Action:  Remove files or ignore folders (using .bdignore files), also consider zipping\n" + \
         "             files and using Binary scan (See report file produced with -r option)\n\n"
 
-    if test_sensitivity(sig_scan_thresholds['binary_matching']):
+    bdba_invoke_thresh = sig_scan_thresholds['binary_matching']
+    if test_sensitivity(bdba_invoke_thresh):
         global bin_pack_name
         binzip_list = {bin.split("##")[0] for bin in
                        bin_list}  # if '##' isn't found, the whole string is still in idx 0 of output
@@ -985,6 +1132,12 @@ def signature_process(folder, f):
             for bin in bin_large_dict.keys():
                 f.write("    {} (Size {:d}MB)\n".format(bin, int(bin_large_dict[bin]/1000000)))
 
+        log_sensitivity_action("Binary Matching", "Binaries have been packed into archive '{}' in scan folder, "
+                                                  "BDBA will be invoked - sensitivity {} {}"
+                                                  .format(bin_pack_name, *bdba_invoke_thresh))
+    else:
+        log_sensitivity_action("Binary Matching", "Binaries have not been packed, nor will BDBA be invoked - "
+                                                  "sensitivity {} {}".format(*invert_op(bdba_invoke_thresh)))
     """
     if size_dirdups > 20000000:
         recs_msgs_dict['imp'] += "- IMPORTANT: Large amount of data ({:,d} MB) in {:,d} duplicate folders\n".format(trunc(size_dirdups/1000000), len(dup_dir_dict)) + \
@@ -1028,10 +1181,23 @@ def signature_process(folder, f):
             "    (CAUTION - will upload local source files)\n"
 
     check_singlefiles(f)
-    if test_sensitivity(sig_scan_thresholds['individual_file_match']):
+    indiv_file_thresh = sig_scan_thresholds['individual_file_match']
+    if test_sensitivity(indiv_file_thresh):
         cli_msgs_dict['scan'] += "--detect.blackduck.signature.scanner.individual.file.matching=SOURCE\n"
-    if test_sensitivity(sig_scan_thresholds['file_snippet_match']):
+        log_sensitivity_action("Individual File Matching", "Individual File Matching (SOURCE) is ENABLED - "
+                                                           "sensitivity {} {}".format(*indiv_file_thresh))
+    else:
+        log_sensitivity_action("Individual File Matching", "Individual File Matching (SOURCE) is DISABLED - "
+                                                           "sensitivity {} {}".format(*invert_op(indiv_file_thresh)))
+
+    snippet_thresh = sig_scan_thresholds['file_snippet_match']
+    if test_sensitivity(snippet_thresh):
         cli_msgs_dict['scan'] += "--detect.blackduck.signature.scanner.snippet.matching=SNIPPET_MATCHING\n"
+        log_sensitivity_action("Snippet Matching", "Snippet Matching is ENABLED - "
+                                                           "sensitivity {} {}".format(*snippet_thresh))
+    else:
+        log_sensitivity_action("Snippet Matching", "Snippet Matching is DISABLED - "
+                                                   "sensitivity {} {}".format(*invert_op(snippet_thresh)))
 
     print(" Done")
     print("")
@@ -1374,6 +1540,7 @@ def output_cli(critical_only, report, f):
     output += re.sub(r"^", "    ", cli_msgs_dict['reqd'], flags=re.MULTILINE)
 
     print(output)
+
     if len(bdignore_list) > 0:
         if report:
             print("        (Note that '.bdignore' exclude file is recommended - see the report file '{}' or use '-b' option\n" + \
@@ -1593,23 +1760,30 @@ def interactive(scanfolder, url, api, sensitivity, no_scan, report):
 
 def get_detector_search_depth():
     global args
-
+    # TODO: we need defined behaviour for all sensitivities for detector search depth
     if args.sensitivity < 3:
         search_depth = det_min_depth if not None else 0  # distance to package manager
+        log_sensitivity_action("Detector Search Depth", "Search depth set to {} - sensitivity < 3".format(search_depth), overwrite=False)
     if 3 < args.sensitivity < 7:
         search_depth = int(det_max_depth/2) if (det_max_depth and int(det_max_depth/2) > 0) else 1
+        log_sensitivity_action("Detector Search Depth", "Search depth set to {} - 3 < sensitivity < 7".format(search_depth), overwrite=False)
     if args.sensitivity > 6:
         search_depth = det_max_depth if det_max_depth else 1
-
+        log_sensitivity_action("Detector Search Depth", "Search depth set to {} - sensitivity > 6".format(search_depth), overwrite=False)
     return search_depth
 
 def get_detector_exclusion_args():
-
+    # TODO: we need defined behaviour for all sensitivities for both "patterns" and "defaults"
     detector_exclusion_args = []
     if args.sensitivity < 4:
         detector_exclusion_args.append('detect.detector.search.exclusion.patterns: test*,samples*,examples*')
+        log_sensitivity_action("Detector Search Exclusions", "Search Exclusion Patters set to 'test*,samples*examples*' "
+                                                             "- sensitivity < 4", overwrite=False)
+
     if args.sensitivity > 8:
         detector_exclusion_args.append('detect.detector.search.exclusion.defaults: false')
+        log_sensitivity_action("Detector Search Exclusions", "Search exclusion defaults set to FALSE - "
+                                                             " > 8", overwrite=False)
     return detector_exclusion_args
 
 def get_detector_args():
@@ -1636,6 +1810,9 @@ def uncomment_min_required_options(data, start_index, end_index):
         if 'detect.detector.buildless' in line:
             if args.sensitivity > 3:
                 data[data.index(line)] = uncomment_line(line, "detect.detector.buildless")
+                log_sensitivity_action("Buildless Mode", "Detect will run in buildless mode - sensitivity > 3")
+            else :
+                log_sensitivity_action("Buildless Mode", "Detect will NOT run in buildless mode - sensitivity <= 3")
 
         if 'blackduck.api.token' in line:
             data[data.index(line)] = line.replace('#', '').replace('API_TOKEN', args.api_token)
@@ -1674,8 +1851,12 @@ def uncomment_optimize_dependency_options(data, start_index, end_index):
     for line in data [start_index:end_index]:
         if args.sensitivity > 2:
             data[data.index(line)] = uncomment_line(line, 'dev.dependencies: true')
+            log_sensitivity_action("Dev Dependencies", "Dev dependencies will be a part of the detect run - "
+                                                       "sensitivity > 2", overwrite=False)
         elif args.sensitivity < 3:
             data[data.index(line)] = uncomment_line(line, 'dev.dependencies: false')
+            log_sensitivity_action("Dev Dependencies", "Dev dependencies will NOT be a part of the detect run - "
+                                                       "sensitivity < 3", overwrite=False)
     return data
 
 def uncomment_line(line, key=None):
@@ -1694,8 +1875,7 @@ def uncomment_line_from_data(data, key):
 def json_splitter(scan_path, maxNodeEntries=200000, maxScanSize=4500000000):
     """
     Splits a json file into multiple jsons so large scans can be broken up with multi-part uploads
-    Source: https://github.com/blackducksoftware/json-splitter/blob/master/src/split_scan_graph_json.py
-    original @author: kumykov
+    Source:
     """
     new_scan_files = []
 
@@ -1705,7 +1885,9 @@ def json_splitter(scan_path, maxNodeEntries=200000, maxScanSize=4500000000):
     dataLength = len(scanData['scanNodeList'])
     scanSize = sum(node['size'] for node in scanData['scanNodeList'] if node['uri'].startswith("file://"))
 
+    #scanData['project'] = scanData['project'] + "-more"
     scanName = scanData['name']
+    baseDir = scanData['baseDir']
     scanNodeList = scanData.pop('scanNodeList')
     scanData.pop('scanProblemList')
     scanData['scanProblemList'] = []
@@ -1768,6 +1950,11 @@ def uncomment_detect_commands(config_file):
     data = uncomment_min_required_options(data, min_req_idx+1, next(item for item in indices if item is not None)-1)
     if args.sensitivity > 4:
         uncomment_line_from_data(data, "detect.docker.tar")
+        log_sensitivity_action("Docker Layer Detection",
+                               "If present, docker '.tar' files will be scanned specially. - sensitivity > 4")
+    else:
+        log_sensitivity_action("Docker Layer Detection",
+                               "Docker '.tar' files will not be scanned specially. - sensitivity <= 4")
 
 
     if improve_scan_coverage_idx:
@@ -1797,6 +1984,20 @@ def uncomment_detect_commands(config_file):
 
 def run_detect(config_file):
 #    config_file = os.path.join(args.scanfolder, "application-project.yml")
+
+    # print out information on what the sensitivity setting is doing
+    title = " Sensitivity Manifest "
+    size = (80 - len(title)) // 2
+    header_str = '-'*size + title + '-'*size
+    print(header_str)
+    for topic, msgs in cli_msgs_dict['sense_log'].items():
+        topic_str = "--> {}".format(topic)
+        print(topic_str)
+        for msg in msgs:
+            print('    - {}'.format(msg))
+
+    print('-'*len(header_str) + "\n")
+
     uncomment_detect_commands(config_file)
     config_file = config_file.replace(" ", "\ ")
     detect_command = cli_msgs_dict['detect'].strip() + ' ' + '--spring.profiles.active=project' + ' ' + ' --blackduck.trust.cert=true'  + ' ' + ' --spring.config.location="file:' + config_file + '"'
@@ -1823,7 +2024,7 @@ def run_detect(config_file):
     detect_status = re.search(r'Overall Status: (.*)\n', file_contents)
     bom_location = re.search(r'Black Duck Project BOM: (.*)\n', file_contents)
 
-    if use_json_splitter and args.sensitivity > 2:
+    if use_json_splitter and args.sensitivity > 2: # is this supposed to be gating this for only when a sig scan is happening?
         print("Using JSON splitter")
         # upload scan files
 
@@ -1836,12 +2037,17 @@ def run_detect(config_file):
             bdio_files = glob.glob('{}/bdio/*.jsonld'.format(output_directory))
             if bdio_files:
                 bdio_file = bdio_files[0]
+                #print(bdio_file)
             if json_files:
                 json_file = json_files[0]
+                #print(json_file)
 
             json_lst = json_splitter(json_file)
 
-            hub = HubInstance(args.url, api_token=args.api_token, insecure=True)
+            with open('.restconfig.json', 'w') as f:
+                json_data = {"baseurl": args.url, "api_token": args.api_token, "insecure": True, "debug": False}
+                json.dump(json_data, f)
+            hub = HubInstance()
             print("Will upload 1 bdio file and {} json files".format(str(len(json_lst))))
             hub.upload_scan(bdio_file)
             print("Uploaded bdio file: {}".format(bdio_file))
@@ -1865,6 +2071,7 @@ def run_detect(config_file):
 
     if bom_location:
         print("BOM location: {}".format(bom_location.group(1)))
+
 
 if os.environ.get('BLACKDUCK_URL') != "" and args.url == None:
     args.url = os.environ.get('BLACKDUCK_URL')
