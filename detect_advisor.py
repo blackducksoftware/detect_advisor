@@ -1,7 +1,8 @@
 import os
 import zipfile
 from math import trunc
-import io
+#import tempfile
+import io, re
 import argparse
 import platform, sys
 import subprocess
@@ -1762,31 +1763,30 @@ def interactive(scanfolder, url, api, sensitivity, no_scan, report):
 def get_detector_search_depth():
     global args
     # TODO: we need defined behaviour for all sensitivities for detector search depth
-    if args.sensitivity <= 3:  # range 1-3
+    if args.sensitivity < 3:
         search_depth = det_min_depth if not None else 0  # distance to package manager
         log_sensitivity_action("Detector Search Depth", ["sensitivity < 3"],
                                "Search depth set to {}".format(search_depth),
                                overwrite=False)
-    if 3 < args.sensitivity < 7:  # 4-6
+    if 3 < args.sensitivity < 7:
         search_depth = int(det_max_depth/2) if (det_max_depth and int(det_max_depth/2) > 0) else 1
         log_sensitivity_action("Detector Search Depth", ["3 < sensitivity < 7"],
-                              "Search depth set to {}".format(search_depth),
-                               overwrite=False)
-    if args.sensitivity > 6: # 7-10
+                              "Search depth set to {}".format(search_depth), overwrite=False)
+    if args.sensitivity > 6:
         search_depth = det_max_depth if det_max_depth else 1
         log_sensitivity_action("Detector Search Depth", ["sensitivity > 6"],
-                                 "Search depth set to {}".format(search_depth),
-                               overwrite=False)
+                                 "Search depth set to {}".format(search_depth), overwrite=False)
     return search_depth
 
 def get_detector_exclusion_args():
+    # TODO: we need defined behaviour for all sensitivities for both "patterns" and "defaults"
     detector_exclusion_args = []
     if args.sensitivity < 4:
         detector_exclusion_args.append('detect.detector.search.exclusion.patterns: test*,samples*,examples*')
         log_sensitivity_action("Detector Search Exclusions", ["sensitivity < 4"],
                                  "Search Exclusion Patters set to 'test*,samples*,examples*'",
                                overwrite=False)
-    # between 5 and 8 - we are using defaults
+
     if args.sensitivity > 8:
         detector_exclusion_args.append('detect.detector.search.exclusion.defaults: false')
         log_sensitivity_action("Detector Search Exclusions", ["sensitivity > 8"],
@@ -2009,7 +2009,6 @@ def run_detect(config_file):
     size = (table_width - len(title)) // 2
     header_str = '-'*size + title + '-'*size
     print(header_str)
-    print(' '*size + " Value: {}".format(args.sensitivity))
     print(table)
     print('-'*len(header_str) + "\n")
 
