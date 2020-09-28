@@ -17,6 +17,7 @@ import magic
 import shutil
 import tarfile
 from tabulate import tabulate
+from WizardLogger import WizardLogger
 
 # Constants
 advisor_version = "0.95-Beta"
@@ -46,7 +47,8 @@ lic_list = ['LICENSE', 'LICENSE.txt', 'notice.txt', 'license.txt', 'license.html
 sig_scan_thresholds = {'enable_disable': ("<", 3),
                        'individual_file_match': (">", 7),
                        'file_snippet_match': (">", 9),
-                       'binary_matching': (">", 7)}
+                       'binary_matching': (">", 7)
+                       }
 
 def test_sensitivity(op_val_pair: tuple):
     global args
@@ -80,7 +82,7 @@ def invert_op(op_val_pair: tuple):
         return "<=", val
     elif op == "<":
         return ">=", val
-
+wl = WizardLogger()
 detectors_file_dict = {
 'build.env': ['bitbake'],
 'cargo.toml': ['cargo'],
@@ -410,17 +412,12 @@ parser.add_argument("-D", "--docker", help="Check docker prerequisites",action='
 parser.add_argument("-i", "--interactive", help="Use interactive mode to review/set options",action='store_true')
 parser.add_argument("--docker_only", help="Only check docker prerequisites",action='store_true')
 parser.add_argument("-s", "--sensitivity", help="Coverage/sensitivity - 1 = dependency scan only & limited FPs, 10 = all scan types including all potential matches")
+parser.add_argument("-f", "--focus", help="What the scan focus is - License Compliance (l) / Security (s) / Both (b)")
 parser.add_argument("-u", "--url", help="Black Duck Server URL")
 parser.add_argument("-a", "--api_token", help="Black Duck Server API Token")
 parser.add_argument("-n", "--no_scan", help="Do not run Detect scan - only create .yml project config file",action='store_true')
 
 args = parser.parse_args()
-
-def log_sensitivity_action(topic, conditionals, action, overwrite=True):
-    if topic not in cli_msgs_dict['sense_log'] or overwrite:
-        cli_msgs_dict['sense_log'][topic] = [(conditionals, action)]
-    else:
-        cli_msgs_dict['sense_log'][topic].append((conditionals, action))
 
 def process_tar_entry(tinfo: tarfile.TarInfo, tarpath, dirdepth, tar):
     print("ENTRY:" + tarpath + "##" + tinfo.name)
@@ -1055,23 +1052,25 @@ def pack_binaries(path_list, fname="binary_files.zip"):
         binpack = fname
         return fname
 
+
 def signature_process(folder, f):
     use_json_splitter = False
 
     enable_disable_thresh = sig_scan_thresholds['enable_disable']
     if test_sensitivity(enable_disable_thresh):
         cli_msgs_dict['reqd'] += "--detect.tools.excluded=SIGNATURE_SCAN\n"
-        log_sensitivity_action("Signature Scanning", ["sensitivity {} {}".format(*enable_disable_thresh)],
-                                 "Signature Scan is DISABLED")
+        wl.log("Signature_Scanning", "sensitivity {} {}".format(*enable_disable_thresh), "--detect.tools.excluded=SIGNATURE_SCAN",
+               "Signature Scan is DISABLED")
     else:
-        log_sensitivity_action("Signature Scanning", ["sensitivity {} {}".format(*invert_op(enable_disable_thresh))],
-                                 "Signature Scan is ENABLED")
+        wl.log("Signature_Scanning", "sensitivity {} {}".format(*invert_op(enable_disable_thresh)), "--detect.tools.excluded={UNSET}",
+               "Signature Scan is ENABLED")
+
     # Find duplicates without expanding archives - to avoid processing dups
     print("- Processing folders         ", end="", flush=True)
-    #num_dirdups, size_dirdups = process_dirdups(f)
+    num_dirdups, size_dirdups = process_dirdups(f)
     print(" Done")
     print("- Processing large files     ", end="", flush=True)
-    #num_dups, size_dups = process_largefiledups(f)
+    num_dups, size_dups = process_largefiledups(f)
     print(" Done")
 
     print("- Processing Signature Scan  .....", end="", flush=True)
@@ -1089,11 +1088,13 @@ def signature_process(folder, f):
 
     # Log the use of json splitter
     if use_json_splitter:
-        log_sensitivity_action("Scan Subdivision", ["Scan size ({:>,d}) is > 5g".format(trunc((sizes['file'][notinarc] + sizes['arc'][notinarc]) / 1000000))],
-                                 "scan WILL be split")
+        wl.log("Scan Subdivision", "Scan size ({:>,.2f}g) is >= 5g".format(float((sizes['file'][notinarc] + sizes['arc'][notinarc])) / 1000000000),
+               "use_json_splitter=true", "Scan WILL be split")
     else:
-        log_sensitivity_action("Scan Subdivision", ["Scan is within global size limit (5g)"],
-                                 "Scan file WILL NOT be split")
+        wl.log("Scan Subdivision", "Scan size ({:>,.2f}g) is within global size limit (5g)"
+               .format(float((sizes['file'][notinarc] + sizes['arc'][notinarc])) / 1000000000), "use_json_splitter=false",
+               "Scan WILL NOT be split")
+
     if counts['file'][notinarc]+counts['file'][inarc] > 1000000:
         recs_msgs_dict['imp'] += "- IMPORTANT: Overall number of files ({:>,d}) is very large\n".format(trunc((counts['file'][notinarc]+counts['file'][inarc]))) + \
         "    Impact:  Scan time could be VERY long\n" + \
@@ -1130,17 +1131,16 @@ def signature_process(folder, f):
             f.write("\nLARGE BINARY FILES:\n")
             for bin in bin_large_dict.keys():
                 f.write("    {} (Size {:d}MB)\n".format(bin, int(bin_large_dict[bin]/1000000)))
+        wl.log("Binary Matching", ["({}) binaries found in scan directory tree".format(len(binzip_list)),
+                                   "sensitivity {} {}".format(*bdba_invoke_thresh)], "--detect.binary.scan.file.path={}".format(bin_pack_name),
+               "Binaries have been packed into zipfile - BDBA will be invoked")
 
-        log_sensitivity_action("Binary Matching",
-                               ["({}) binaries found in scan folder".format(len(binzip_list)),
-                                                "sensitivity {} {}".format(*bdba_invoke_thresh)],
-                                                  "Binaries have been packed into zipfile '{}' - BDBA will be invoked"
-                               .format(bin_pack_name))
     else:
-        log_sensitivity_action("Binary Matching",
-                               ["sensitivity {} {}".format(*invert_op(bdba_invoke_thresh))],
-                                 "Binaries have not been packed; BDBA will NOT be invoked")
-    """
+        wl.log("Binary Matching", "sensitivity {} {}".format(*bdba_invoke_thresh),
+               "--detect.binary.scan.file.path={UNSET}",
+               "BDBA will NOT be invoked")
+
+
     if size_dirdups > 20000000:
         recs_msgs_dict['imp'] += "- IMPORTANT: Large amount of data ({:,d} MB) in {:,d} duplicate folders\n".format(trunc(size_dirdups/1000000), len(dup_dir_dict)) + \
         "    Impact:  Scan capacity potentially utilised without detecting additional\n" + \
@@ -1159,7 +1159,7 @@ def signature_process(folder, f):
         #    if dup_dir_dict.get(os.path.dirname(apath)) == None and dup_dir_dict.get(os.path.dirname(bpath)) == None:
         #        print("    {}".format(bpath))
         #print("")
-    """
+
 
     if counts['lic'][notinarc] > 10:
         recs_msgs_dict['info'] += "- INFORMATION: License or notices files found\n" + \
@@ -1186,19 +1186,30 @@ def signature_process(folder, f):
     indiv_file_thresh = sig_scan_thresholds['individual_file_match']
     if test_sensitivity(indiv_file_thresh):
         cli_msgs_dict['scan'] += "--detect.blackduck.signature.scanner.individual.file.matching=SOURCE\n"
-        log_sensitivity_action("Individual File Matching", ["sensitivity {} {}".format(*indiv_file_thresh)],
-                                 "Individual File Matching (SOURCE) is ENABLED")
+        wl.log("Individual File Matching", "sensitivity {} {}".format(*indiv_file_thresh),
+               "--detect.blackduck.signature.scanner.individual.file.matching=SOURCE",
+               "Individual File Matching (SOURCE) is ENABLED")
     else:
-        log_sensitivity_action("Individual File Matching", ["sensitivity {} {}".format(*invert_op(indiv_file_thresh))],
-                                 "Individual File Matching (SOURCE) is DISABLED")
+        wl.log("Individual File Matching", "sensitivity {} {}".format(*invert_op(indiv_file_thresh)),
+               "--detect.blackduck.signature.scanner.individual.file.matching={UNSET}",
+               "Individual File Matching (SOURCE) is ENABLED")
 
     snippet_thresh = sig_scan_thresholds['file_snippet_match']
     if test_sensitivity(snippet_thresh):
-        cli_msgs_dict['scan'] += "--detect.blackduck.signature.scanner.snippet.matching=SNIPPET_MATCHING\n"
-        log_sensitivity_action("Snippet Matching", ["sensitivity {} {}".format(*snippet_thresh)],
-                               "Snippet Matching is ENABLED")
+        if args.focus != 's':
+
+            cli_msgs_dict['scan'] += "--detect.blackduck.signature.scanner.snippet.matching=SNIPPET_MATCHING\n"
+
+            wl.log("Snippet Matching", ["sensitivity {} {}".format(*snippet_thresh), "scan focus != security only"],
+                   "--detect.blackduck.signature.scanner.snippet.matching=SNIPPET_MATCHING",
+                                   "Snippet Matching is ENABLED")
+        else:
+            wl.log("Snippet Matching", "scan focus == security only",
+                   "--detect.blackduck.signature.scanner.snippet.matching={UNSET}",
+                   "Snippet Matching is DISABLED")
     else:
-        log_sensitivity_action("Snippet Matching", ["sensitivity {} {}".format(*invert_op(snippet_thresh))],
+        wl.log("Snippet Matching", "sensitivity {} {}".format(*invert_op(snippet_thresh)),
+               "--detect.blackduck.signature.scanner.snippet.matching={UNSET}",
                                "Snippet Matching is DISABLED")
 
     print(" Done")
@@ -1707,7 +1718,7 @@ def backup_file(filename, filetype):
                 return(new_file)
     return("")
 
-def interactive(scanfolder, url, api, sensitivity, no_scan, report):
+def interactive(scanfolder, url, api, sensitivity, focus, no_scan, report):
     if scanfolder == "" or scanfolder == None:
         scanfolder = os.getcwd()
 
@@ -1727,23 +1738,7 @@ def interactive(scanfolder, url, api, sensitivity, no_scan, report):
         url = get_input("Black Duck Server URL [{}]: ".format(url), url)
         api = get_input("Black Duck API Token [{}]: ".format(api), api)
         sensitivity = int(get_input("Scan sensitivity/coverage (1-10) where 1 = dependency scan only, 10 = all scan types including all potential matches [{}]: ".format(sensitivity), sensitivity))
-
-#         if scantype == "d":
-#             mylist = ['d','b','s']
-#         elif scantype == "s":
-#             mylist = ['s','d','b']
-#         else:
-#             mylist = ['b','d','s']
-#         scantype = check_input_options("Types of scan to check? (b)oth, (d)ependency or (s)ignature] [{}]:".format(scantype), mylist)
-#         docker_bool = check_input_yn("Docker scan check? (y/n)", docker)
-#         critical_bool = check_input_yn("Critical recommendations only? (y/n)", critical_only)
-#         if report != "":
-#             rep_default = True
-#         else:
-#             rep_default = False
-#             report = "report.txt"
-#         report_bool = check_input_yn("Create output report file? (y/n)", rep_default)
-#         if report_bool:
+        focus = str(get_input("Scan Focus (License Compliance (l) / Security (s) / Both (b)) [{}]: ".format(focus), focus))
 
         if report == None:
             report = "report.txt"
@@ -1757,25 +1752,24 @@ def interactive(scanfolder, url, api, sensitivity, no_scan, report):
 #         config_bool = check_input_yn("Create application-project.yml file? (y/n)", output_config)
     except:
         print("Exiting")
-        return("", "", "", 0, False, "")
-    return(scanfolder, url, api, sensitivity, no_scan, report)
+        return "", "", "", 0, False, ""
+    return scanfolder, url, api, sensitivity, focus, no_scan, report
 
 def get_detector_search_depth():
     global args
     # TODO: we need defined behaviour for all sensitivities for detector search depth
-    if args.sensitivity < 3:
+    if args.sensitivity <= 3:
         search_depth = det_min_depth if not None else 0  # distance to package manager
-        log_sensitivity_action("Detector Search Depth", ["sensitivity < 3"],
-                               "Search depth set to {}".format(search_depth),
-                               overwrite=False)
+        wl.log("Detector Search Depth", "sensitivity <= 3", "Detector search depth",
+               "Search depth set to {}".format(search_depth))
     if 3 < args.sensitivity < 7:
         search_depth = int(det_max_depth/2) if (det_max_depth and int(det_max_depth/2) > 0) else 1
-        log_sensitivity_action("Detector Search Depth", ["3 < sensitivity < 7"],
-                              "Search depth set to {}".format(search_depth), overwrite=False)
+        wl.log("Detector Search Depth", "3 < sensitivity < 7", "Detector search depth",
+               "Search depth set to {}".format(search_depth))
     if args.sensitivity > 6:
         search_depth = det_max_depth if det_max_depth else 1
-        log_sensitivity_action("Detector Search Depth", ["sensitivity > 6"],
-                                 "Search depth set to {}".format(search_depth), overwrite=False)
+        wl.log("Detector Search Depth", "sensitivity > 6", "Detector search depth", "Search depth set to {}".format(search_depth))
+
     return search_depth
 
 def get_detector_exclusion_args():
@@ -1783,16 +1777,21 @@ def get_detector_exclusion_args():
     detector_exclusion_args = []
     if args.sensitivity < 4:
         detector_exclusion_args.append('detect.detector.search.exclusion.patterns: test*,samples*,examples*')
-        log_sensitivity_action("Detector Search Exclusions", ["sensitivity < 4"],
-                                 "Search Exclusion Patters set to 'test*,samples*,examples*'",
-                               overwrite=False)
-
-    if args.sensitivity > 8:
+        wl.log("Detector Search Exclusions", "sensitivity < 4", "",
+                                 "Search Exclusion Patters set to 'test*,samples*,examples*'")
+    elif args.sensitivity <= 8:
+        wl.log("Detector Search Exclusions", " 4 <= sensitivity <= 8", "",
+               "Search exclusion defaults are used")
+    else:
         detector_exclusion_args.append('detect.detector.search.exclusion.defaults: false')
-        log_sensitivity_action("Detector Search Exclusions", ["sensitivity > 8"],
-                                 "Search exclusion defaults set to FALSE", overwrite=False)
+        wl.log("Detector Search Exclusions", "sensitivity > 8", "",
+                                 "Search exclusion defaults set to FALSE")
     return detector_exclusion_args
-
+def get_license_search_args():
+    detect_license_search_args = []
+    if args.focus == "l":
+        detect_license_search_args.append("detect.blackduck.signature.scanner.license.search=true")
+        wl.log()
 def get_detector_args():
     detector_args = []
     for item in get_detector_exclusion_args():
@@ -1817,10 +1816,11 @@ def uncomment_min_required_options(data, start_index, end_index):
         if 'detect.detector.buildless' in line:
             if args.sensitivity > 3:
                 data[data.index(line)] = uncomment_line(line, "detect.detector.buildless")
-                log_sensitivity_action("Buildless Mode", ["sensitivity > 3", "detect.detector.buildless in config"],
+
+                wl.log("Buildless Mode", "sensitivity > 3", "detect.detector.buildless uncommented in config",
                                          "Detect will run in buildless mode")
             else :
-                log_sensitivity_action("Buildless Mode", ["sensitivity <= 3"],
+                wl.log("Buildless Mode", "sensitivity <= 3", "",
                                          "Despite the option to, Detect will NOT run in buildless mode")
 
         if 'blackduck.api.token' in line:
@@ -1860,12 +1860,12 @@ def uncomment_optimize_dependency_options(data, start_index, end_index):
     for line in data [start_index:end_index]:
         if args.sensitivity > 2:
             data[data.index(line)] = uncomment_line(line, 'dev.dependencies: true')
-            log_sensitivity_action("Dev Dependencies", ["sensitivity > 2"],
-                                     "Dev dependencies will be a part of the detect run", overwrite=False)
+            wl.log("Dev Dependencies", "sensitivity > 2", "dev.dependencies = true",
+                                     "Dev dependencies will be a part of the detect run")
         elif args.sensitivity < 3:
             data[data.index(line)] = uncomment_line(line, 'dev.dependencies: false')
-            log_sensitivity_action("Dev Dependencies", ["sensitivity < 3"],
-                                     "Dev dependencies will NOT be a part of the detect run", overwrite=False)
+            wl.log("Dev Dependencies", "sensitivity < 3", "dev.dependencies = false",
+                                     "Dev dependencies will NOT be a part of the detect run")
     return data
 
 def uncomment_line(line, key=None):
@@ -1959,12 +1959,11 @@ def uncomment_detect_commands(config_file):
     data = uncomment_min_required_options(data, min_req_idx+1, next(item for item in indices if item is not None)-1)
     if args.sensitivity > 4:
         uncomment_line_from_data(data, "detect.docker.tar")
-        log_sensitivity_action("Docker Layer Detection", ['sensitivity > 4'],
-                               "If present, docker '.tar' files will be scanned specially")
-    else:
-        log_sensitivity_action("Docker Layer Detection", ['sensitivity <= 4'],
-                               "Docker '.tar' files will not be scanned specially")
+        wl.log("Docker Layer Detection", ['sensitivity > 4'], "true", "{} Docker '.tar' files will be scanned specially" \
+               .format(len(cli_msgs_dict['docker'])))
 
+    else:
+        wl.log("Docker Layer Detection", ['sensitivity <= 4'], "false", "Docker '.tar' files will NOT be scanned specially")
 
     if improve_scan_coverage_idx:
         indices.remove(improve_scan_coverage_idx)
@@ -1995,40 +1994,27 @@ def run_detect(config_file):
 #    config_file = os.path.join(args.scanfolder, "application-project.yml")
 
     # print out information on what the sensitivity setting is doing
-    data_rows = []
-    for topic, reason_outcome_list in cli_msgs_dict['sense_log'].items():
-        for idx, (reasons, outcome) in enumerate(reason_outcome_list):
-            if idx == 0:
-                data_rows.append([topic, ', '.join(reasons), outcome])
-            else:
-                data_rows.append(["", ', '.join(reasons), outcome])
-    table = tabulate(data_rows, headers=("Actionable", "Cause/Condition", "Outcome"), tablefmt='pretty')
-
-    table_width = table.index('\n')
-    title = " Sensitivity Manifest "
-    size = (table_width - len(title)) // 2
-    header_str = '-'*size + title + '-'*size
-    print(header_str)
-    print(table)
-    print('-'*len(header_str) + "\n")
-
+    print(wl.make_table())
     uncomment_detect_commands(config_file)
     config_file = config_file.replace(" ", "\ ")
     detect_command = cli_msgs_dict['detect'].strip() + ' ' + '--spring.profiles.active=project' + ' ' + ' --blackduck.trust.cert=true'  + ' ' + ' --spring.config.location="file:' + config_file + '"'
     print("Running command: {}\n".format(detect_command))
     p = subprocess.Popen(detect_command, shell=True, executable='/bin/bash',
-                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    stdout, stderr = p.communicate()
-    out_file = 'latest_detect_run.txt'
-    err_file = 'latest_detect_errors.txt'
-
-    with open(out_file, 'w') as out:
-        out.write(stdout.decode('utf-8'))
-    with open(err_file, 'w') as err:
-        err.write(stderr.decode('utf-8'))
-
-    with open(out_file, 'r+') as f:
-        file_contents = f.read()
+                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    stdout = p.stdout
+    out_file = open('latest_detect_run.txt', "w+")
+    out_file.write(wl.make_table())
+    rc = None
+    while True:
+        std_out_output = stdout.readline()
+        if std_out_output == '' and p.poll is not None:
+            break
+        if std_out_output:
+            out_file.write(std_out_output.decode('utf-8'))
+            print(std_out_output.decode('utf-8').strip())
+        rc = p.poll
+    file_contents = out_file.read()
+    print(rc)
     global binpack
     try:
         if binpack is not None:
@@ -2077,7 +2063,6 @@ def run_detect(config_file):
 
 
     print("Detect logs written to: {}".format(out_file))
-    print("Detect erros written to: {}".format(err_file))
     if detect_status:
         print("Detect run complete. Overall status: {}".format(detect_status.group(1)))
     else:
@@ -2095,6 +2080,8 @@ if args.sensitivity == None:
     args.sensitivity = 5
 else:
     args.sensitivity = int(args.sensitivity)
+if args.focus == None:
+    args.focus = "b"
 if args.no_scan == None:
     args.no_scan = False
 
@@ -2110,7 +2097,9 @@ if args.scanfolder == "" or args.interactive:
 #             scantype = "s"
 #         else:
 #             scantype = "b"
-        args.scanfolder, args.url, args.api_token, args.sensitivity, args.no_scan, args.report = interactive(args.scanfolder, args.url, args.api_token, args.sensitivity, args.no_scan, args.report)
+        args.scanfolder, args.url, args.api_token, \
+        args.sensitivity, args.focus, args.no_scan, args.report = interactive(args.scanfolder, args.url, args.api_token,
+                                                                              args.sensitivity, args.focus, args.no_scan, args.report)
 #         if scantype == "d":
 #             args.detector_only = True
 #         elif scantype == "s":
