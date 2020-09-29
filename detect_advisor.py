@@ -624,15 +624,14 @@ def checkfile(name, path, size, size_comp, dirdepth, in_archive, filebuff=None):
         ftype = 'jar'
     elif ext in binext_list or magic_result in ['application/x-mach-binary',
                                                 'application/x-dosexec',
-                                                'application/x-executable',
-                                                'application/octet-stream']:
+                                                'application/x-executable']:
         bin_list.append(path)
         if size > largesize:
             bin_large_dict[path] = size
         ftype = 'bin'
     elif ext in arcext_list:
         if ext in dockerext_list:
-            if (is_tar_docker(path)):
+            if is_tar_docker(path):
                 # we will invoke --detect.docker.tar on these
                 cli_msgs_dict['docker'] += "--detect.docker.tar='{}'\n".format(os.path.abspath(path))
         arc_list.append(path)
@@ -644,7 +643,6 @@ def checkfile(name, path, size, size_comp, dirdepth, in_archive, filebuff=None):
         other_list.append(path)
         ftype = 'other'
 
-    #print("path:{} type:{}, size_comp:{}, size:{}".format(path, ftype, size_comp, size))
     if not in_archive:
         counts[ftype][notinarc] += 1
         sizes[ftype][notinarc] += size
@@ -678,7 +676,6 @@ def process_dir(path, dirdepth, ignore):
                 for bline in lines:
                     ignore_list.append(bline[1:len(bline)-2])
                 b.close()
-                #print(path, ignore_list)
 
         for entry in os.scandir(path):
             ignorethis = False
@@ -686,7 +683,6 @@ def process_dir(path, dirdepth, ignore):
             filenames_string += entry.name + ";"
             if entry.is_dir(follow_symlinks=False):
                 if ignore or os.path.basename(entry.path) in ignore_list:
-                    #print("IGNORE {}".format(entry.path))
                     ignorethis = True
                     counts['ignoredir'][notinarc] += 1
                 else:
@@ -1042,7 +1038,7 @@ def pack_binaries(path_list, fname="binary_files.zip"):
     global binpack
     binpack = None
     try:
-        with zipfile.ZipFile(os.path.join(os.getcwd(), fname), 'w') as binzip:
+        with zipfile.ZipFile(os.path.join(args.scanfolder, fname), 'w') as binzip:
             for bin_path in path_list:
                 binzip.write(os.path.relpath(bin_path, os.curdir))
 
