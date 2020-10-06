@@ -1772,7 +1772,7 @@ def get_detector_exclusion_args():
     # TODO: we need defined behaviour for all sensitivities for both "patterns" and "defaults"
     detector_exclusion_args = []
     if args.sensitivity < 4:
-        detector_exclusion_args.append('detect.detector.search.exclusion.patterns: test*,samples*,examples*')
+        detector_exclusion_args.append('detect.detector.search.exclusion.patterns: *test*,*samples*,*examples*')
         wl.log("Detector Search Exclusions", "sensitivity < 4", "",
                                  "Search Exclusion Patters set to 'test*,samples*,examples*'")
     elif args.sensitivity <= 8:
@@ -2080,10 +2080,6 @@ if args.focus == None:
     args.focus = "b"
 if args.no_scan == None:
     args.no_scan = False
-
-# Remove this
-#args.url = 'https://eng-spider-hub04.dc1.lan'
-#args.api_token = 'ZDBhN2Q1YjctNWMyMS00YTIwLTg5NjUtMjY1ZmNhMmViNmQxOjE4ZWU3MWE0LTg0YzItNDc0OS1hZTQxLTExZjczNWQ5ODRmYg=='
 
 if args.scanfolder == "" or args.interactive:
 #     try:
