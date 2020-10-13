@@ -10,6 +10,8 @@ import json
 import math
 import traceback
 from datetime import datetime
+from pathlib import Path
+
 from TarExaminer import is_tar_docker
 import re, glob
 from blackduck.HubRestApi import HubInstance
@@ -1771,10 +1773,30 @@ def get_detector_search_depth():
 def get_detector_exclusion_args():
     # TODO: we need defined behaviour for all sensitivities for both "patterns" and "defaults"
     detector_exclusion_args = []
+    detector_exclusions = ['*test*', '*samples*', '*examples*']
+
     if args.sensitivity < 4:
-        detector_exclusion_args.append('detect.detector.search.exclusion.patterns: *test*,*samples*,*examples*')
+        gradle_paths = []
+        gradle_test_configurations = []
+        for path in Path(os.path.abspath(args.scanfolder)).rglob('build.gradle'):
+            gradle_paths.append(path)
+
+        for p in gradle_paths:
+            with open(p, 'r') as file:
+                f = file.read()
+            #for item in re.findall("(?:testCompile|testImplementation).*'(.*)'", f):
+            for item in re.findall("(?:testsupportCompile|testsupportImplementation).*configuration:\s*'(.*)'", f):
+                gradle_test_configurations.append(item)
+
+        detector_exclusion_args.append('detect.detector.search.exclusion.patterns: \'{}\''.format(','.join(detector_exclusions)))
+
+        if gradle_test_configurations:
+            detector_exclusion_args.append('detect.gradle.excluded.configurations: \'{}\''.format(','.join(gradle_test_configurations)))
+
         wl.log("Detector Search Exclusions", "sensitivity < 4", "",
-                                 "Search Exclusion Patters set to 'test*,samples*,examples*'")
+                                 "Search Exclusion Patterns set to '{}'".format(','.join(detector_exclusions)))
+        wl.log("Detector Search Exclusions", "sensitivity < 4", "",
+                                 "Gradle Configuration Exclusion set to '{}'".format(','.join(gradle_test_configurations)))
     elif args.sensitivity <= 8:
         wl.log("Detector Search Exclusions", " 4 <= sensitivity <= 8", "",
                "Search exclusion defaults are used")
