@@ -1793,10 +1793,14 @@ def get_detector_exclusion_args():
         if gradle_test_configurations:
             detector_exclusion_args.append('detect.gradle.excluded.configurations: \'{}\''.format(','.join(gradle_test_configurations)))
 
+        detector_exclusion_args.append('detect.maven.excluded.scopes: test')
+
         wl.log("Detector Search Exclusions", "sensitivity < 4", "",
                                  "Search Exclusion Patterns set to '{}'".format(','.join(detector_exclusions)))
         wl.log("Detector Search Exclusions", "sensitivity < 4", "",
                                  "Gradle Configuration Exclusion set to '{}'".format(','.join(gradle_test_configurations)))
+        wl.log("Detector Search Exclusions", "sensitivity < 4", "",
+                                 "Maven Scope Exclusion set to 'test'")
     elif args.sensitivity <= 8:
         wl.log("Detector Search Exclusions", " 4 <= sensitivity <= 8", "",
                "Search exclusion defaults are used")
