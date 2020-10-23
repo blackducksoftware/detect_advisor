@@ -1130,7 +1130,6 @@ def signature_process(folder, f):
     # test if we should exclude signature scanner
     result = sig_scan_actionable.test(sensitivity=args.sensitivity)
     if result.outcome != "NO-OP":
-        print(result.outcome)
         c.str_add('reqd', result.outcome)
         cli_msgs_dict['reqd'] += "{}\n".format(result.outcome)
 
@@ -1152,8 +1151,7 @@ def signature_process(folder, f):
         for property in retval.outcome:
             print(property)
 
-    print(retval)
-    print(use_json_splitter)
+
     if sizes['file'][notinarc]+sizes['arc'][notinarc] > 2000000000:
         recs_msgs_dict['imp'] += "- IMPORTANT: Overall scan size ({:>,d} MB) is large\n".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000)) + \
         "    Impact:  Will impact Capacity license usage\n" + \
@@ -1195,8 +1193,10 @@ def signature_process(folder, f):
                    bin_list}  # if '##' isn't found, the whole string is still in idx 0 of output
     if len(binzip_list) > 1:
         bin_pack_name = pack_binaries(binzip_list)
-    else:
+    elif len(binzip_list) > 0:
         bin_pack_name = binzip_list.pop()
+    else:
+        bin_pack_name = None
     result = binary_matching_actionable.test(sensitivity=args.sensitivity, num_binaries=len(binzip_list),
                                     bin_pack_name=bin_pack_name, no_write=False)
     if result.outcome != "NO-OP":
