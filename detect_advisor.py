@@ -7,19 +7,22 @@ import argparse
 import platform, sys
 import subprocess
 import json
-import math
 import traceback
 from datetime import datetime
 from pathlib import Path
+import subprocess
+import shutil
 
 from TarExaminer import is_tar_docker
 import re, glob
 from blackduck.HubRestApi import HubInstance
 import magic
-import shutil
 import tarfile
 from tabulate import tabulate
 from WizardLogger import WizardLogger
+from Actionable import Actionable
+from file_size_util import b_to_gb, b_to_mb
+from Configuration import Configuration, PropertyGroup, Property
 
 # Constants
 advisor_version = "0.95-Beta"
@@ -46,10 +49,89 @@ dockerext_list = ['.tar', '.gz']
 pkgext_list = ['.rpm', '.deb', '.dmg']
 lic_list = ['LICENSE', 'LICENSE.txt', 'notice.txt', 'license.txt', 'license.html', 'NOTICE', 'NOTICE.txt']
 
-sig_scan_thresholds = {'enable_disable': ("<", 3),
+#Sets Sig scan
+sig_scan_actionable = Actionable("Signature Scan",
+                                 {'sensitivity == 1':
+                                      ("--detect.tools.excluded=SIGNATURE_SCAN", "Signature Scan is DISABLED")},
+                                 default_description="Signature Scan is ENABLED")
+indiv_file_match_actionable = Actionable("Individual File Match",
+                                         {'sensitivity >= 4':
+                                              ("--detect.blackduck.signature.scanner.individual.file.matching=SOURCE",
+                                               "Individual File Matching (SOURCE) is ENABLED")},
+                                         default_description="Individual File Matching (SOURCE) is DISABLED")
+
+binary_matching_actionable = Actionable("BDBA Binary Scan",
+                                        {'sensitivity >= 4 and num_binaries > 1 and no_write == true':
+                                             ("--detect.binary.scan.file.path=${bin_pack_name}",
+                                              "${num_binaries} binaries found - but no_write==true..."),
+                                         'sensitivity >= 4 and num_binaries > 1 and no_write == false':
+                                             ("--detect.binary.scan.file.path=${bin_pack_name}",
+                                              "${num_binaries} binaries found - loaded into zip archive - passed to BDBA."),
+                                         'sensitivity >= 4 and num_binaries == 1':
+                                             ("--detect.binary.scan.file.path=${bin_pack_name}",
+                                              "One binary found, BDBA will be invoked.")},
+                                        default_description="BDBA will NOT be invoked.")
+
+file_snippet_match_actionable = Actionable("File Snippet Matching",
+                                           {'sensitivity == 5 and scan_focus != "s"':
+                                                ("--detect.blackduck.signature.scanner.snippet.matching=SNIPPET_MATCHING",
+                                                 "File Snippet Matching set to ENABLED")},
+                                           default_description="File Snippet Matching is DISABLED")
+
+directory_dupes_actionable = Actionable("Directory Duplicate Ignore",
+                                        {'sensitivity <= 2': ("bdignores added", "Duplicated directories WILL be ignored.")},
+                                        default_description="Duplicated directories WILL NOT be ignored.")
+
+binary_dupes_actionable = Actionable("File Duplicate Ignore",
+                                     {'sensitivity <= 2': ("bdignores added", "Duplicated files WILL be ignored.")},
+                                        default_description="Duplicated binaries WILL NOT be ignored.")
+
+detector_search_depth_actionable = Actionable("Detector Search Depth",
+                                              {'sensitivity == 1': (lambda: det_min_depth if not None else 0,
+                                                                    "Detector search depth set to ${OUT}"),
+                                               'sensitivity >= 2 and sensitivity <= 4': (lambda: det_max_depth // 2 if det_max_depth and det_max_depth // 2 > 0 else 1,
+                                                                                         "Detector search depth set to ${OUT}"),
+                                               'sensitivity == 5': (lambda: det_max_depth if det_max_depth else 1,
+                                                                    "Detector search depth set to ${OUT}")},
+                                              default_description=None)
+
+detector_exclusions_actionable = Actionable("Detector Search Exclusions",
+                                            {'sensitivity <= 2': ("${detector_exclusions_func}", "Search exclusion patterns changed to favor small scan.."),
+                                             'sensitivity >= 4': ("detect.detector.search.exclusion.defaults: false", "Search exclusion defaults DEACTIVATED.")},
+                                            default_description="Search exclusion defaults are used.")
+
+buildless_mode_actionable = Actionable("Buildless Mode", {'sensitivity <= 2': ("--detect.detector.buildless=true", "Buildless mode WILL be used.")},
+                                              default_description="Buildless mode will NOT be used.")
+
+dev_dependencies_actionable = Actionable("Dev Dependencies", {'sensitivity <= 2': ("--dev.dependencies=true", "Dev dependencies WILL be used."),
+                                                              'sensitivity > 2': ("--dev.dependencies=false", "Dev dependencies WILL NOT be used.")})
+
+detect_docker_actionable = Actionable("Detect Docker TAR", {'sensitivity >= 3 and docker_tar_present == true':
+                                                                ("--detect.docker.tar='${docker_tar}'", "Docker Layer detection WILL be used on ${docker_tar}.")},
+                                              default_description="Docker Layer Detection will NOT be used.")
+
+
+json_splitter_actionable = Actionable("Scanfile Splitter", {'sensitivity > 1 and scan_size >= 4.5':
+                                                                (("blackduck.offline.mode: true",
+                                                                  "detect.bom.aggregate.name: detect_advisor_run_{}".format(datetime.now())),
+                                                                 "Scan (${scan_size} G) will be split up to avoid reaching scanfile size limit of (5GB)")},
+                                              default_description="Scan (${scan_size} G) is within size limit (5GB) and will NOT be split.")
+
+license_search_actionable = Actionable("License Search", {'scan_focus == "l"':
+                                                              ("detect.blackduck.signature.scanner.license.search=true", 'License search WILL be used.')},
+                                       default_description="License search will NOT be used. ")
+
+sig_scan_thresholds = {'enable_disable': ("<", 2),
                        'individual_file_match': (">", 7),
                        'file_snippet_match': (">", 9),
-                       'binary_matching': (">", 7)
+                       'binary_matching': (">", 7),
+                       'dir_dups': ("=", 1),
+                       'detector_search_depth': (("<=", 3), ((">", 3), (">=", 7))),
+                       'detector_exclusion': ("<", 4),
+                       'buildless': (">", 3),
+                       'dev_deps': (">", 2),
+                       'detect_docker_tar': (">", 4),
+                       'json_splitter': (">", 2)
                        }
 
 def test_sensitivity(op_val_pair: tuple):
@@ -70,6 +152,7 @@ def test_sensitivity(op_val_pair: tuple):
     else:
         raise ValueError("{} is not a valid value for sensitivity comparison".format(op_val_pair))
 
+
 def invert_op(op_val_pair: tuple):
     op, val = op_val_pair
     if op == "!=":
@@ -84,6 +167,7 @@ def invert_op(op_val_pair: tuple):
         return "<=", val
     elif op == "<":
         return ">=", val
+
 wl = WizardLogger()
 detectors_file_dict = {
 'build.env': ['bitbake'],
@@ -157,98 +241,98 @@ detectors_ext_dict = {
 detector_cli_options_dict = {
 'bazel':
 "--detect.bazel.cquery.options='OPTION1,OPTION2'\n" + \
-"    (OPTIONAL List of additional options to pass to the bazel cquery command.)\n" + \
+"   (OPTIONAL List of additional options to pass to the bazel cquery command.)\n" + \
 "--detect.bazel.dependency.type=MAVEN_JAR/MAVEN_INSTALL/UNSPECIFIED\n" + \
-"       (OPTIONAL Bazel workspace external dependency rule: The Bazel workspace rule used to pull in external dependencies.\n" + \
+"   (OPTIONAL Bazel workspace external dependency rule: The Bazel workspace rule used to pull in external dependencies.\n" + \
 "    If not set, Detect will attempt to determine the rule from the contents of the WORKSPACE file (default: UNSPECIFIED).)\n",
 'bitbake':
 "--detect.bitbake.package.names='PACKAGE1,PACKAGE2'\n" + \
-"    (OPTIONAL List of package names from which dependencies are extracted.)\n" + \
+"   (OPTIONAL List of package names from which dependencies are extracted.)\n" + \
 "--detect.bitbake.search.depth=X\n" + \
-"    (OPTIONAL The depth at which Detect will search for the recipe-depends.dot or package-depends.dot files (default: 1).)\n" + \
+"   (OPTIONAL The depth at which Detect will search for the recipe-depends.dot or package-depends.dot files (default: 1).)\n" + \
 "--detect.bitbake.source.arguments='ARG1,ARG2,ARG3'\n" + \
-"    (OPTIONAL List of arguments to supply when sourcing the build environment init script)\n",
+"   (OPTIONAL List of arguments to supply when sourcing the build environment init script)\n",
 'clang':
-"    Note that Detect supports reading a compile_commands.json file generated by cmake.\n" + \
-"    If the project does not use cmake then it is possible to produce the compile_commands.json\n" + \
-"    from standard make using utilities such as https://github.com/rizsotto/Bear. Detect must be\n" + \
-"    run on Linux only for the detection of OSS packages using compile_commands.json, and the packages\n" + \
-"    must be installed in the OS.\n",
+"   Note that Detect supports reading a compile_commands.json file generated by cmake.\n" + \
+"   If the project does not use cmake then it is possible to produce the compile_commands.json\n" + \
+"   from standard make using utilities such as https://github.com/rizsotto/Bear. Detect must be\n" + \
+"   run on Linux only for the detection of OSS packages using compile_commands.json, and the packages\n" + \
+"   must be installed in the OS.\n",
 'conda':
 "--detect.conda.environment.name=NAME\n" + \
-"    (OPTIONAL The name of the anaconda environment used by your project)\n",
+"   (OPTIONAL The name of the anaconda environment used by your project)\n",
 'dotnet':
 "--detect.nuget.config.path=PATH\n" + \
-"    (OPTIONAL The path to the Nuget.Config file to supply to the nuget exe)\n" + \
+"   (OPTIONAL The path to the Nuget.Config file to supply to the nuget exe)\n" + \
 "--detect.nuget.packages.repo.url=URL\n" + \
-"    (OPTIONAL Nuget Packages Repository URL (default: https://api.nuget.org/v3/index.json).)\n" + \
+"   (OPTIONAL Nuget Packages Repository URL (default: https://api.nuget.org/v3/index.json).)\n" + \
 "--detect.nuget.excluded.modules=PROJECT\n" + \
-"    (OPTIONAL Nuget Projects Excluded: The names of the projects in a solution to exclude.)\n" + \
+"   (OPTIONAL Nuget Projects Excluded: The names of the projects in a solution to exclude.)\n" + \
 "--detect.nuget.ignore.failure=true\n" + \
-"    (OPTIONAL Ignore Nuget Failures: If true errors will be logged and then ignored.)\n" + \
+"   (OPTIONAL Ignore Nuget Failures: If true errors will be logged and then ignored.)\n" + \
 "--detect.nuget.included.modules=PROJECT\n" + \
-"    (OPTIONAL Nuget Modules Included: The names of the projects in a solution to include (overrides exclude).)\n",
+"   (OPTIONAL Nuget Modules Included: The names of the projects in a solution to include (overrides exclude).)\n",
 'gradle':
 "--detect.gradle.build.command='ARGUMENT1 ARGUMENT2'\n" + \
-"    (OPTIONAL Gradle Build Command: Gradle command line arguments to add to the mvn/mvnw command line.)\n" + \
+"   (OPTIONAL Gradle Build Command: Gradle command line arguments to add to the mvn/mvnw command line.)\n" + \
 "--detect.gradle.excluded.configurations='CONFIG1,CONFIG2'\n" + \
-"    (OPTIONAL Gradle Exclude Configurations: List of Gradle configurations to exclude.)\n" + \
+"   (OPTIONAL Gradle Exclude Configurations: List of Gradle configurations to exclude.)\n" + \
 "--detect.gradle.excluded.projects='PROJECT1,PROJECT2'\n" + \
-"    (OPTIONAL Gradle Exclude Projects: List of Gradle sub-projects to exclude.)\n" + \
+"   (OPTIONAL Gradle Exclude Projects: List of Gradle sub-projects to exclude.)\n" + \
 "--detect.gradle.included.configurations='CONFIG1,CONFIG2'\n" + \
-"    (OPTIONAL Gradle Include Configurations: List of Gradle configurations to include.)\n" + \
+"   (OPTIONAL Gradle Include Configurations: List of Gradle configurations to include.)\n" + \
 "--detect.gradle.included.projects='PROJECT1,PROJECT2'\n" + \
-"    (OPTIONAL Gradle Include Projects: List of Gradle sub-projects to include.)\n",
+"   (OPTIONAL Gradle Include Projects: List of Gradle sub-projects to include.)\n",
 'mvn':
 "--detect.maven.build.command='ARGUMENT1 ARGUMENT2'\n" + \
-"    (OPTIONAL Maven Build Command: Maven command line arguments to add to the mvn/mvnw command line.)\n" + \
+"   (OPTIONAL Maven Build Command: Maven command line arguments to add to the mvn/mvnw command line.)\n" + \
 "--detect.maven.excluded.scopes='SCOPE1,SCOPE2'\n" + \
-"    (OPTIONAL Dependency Scope Excluded: List of Maven scopes. Output will be limited to dependencies outside these scopes (overrides include).)\n" + \
+"   (OPTIONAL Dependency Scope Excluded: List of Maven scopes. Output will be limited to dependencies outside these scopes (overrides include).)\n" + \
 "--detect.maven.included.scopes='SCOPE1,SCOPE2'\n" + \
-"    (OPTIONAL Dependency Scope Included: List of Maven scopes. Output will be limited to dependencies within these scopes (overridden by exclude).)\n" + \
+"   (OPTIONAL Dependency Scope Included: List of Maven scopes. Output will be limited to dependencies within these scopes (overridden by exclude).)\n" + \
 "--detect.maven.excluded.modules='MODULE1,MODULE2'\n" + \
-"    (OPTIONAL Maven Modules Excluded: List of Maven modules (sub-projects) to exclude.)\n" + \
+"   (OPTIONAL Maven Modules Excluded: List of Maven modules (sub-projects) to exclude.)\n" + \
 "--detect.maven.included.modules='MODULE1,MODULE2'\n" + \
-"    (OPTIONAL Maven Modules Included: List of Maven modules (sub-projects) to include.)\n" + \
+"   (OPTIONAL Maven Modules Included: List of Maven modules (sub-projects) to include.)\n" + \
 "--detect.maven.include.plugins=true\n" + \
-"    (OPTIONAL Maven Include Plugins: Whether or not detect will include the plugins section when parsing a pom.xml.)\n",
+"   (OPTIONAL Maven Include Plugins: Whether or not detect will include the plugins section when parsing a pom.xml.)\n",
 'npm':
 "--detect.npm.arguments='ARG1 ARG2'\n" + \
-"    (OPTIONAL Additional arguments to add to the npm command line when running Detect against an NPM project.)\n" + \
+"   (OPTIONAL Additional arguments to add to the npm command line when running Detect against an NPM project.)\n" + \
 "--detect.npm.include.dev.dependencies=false\n" + \
-"    (OPTIONAL Include NPM Development Dependencies: Set this value to false if you would like to exclude your dev dependencies.)\n",
+"   (OPTIONAL Include NPM Development Dependencies: Set this value to false if you would like to exclude your dev dependencies.)\n",
 'packagist':
 "--detect.packagist.include.dev.dependencies=false\n" + \
-"    (OPTIONAL Include Packagist Development Dependencies: Set this value to false if you would like to exclude your dev requires dependencies.)\n",
+"   (OPTIONAL Include Packagist Development Dependencies: Set this value to false if you would like to exclude your dev requires dependencies.)\n",
 'pear':
 "--detect.pear.only.required.deps=true\n" + \
-"    (OPTIONAL Include Only Required Pear Dependencies: Set to true if you would like to include only required packages.)\n",
+"   (OPTIONAL Include Only Required Pear Dependencies: Set to true if you would like to include only required packages.)\n",
 'python':
 "--detect.pip.only.project.tree=true\n" + \
-"    (OPTIONAL PIP Include Only Project Tree: By default, pipenv includes all dependencies found in the graph. Set to true to only\n" + \
-"    include dependencies found underneath the dependency that matches the provided pip project and version name.)\n" + \
+"   (OPTIONAL PIP Include Only Project Tree: By default, pipenv includes all dependencies found in the graph. Set to true to only\n" + \
+"   include dependencies found underneath the dependency that matches the provided pip project and version name.)\n" + \
 "--detect.pip.project.name=NAME\n" + \
-"    (OPTIONAL PIP Project Name: The name of your PIP project, to be used if your project's name cannot be correctly inferred from its setup.py file.)\n" + \
+"   (OPTIONAL PIP Project Name: The name of your PIP project, to be used if your project's name cannot be correctly inferred from its setup.py file.)\n" + \
 "--detect.pip.project.version.name=VERSION\n" + \
-"    (OPTIONAL PIP Project Version Name: The version of your PIP project, to be used if your project's version name\n" + \
-"    cannot be correctly inferred from its setup.py file.)\n" + \
+"   (OPTIONAL PIP Project Version Name: The version of your PIP project, to be used if your project's version name\n" + \
+"   cannot be correctly inferred from its setup.py file.)\n" + \
 "--detect.pip.requirements.path='PATH1,PATH2'\n" + \
-"    (OPTIONAL PIP Requirements Path: List of paths to requirements.txt files.)\n",
+"   (OPTIONAL PIP Requirements Path: List of paths to requirements.txt files.)\n",
 'ruby':
 "--detect.ruby.include.dev.dependencies=true\n" + \
-"    (OPTIONAL Ruby Development Dependencies: If set to true, development dependencies will be included when parsing *.gemspec files.)\n" + \
+"   (OPTIONAL Ruby Development Dependencies: If set to true, development dependencies will be included when parsing *.gemspec files.)\n" + \
 "--detect.ruby.include.runtime.dependencies=false\n" + \
-"    (OPTIONAL Ruby Runtime Dependencies: If set to false, runtime dependencies will not be included when parsing *.gemspec files.)\n",
+"   (OPTIONAL Ruby Runtime Dependencies: If set to false, runtime dependencies will not be included when parsing *.gemspec files.)\n",
 'sbt':
 "--detect.sbt.report.search.depth\n" + \
-"    (OPTIONAL SBT Report Search Depth: Depth the sbt detector will use to search for report files (default 3))\n" + \
+"   (OPTIONAL SBT Report Search Depth: Depth the sbt detector will use to search for report files (default 3))\n" + \
 "--detect.sbt.excluded.configurations='CONFIG'\n" + \
-"    (OPTIONAL SBT Configurations Excluded: The names of the sbt configurations to exclude.)\n" + \
+"   (OPTIONAL SBT Configurations Excluded: The names of the sbt configurations to exclude.)\n" + \
 "--detect.sbt.included.configurations='CONFIG'\n" + \
-"    (OPTIONAL SBT Configurations Included: The names of the sbt configurations to include.)\n",
+"   (OPTIONAL SBT Configurations Included: The names of the sbt configurations to include.)\n",
 'yarn':
 "--detect.yarn.prod.only=true\n" + \
-"    (OPTIONAL Include Yarn Production Dependencies Only: Set this to true to only scan production dependencies.)\n"
+"   (OPTIONAL Include Yarn Production Dependencies Only: Set this to true to only scan production dependencies.)\n"
 }
 
 detector_cli_required_dict = {
@@ -403,22 +487,17 @@ cli_msgs_dict['rep'] = "--detect.wait.for.results=true\n" + \
 
 parser = argparse.ArgumentParser(description='Check prerequisites for Detect, scan folders, provide recommendations and example CLI options', prog='detect_advisor')
 parser.add_argument("scanfolder", nargs="?", help="Project folder to analyse", default="")
-parser.add_argument("-r", "--report", help="Output report file (must not exist already)")
-#parser.add_argument("-d", "--detector_only", help="Check for detector files and prerequisites only",action='store_true')
-#parser.add_argument("-s", "--signature_only", help="Check for files and folders for signature scan only",action='store_true')
-#parser.add_argument("-c", "--critical_only", help="Only show critical issues which will causes detect to fail",action='store_true')
-#parser.add_argument("-f", "--full", help="Output full information to report file if specified",action='store_true')
-#parser.add_argument("-o", "--output_config", help="Create .yml config file in project folder",action='store_true')
 parser.add_argument("-b", "--bdignore", help="Create .bdignore files in sub-folders to exclude folders from scan",action='store_true')
 parser.add_argument("-D", "--docker", help="Check docker prerequisites",action='store_true')
 parser.add_argument("-i", "--interactive", help="Use interactive mode to review/set options",action='store_true')
 parser.add_argument("--docker_only", help="Only check docker prerequisites",action='store_true')
-parser.add_argument("-s", "--sensitivity", help="Coverage/sensitivity - 1 = dependency scan only & limited FPs, 10 = all scan types including all potential matches")
+parser.add_argument("-s", "--sensitivity", help="Coverage/sensitivity - 1 = dependency scan only & limited FPs, 5 = all scan types including all potential matches")
 parser.add_argument("-f", "--focus", help="What the scan focus is - License Compliance (l) / Security (s) / Both (b)")
 parser.add_argument("-u", "--url", help="Black Duck Server URL")
 parser.add_argument("-a", "--api_token", help="Black Duck Server API Token")
-parser.add_argument("-n", "--no_scan", help="Do not run Detect scan - only create .yml project config file",action='store_true')
-
+parser.add_argument("-n", "--no_scan", help="Do not run Detect scan - only create .yml project config file", action='store_true')
+parser.add_argument('--no_write', help="Do not add files to scan directory.", action='store_true')
+parser.add_argument('--aux_write_dir', help="Directory to write intermediate files.", action='store_true')
 args = parser.parse_args()
 
 def process_tar_entry(tinfo: tarfile.TarInfo, tarpath, dirdepth, tar):
@@ -635,7 +714,10 @@ def checkfile(name, path, size, size_comp, dirdepth, in_archive, filebuff=None):
         if ext in dockerext_list:
             if is_tar_docker(path):
                 # we will invoke --detect.docker.tar on these
-                cli_msgs_dict['docker'] += "--detect.docker.tar='{}'\n".format(os.path.abspath(path))
+                retval = detect_docker_actionable.test(sensitivity=args.sensitivity, docker_tar=os.path.abspath(path))
+                if retval.outcome != "NO-OP":
+                    c.str_add('docker', retval.outcome)
+                    cli_msgs_dict['docker'] += retval.outcome + "\n"
         arc_list.append(path)
         ftype = 'arc'
     elif ext in pkgext_list:
@@ -855,7 +937,6 @@ def process_dirdups(f):
     return(count_dupdirs, size_dupdirs)
 
 def check_singlefiles(f):
-
     # Check for singleton js & other single files
     sfmatch = False
     sf_list = []
@@ -877,18 +958,10 @@ def check_singlefiles(f):
                     sfmatch = True
                     sf_list.append(thisfile)
     if sfmatch:
-        recs_msgs_dict['info'] += "- INFORMATION: {} singleton .js files found\n".format(len(sf_list)) + \
-        "    Impact:  OSS components within JS files may not be detected\n" + \
-        "    Action:  Consider specifying Single file matching in Signature scan\n" + \
-        "             (--detect.blackduck.signature.scanner.individual.file.matching=SOURCE)\n\n"
         if cli_msgs_dict['scan'].find("individual.file.matching") < 0:
             cli_msgs_dict['scan'] += "--detect.blackduck.signature.scanner.individual.file.matching=SOURCE\n" + \
             "    (To include singleton .js files in signature scan for OSS matches)\n"
 
-        #if f:
-        #    f.write("\nSINGLE JS FILES:\n")
-        #    for thisfile in sf_list:
-        #        f.write("- {}\n".format(thisfile))
 
 def get_crc(myfile):
     import zlib
@@ -926,7 +999,7 @@ def print_summary(critical_only, f):
     global rep
 
     summary = "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\n" + \
-    "SUMMARY INFO:\nTotal Scan Size = {:,d} MB\n\n".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000)) + \
+    "SUMMARY INFO:\nTotal Scan Size = {:,d} MB\n\n".format(trunc(b_to_mb(sizes['file'][notinarc]+sizes['arc'][notinarc]))) + \
     "                         Num Outside     Size Outside      Num Inside     Size Inside     Size Inside\n" + \
     "                            Archives         Archives        Archives        Archives        Archives\n" + \
     "                                                                        (UNcompressed)    (compressed)\n" + \
@@ -936,25 +1009,25 @@ def print_summary(critical_only, f):
 
     summary += row.format("Files (exc. Archives)", \
     counts['file'][notinarc], \
-    trunc(sizes['file'][notinarc]/1000000), \
+    trunc(b_to_mb(sizes['file'][notinarc])), \
     counts['file'][inarc], \
-    trunc(sizes['file'][inarcunc]/1000000), \
-    trunc(sizes['file'][inarccomp]/1000000))
+    trunc(b_to_mb(sizes['file'][inarcunc])), \
+    trunc(b_to_mb(sizes['file'][inarccomp])))
 
     summary += row.format("Archives (exc. Jars)", \
     counts['arc'][notinarc], \
-    trunc(sizes['arc'][notinarc]/1000000), \
+    trunc(b_to_mb(sizes['arc'][notinarc])), \
     counts['arc'][inarc], \
-    trunc(sizes['arc'][inarcunc]/1000000), \
-    trunc(sizes['arc'][inarccomp]/1000000))
+    trunc(b_to_mb(sizes['arc'][inarcunc])), \
+    trunc(b_to_mb(sizes['arc'][inarccomp])))
 
     summary += "====================  ==============   ==============   =============   =============   =============\n"
 
     summary += row.format("ALL FILES (Scan size)", counts['file'][notinarc]+counts['arc'][notinarc], \
-    trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000), \
+    trunc(b_to_mb(sizes['file'][notinarc]+sizes['arc'][notinarc])), \
     counts['file'][inarc]+counts['arc'][inarc], \
-    trunc((sizes['file'][inarcunc]+sizes['arc'][inarcunc])/1000000), \
-    trunc((sizes['file'][inarccomp]+sizes['arc'][inarccomp])/1000000))
+    trunc(b_to_mb(sizes['file'][inarcunc]+sizes['arc'][inarcunc])), \
+    trunc(b_to_mb(sizes['file'][inarccomp]+sizes['arc'][inarccomp])))
 
     summary += "====================  ==============   ==============   =============   =============   =============\n"
 
@@ -964,68 +1037,68 @@ def print_summary(critical_only, f):
 
     summary += row.format("Ignored Folders", \
     counts['ignoredir'][notinarc], \
-    trunc(sizes['ignoredir'][notinarc]/1000000), \
+    trunc(b_to_mb(sizes['ignoredir'][notinarc])), \
     counts['ignoredir'][inarc], \
-    trunc(sizes['ignoredir'][inarcunc]/1000000), \
-    trunc(sizes['ignoredir'][inarccomp]/1000000))
+    trunc(b_to_mb(sizes['ignoredir'][inarcunc])), \
+    trunc(b_to_mb(sizes['ignoredir'][inarccomp])))
 
     summary += row.format("Source Files", \
     counts['src'][notinarc], \
-    trunc(sizes['src'][notinarc]/1000000), \
+    trunc(b_to_mb(sizes['src'][notinarc])), \
     counts['src'][inarc], \
-    trunc(sizes['src'][inarcunc]/1000000), \
-    trunc(sizes['src'][inarccomp]/1000000))
+    trunc(b_to_mb(sizes['src'][inarcunc])), \
+    trunc(b_to_mb(sizes['src'][inarccomp])))
 
     summary += row.format("JAR Archives", \
     counts['jar'][notinarc], \
-    trunc(sizes['jar'][notinarc]/1000000), \
+    trunc(b_to_mb(sizes['jar'][notinarc])), \
     counts['jar'][inarc], \
-    trunc(sizes['jar'][inarcunc]/1000000), \
-    trunc(sizes['jar'][inarccomp]/1000000))
+    trunc(b_to_mb(sizes['jar'][inarcunc])), \
+    trunc(b_to_mb(sizes['jar'][inarccomp])))
 
     summary += row.format("Binary Files", \
     counts['bin'][notinarc], \
-    trunc(sizes['bin'][notinarc]/1000000), \
+    trunc(b_to_mb(sizes['bin'][notinarc])), \
     counts['bin'][inarc], \
-    trunc(sizes['bin'][inarcunc]/1000000), \
-    trunc(sizes['bin'][inarccomp]/1000000))
+    trunc(b_to_mb(sizes['bin'][inarcunc])), \
+    trunc(b_to_mb(sizes['bin'][inarccomp])))
 
     summary += row.format("Other Files", \
     counts['other'][notinarc], \
-    trunc(sizes['other'][notinarc]/1000000), \
+    trunc(b_to_mb(sizes['other'][notinarc])), \
     counts['other'][inarc], \
-    trunc(sizes['other'][inarcunc]/1000000), \
-    trunc(sizes['other'][inarccomp]/1000000))
+    trunc(b_to_mb(sizes['other'][inarcunc])), \
+    trunc(b_to_mb(sizes['other'][inarccomp])))
 
     summary += row.format("Package Mgr Files", \
     counts['det'][notinarc], \
-    trunc(sizes['det'][notinarc]/1000000), \
+    trunc(b_to_mb(sizes['det'][notinarc])), \
     counts['det'][inarc], \
-    trunc(sizes['det'][inarcunc]/1000000), \
-    trunc(sizes['det'][inarccomp]/1000000))
+    trunc(b_to_mb(sizes['det'][inarcunc])), \
+    trunc(b_to_mb(sizes['det'][inarccomp])))
 
     summary += row.format("OS Package Files", \
     counts['pkg'][notinarc], \
-    trunc(sizes['pkg'][notinarc]/1000000), \
+    trunc(b_to_mb(sizes['pkg'][notinarc])), \
     counts['pkg'][inarc], \
-    trunc(sizes['pkg'][inarcunc]/1000000), \
-    trunc(sizes['pkg'][inarccomp]/1000000))
+    trunc(b_to_mb(sizes['pkg'][inarcunc])), \
+    trunc(b_to_mb(sizes['pkg'][inarccomp])))
 
     summary += "--------------------  --------------   --------------   -------------   -------------   -------------\n"
 
-    summary += row.format("Large Files (>{:1d}MB)".format(trunc(largesize/1000000)), \
+    summary += row.format("Large Files (>{:1d}MB)".format(trunc(b_to_mb(largesize))), \
     counts['large'][notinarc], \
-    trunc(sizes['large'][notinarc]/1000000), \
+    trunc(b_to_mb(sizes['large'][notinarc])), \
     counts['large'][inarc], \
-    trunc(sizes['large'][inarcunc]/1000000), \
-    trunc(sizes['large'][inarccomp]/1000000))
+    trunc(b_to_mb(sizes['large'][inarcunc])), \
+    trunc(b_to_mb(sizes['large'][inarccomp])))
 
-    summary += row.format("Huge Files (>{:2d}MB)".format(trunc(hugesize/1000000)), \
+    summary += row.format("Huge Files (>{:2d}MB)".format(trunc(b_to_mb(hugesize))), \
     counts['huge'][notinarc], \
-    trunc(sizes['huge'][notinarc]/1000000), \
+    trunc(b_to_mb(sizes['huge'][notinarc])), \
     counts['huge'][inarc], \
-    trunc(sizes['huge'][inarcunc]/1000000), \
-    trunc(sizes['huge'][inarccomp]/1000000))
+    trunc(b_to_mb(sizes['huge'][inarcunc])), \
+    trunc(b_to_mb(sizes['huge'][inarccomp])))
 
     summary += "--------------------  --------------   --------------   -------------   -------------   -------------\n"
 
@@ -1035,6 +1108,7 @@ def print_summary(critical_only, f):
         print(summary)
     if f:
         f.write(summary)
+
 
 def pack_binaries(path_list, fname="binary_files.zip"):
     global binpack
@@ -1053,33 +1127,34 @@ def pack_binaries(path_list, fname="binary_files.zip"):
 
 def signature_process(folder, f):
     use_json_splitter = False
-
-    enable_disable_thresh = sig_scan_thresholds['enable_disable']
-    if test_sensitivity(enable_disable_thresh):
-        cli_msgs_dict['reqd'] += "--detect.tools.excluded=SIGNATURE_SCAN\n"
-        wl.log("Signature_Scanning", "sensitivity {} {}".format(*enable_disable_thresh), "--detect.tools.excluded=SIGNATURE_SCAN",
-               "Signature Scan is DISABLED")
-    else:
-        wl.log("Signature_Scanning", "sensitivity {} {}".format(*invert_op(enable_disable_thresh)), "--detect.tools.excluded={UNSET}",
-               "Signature Scan is ENABLED")
+    # test if we should exclude signature scanner
+    result = sig_scan_actionable.test(sensitivity=args.sensitivity)
+    if result.outcome != "NO-OP":
+        print(result.outcome)
+        c.str_add('reqd', result.outcome)
+        cli_msgs_dict['reqd'] += "{}\n".format(result.outcome)
 
     # Find duplicates without expanding archives - to avoid processing dups
     print("- Processing folders         ", end="", flush=True)
     num_dirdups, size_dirdups = process_dirdups(f)
     print(" Done")
+
     print("- Processing large files     ", end="", flush=True)
     num_dups, size_dups = process_largefiledups(f)
     print(" Done")
 
     print("- Processing Signature Scan  .....", end="", flush=True)
+    retval = json_splitter_actionable.test(sensitivity=args.sensitivity,
+                                           scan_size=b_to_gb(sizes['file'][notinarc]+sizes['arc'][notinarc]))
     # Produce Recommendations
-    if sizes['file'][notinarc]+sizes['arc'][notinarc] > 5000000000:
-        recs_msgs_dict['crit'] += "- CRITICAL: Overall scan size ({:>,d} MB) is too large\n".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000)) + \
-        "    Impact:  Scan will fail\n" + \
-        "    Action:  Ignore folders, remove large files or use repeated scans of sub-folders (Also consider detect_advisor -b option to create multiple .bdignore files to ignore duplicate folders)\n\n"
+    if retval.outcome != "NO-OP":
         use_json_splitter = True
+        for property in retval.outcome:
+            print(property)
 
-    elif sizes['file'][notinarc]+sizes['arc'][notinarc] > 2000000000:
+    print(retval)
+    print(use_json_splitter)
+    if sizes['file'][notinarc]+sizes['arc'][notinarc] > 2000000000:
         recs_msgs_dict['imp'] += "- IMPORTANT: Overall scan size ({:>,d} MB) is large\n".format(trunc((sizes['file'][notinarc]+sizes['arc'][notinarc])/1000000)) + \
         "    Impact:  Will impact Capacity license usage\n" + \
         "    Action:  Ignore folders, remove large files or use repeated scans of sub-folders (Also consider detect_advisor -b option to create multiple .bdignore files to ignore duplicate folders)\n\n"
@@ -1116,71 +1191,64 @@ def signature_process(folder, f):
         "    Action:  Remove files or ignore folders (using .bdignore files), also consider zipping\n" + \
         "             files and using Binary scan (See report file produced with -r option)\n\n"
 
-    bdba_invoke_thresh = sig_scan_thresholds['binary_matching']
-    if test_sensitivity(bdba_invoke_thresh):
-        global bin_pack_name
-        binzip_list = {bin.split("##")[0] for bin in
-                       bin_list}  # if '##' isn't found, the whole string is still in idx 0 of output
+    binzip_list = {bin.split("##")[0] for bin in
+                   bin_list}  # if '##' isn't found, the whole string is still in idx 0 of output
+    if len(binzip_list) > 1:
         bin_pack_name = pack_binaries(binzip_list)
-        cli_msgs_dict['scan'] += "--detect.binary.scan.file.path={}\n".format(bin_pack_name) + \
-        "    (binary scan license required)\n"
-
-        if f and len(bin_large_dict) > 0:
-            f.write("\nLARGE BINARY FILES:\n")
-            for bin in bin_large_dict.keys():
-                f.write("    {} (Size {:d}MB)\n".format(bin, int(bin_large_dict[bin]/1000000)))
-        wl.log("Binary Matching", ["({}) binaries found in scan directory tree".format(len(binzip_list)),
-                                   "sensitivity {} {}".format(*bdba_invoke_thresh)], "--detect.binary.scan.file.path={}".format(bin_pack_name),
-               "Binaries have been packed into zipfile - BDBA will be invoked")
-
     else:
-        wl.log("Binary Matching", "sensitivity {} {}".format(*bdba_invoke_thresh),
-               "--detect.binary.scan.file.path={UNSET}",
-               "BDBA will NOT be invoked")
-
+        bin_pack_name = binzip_list.pop()
+    result = binary_matching_actionable.test(sensitivity=args.sensitivity, num_binaries=len(binzip_list),
+                                    bin_pack_name=bin_pack_name, no_write=False)
+    if result.outcome != "NO-OP":
+        c.str_add('size', result.outcome)
 
     if size_dirdups > 20000000:
-        recs_msgs_dict['imp'] += "- IMPORTANT: Large amount of data ({:,d} MB) in {:,d} duplicate folders\n".format(trunc(size_dirdups/1000000), len(dup_dir_dict)) + \
-        "    Impact:  Scan capacity potentially utilised without detecting additional\n" + \
-        "             components, will impact Capacity license usage\n" + \
-        "    Action:  Remove or ignore duplicate folders (Consider detect_advisor -b option to create multiple .bdignore files)\n\n"
+        pass
+    retval = directory_dupes_actionable.test(sensitivity=args.sensitivity)
+    if retval.outcome != "NO-OP":
         for apath, bpath in dup_dir_dict.items():
             if bpath.find("##") < 0:
                 bdignore_list.append(bpath)
 
     if size_dups > 20000000:
-        recs_msgs_dict['imp'] += "- IMPORTANT: Large amount of data ({:,d} MB) in {:,d} duplicate files\n".format(trunc(size_dups/1000000), len(dup_large_dict)) + \
-        "    Impact:  Scan capacity potentially utilised without detecting additional\n" + \
-        "             components, will impact Capacity license usage\n" + \
-        "    Action:  Remove duplicate files or ignore folders (Consider detect_advisor -b option to create multiple .bdignore files)\n\n"
-        #for apath, bpath in dup_large_dict.items():
-        #    if dup_dir_dict.get(os.path.dirname(apath)) == None and dup_dir_dict.get(os.path.dirname(bpath)) == None:
-        #        print("    {}".format(bpath))
-        #print("")
+        pass
+
+    for apath, bpath in dup_large_dict.items():
+        if bpath.find("##") < 0:
+            bdignore_list.append(bpath)
 
 
-    if counts['lic'][notinarc] > 10:
-        recs_msgs_dict['info'] += "- INFORMATION: License or notices files found\n" + \
-        "    Impact:  Local license text may need to be scanned\n" + \
-        "    Action:  Add options --detect.blackduck.signature.scanner.license.search=true\n" + \
-        "             and optionally --detect.blackduck.signature.scanner.upload.source.mode=true\n\n"
-        cli_msgs_dict['lic'] += "--detect.blackduck.signature.scanner.license.search=true\n" + \
-        "    (To perform client-side scanning for license files and references)\n"
+
+    #if counts['lic'][notinarc] > 10:
+    #    recs_msgs_dict['info'] += "- INFORMATION: License or notices files found\n" + \
+    #    "    Impact:  Local license text may need to be scanned\n" + \
+    #    "    Action:  Add options --detect.blackduck.signature.scanner.license.search=true\n" + \
+    #    "             and optionally --detect.blackduck.signature.scanner.upload.source.mode=true\n\n"
+    #    cli_msgs_dict['lic'] += "--detect.blackduck.signature.scanner.license.search=true\n" + \
+    #    "    (To perform client-side scanning for license files and references)\n"
+    #    if cli_msgs_dict['lic'].find("upload.source.mode") < 0:
+    #        cli_msgs_dict['lic'] += "--detect.blackduck.signature.scanner.upload.source.mode=true\n" + \
+    #        "    (CAUTION - will upload local source files)\n"
+
+    #if counts['src'][notinarc]+counts['src'][inarc] > 10:
+    #    recs_msgs_dict['info'] += "- INFORMATION: Source files found for which Snippet analysis supported\n" + \
+    #    "    Impact:  Snippet analysis can discover copied OSS source files and functions\n" + \
+    #    "    Action:  Add options --detect.blackduck.signature.scanner.snippet.matching=SNIPPET_MATCHING\n\n"
+    #    cli_msgs_dict['lic'] += "--detect.blackduck.signature.scanner.snippet.matching=SNIPPET_MATCHING\n" + \
+    #    "    (To search for copied OSS source files and functions within source files)\n"
+        #TODO How should we deal with this?
         if cli_msgs_dict['lic'].find("upload.source.mode") < 0:
             cli_msgs_dict['lic'] += "--detect.blackduck.signature.scanner.upload.source.mode=true\n" + \
             "    (CAUTION - will upload local source files)\n"
 
-    if counts['src'][notinarc]+counts['src'][inarc] > 10:
-        recs_msgs_dict['info'] += "- INFORMATION: Source files found for which Snippet analysis supported\n" + \
-        "    Impact:  Snippet analysis can discover copied OSS source files and functions\n" + \
-        "    Action:  Add options --detect.blackduck.signature.scanner.snippet.matching=SNIPPET_MATCHING\n\n"
-        cli_msgs_dict['lic'] += "--detect.blackduck.signature.scanner.snippet.matching=SNIPPET_MATCHING\n" + \
-        "    (To search for copied OSS source files and functions within source files)\n"
-        if cli_msgs_dict['lic'].find("upload.source.mode") < 0:
-            cli_msgs_dict['lic'] += "--detect.blackduck.signature.scanner.upload.source.mode=true\n" + \
-            "    (CAUTION - will upload local source files)\n"
+        if not c.has_prop('detect.blackduck.signature.scanner.upload.source.mode'):
+            c.str_add('lic', "--detect.blackduck.signature.scanner.upload.source.mode=true")
+            c.add('lic', Property(comment_line="    (CAUTION - will upload local source files)"))
 
     check_singlefiles(f)
+    result = indiv_file_match_actionable.test(sensitivity=args.sensitivity)
+    if result.outcome != "NO-OP":
+        c.str_add('scan', result.outcome)
     indiv_file_thresh = sig_scan_thresholds['individual_file_match']
     if test_sensitivity(indiv_file_thresh):
         cli_msgs_dict['scan'] += "--detect.blackduck.signature.scanner.individual.file.matching=SOURCE\n"
@@ -1190,8 +1258,11 @@ def signature_process(folder, f):
     else:
         wl.log("Individual File Matching", "sensitivity {} {}".format(*invert_op(indiv_file_thresh)),
                "--detect.blackduck.signature.scanner.individual.file.matching={UNSET}",
-               "Individual File Matching (SOURCE) is ENABLED")
+               "Individual File Matching (SOURCE) is DISABLED")
 
+    result = file_snippet_match_actionable.test(sensitivity=args.sensitivity, scan_focus=args.focus)
+    if result.outcome != "NO-OP":
+        c.str_add('scan', result.outcome)
     snippet_thresh = sig_scan_thresholds['file_snippet_match']
     if test_sensitivity(snippet_thresh):
         if args.focus != 's':
@@ -1314,6 +1385,7 @@ def detector_process(folder, f):
         "    Impact:  Dependency scan will not be run\n" + \
         "    Action:  Specify --detect.detector.search.depth={} (although depth could be up to {})\n".format(det_min_depth, det_max_depth) + \
         "             optionally with --detect.detector.search.continue=true or scan sub-folders separately.\n\n"
+
         if cli_msgs_dict['scan'].find("detector.search.depth") < 0:
             cli_msgs_dict['scan'] += "--detect.detector.search.depth={}\n".format(det_min_depth) + \
             "    optionally with optionally with -detect.detector.search.continue=true\n" + \
@@ -1324,6 +1396,16 @@ def detector_process(folder, f):
         recs_msgs_dict['info'] += "- INFORMATION: No package manager files found in project at all\n" + \
         "    Impact:  No dependency scan will be performed\n" + \
         "    Action:  This may be expected, but ensure you are scanning the correct location\n\n"
+
+    result = buildless_mode_actionable.test(sensitivity=args.sensitivity)
+    if result.outcome != "NO-OP":
+        c.str_add('reqd', result.outcome)
+        cli_msgs_dict['reqd'] += "{}\n".format(result.outcome)
+
+    dev_dep_result = dev_dependencies_actionable.test(sensitivity=args.sensitivity)
+    if dev_dep_result.outcome != "NO-OP":
+        c.str_add('reqd', dev_dep_result.outcome)
+        cli_msgs_dict['reqd'] += "{}\n".format(dev_dep_result.outcome)
 
     if cmds_missing1:
         package_managers_missing.append(cmds_missing1)
@@ -1354,9 +1436,13 @@ def detector_process(folder, f):
 
     for cmd in detectors_list:
         if cmd in detector_cli_options_dict.keys():
+            for prop in detector_cli_options_dict[cmd].splitlines(keepends=False):
+                c.str_add('dep', prop, is_commented=True)
             cli_msgs_dict['dep'] += " For {}:\n".format(cmd) + detector_cli_options_dict[cmd]
         if cmd in detector_cli_required_dict.keys():
             cli_msgs_dict['crit'] += " For {}:\n".format(cmd) + detector_cli_required_dict[cmd]
+            for prop in detector_cli_required_dict[cmd].splitlines(keepends=False):
+                c.str_add('reqd', prop, is_commented=True)
 
     print(" Done")
 
@@ -1411,8 +1497,7 @@ def output_recs(critical_only, f):
             f.write(bpath)
 
 def check_prereqs():
-    import subprocess
-    import shutil
+
 
     global rep
 
@@ -1630,11 +1715,11 @@ def create_bdignores():
         foldercount += 1
     print("INFO: Created/updated {} .bdignore files to ignore {} folders\n".format(filecount, foldercount))
 
-def output_config(conffile):
-
+def output_config(conffile, c):
     #config_file = os.path.join(projdir, "application-project.yml")
     #config_file = os.path.join(os.getcwd(), conffile)
     #config_file = os.path "application-project.yml")
+    print(c)
     if not os.path.exists(conffile):
         config = "#\n# EXAMPLE PROJECT CONFIG FILE\n" + \
         "# Uncomment and update required options\n#\n#\n" + \
@@ -1662,44 +1747,29 @@ def output_config(conffile):
     else:
         print("INFO: Project config file 'application-project.yml' already exists - not updated")
 
-# def check_input_options(prompt, accepted_values):
-#     value = input(prompt)
-#     if value == "":
-#         return(0)
-#     ret = value[0].lower()
-#     if ret == "q":
-#         raise Exception("quit")
-#     ind = 0
-#     for val in accepted_values:
-#         if ret == val[0].lower():
-#             return(ind)
-#         ind += 1
-#     raise Exception("quit")
 
 def get_input_yn(prompt, default):
     value = input(prompt)
     if value == "":
-        return(default)
+        return default
     ret = value[0].lower()
-
     if ret == "y":
-        return(True)
+        return True
+
     elif ret == "n":
-        return(False)
+        return False
 
 def get_input(prompt, default):
     value = input(prompt)
     if value == "":
-        return(default)
-    return(value)
+        return default
+    return value
+
 
 def backup_file(filename, filetype):
-    import os, shutil
-
     if os.path.isfile(filename):
         # Determine root filename so the extension doesn't get longer
         n, e = os.path.splitext(filename)
-
         # Is e an integer?
         try:
             num = int(e)
@@ -1713,69 +1783,61 @@ def backup_file(filename, filetype):
             if not os.path.isfile(new_file):
                 os.rename(filename, new_file)
                 print("INFO: Moved existing {} file '{}' to '{}'\n".format(filetype, filename, new_file))
-                return(new_file)
-    return("")
+                return new_file
+    return None
 
-def interactive(scanfolder, url, api, sensitivity, focus, no_scan, report):
-    if scanfolder == "" or scanfolder == None:
+
+def interactive(scanfolder, url, api, sensitivity, focus, no_scan):
+    if scanfolder is None or scanfolder == "":
         scanfolder = os.getcwd()
-
-    # @@@ remove code
-#    scanfolder = "/Users/damonw/bds/problems/trailheads/strange_debian_postgres"
     try:
         scanfolder = get_input("Enter project folder to scan (default current folder '{}'):".format(scanfolder), scanfolder)
     except:
         print("Exiting")
-        return("", "", "", 0, False, "")
-#     if folder == "":
-#         folder = scanfolder
+        return "", "", "", 0, False, ""
     if not os.path.isdir(scanfolder):
         print("Scan location '{}' does not exist\nExiting".format(scanfolder))
-        return("", "", "", 0, False, "")
+        return "", "", "", 0, False, ""
     try:
         url = get_input("Black Duck Server URL [{}]: ".format(url), url)
         api = get_input("Black Duck API Token [{}]: ".format(api), api)
-        sensitivity = int(get_input("Scan sensitivity/coverage (1-10) where 1 = dependency scan only, 10 = all scan types including all potential matches [{}]: ".format(sensitivity), sensitivity))
-        focus = str(get_input("Scan Focus (License Compliance (l) / Security (s) / Both (b)) [{}]: ".format(focus), focus))
-
-        if report == None:
-            report = "report.txt"
-        report = get_input("Report file name [{}]: ".format(report), report)
-        if no_scan:
-            scandef = "n"
-        else:
-            scandef = "y"
+        sensitivity = int(get_input("Scan sensitivity/coverage (1-5) where 1 = dependency scan only, "
+                                    "5 = all scan types including all potential matches [{}]: ".format(sensitivity),
+                                    sensitivity))
+        focus = str(get_input("Scan Focus (License Compliance (l) / Security (s) / Both (b)) [{}]: ".format(focus),
+                              focus))
+        #if report == None:
+        #    report = "report.txt"
+        #report = get_input("Report file name [{}]: ".format(report), report)
+        scandef = "n" if no_scan else "y"
         no_scan = not get_input_yn("Run Detect scan (y/n) [{}]: ".format(scandef), scandef)
-#         bdignore_bool = check_input_yn("Create .bdignore files within sub-folders to exclude folders from scan (USE WITH CAUTION)? (y/n)", bdignore)
-#         config_bool = check_input_yn("Create application-project.yml file? (y/n)", output_config)
     except:
         print("Exiting")
         return "", "", "", 0, False, ""
-    return scanfolder, url, api, sensitivity, focus, no_scan, report
+    return scanfolder, url, api, sensitivity, focus, no_scan
+
+
 
 def get_detector_search_depth():
     global args
     # TODO: we need defined behaviour for all sensitivities for detector search depth
-    if args.sensitivity <= 3:
-        search_depth = det_min_depth if not None else 0  # distance to package manager
-        wl.log("Detector Search Depth", "sensitivity <= 3", "Detector search depth",
-               "Search depth set to {}".format(search_depth))
-    if 3 < args.sensitivity < 7:
-        search_depth = int(det_max_depth/2) if (det_max_depth and int(det_max_depth/2) > 0) else 1
-        wl.log("Detector Search Depth", "3 < sensitivity < 7", "Detector search depth",
-               "Search depth set to {}".format(search_depth))
-    if args.sensitivity > 6:
-        search_depth = det_max_depth if det_max_depth else 1
-        wl.log("Detector Search Depth", "sensitivity > 6", "Detector search depth", "Search depth set to {}".format(search_depth))
 
-    return search_depth
+    result = detector_search_depth_actionable.test(sensitivity=args.sensitivity)
+    if result is not None and result != "NO-OP":
+        cli_msgs_dict['scan'] += "detect.detector.search.depth: {}\n".format(result.outcome)
+        cli_msgs_dict['scan'] += "detect.detector.search.continue: true\n"
+        c.str_add('scan', "detect.detector.search.depth: {}".format(result.outcome))
+        c.str_add('scan', "detect.detector.search.continue: true")
+
+    return result.outcome
+
 
 def get_detector_exclusion_args():
-    # TODO: we need defined behaviour for all sensitivities for both "patterns" and "defaults"
     detector_exclusion_args = []
-    detector_exclusions = ['*test*', '*samples*', '*examples*']
 
-    if args.sensitivity < 4:
+    def detector_exclusions_func():
+        detector_exclusion_args = []
+        detector_exclusions = ['*test*', '*samples*', '*examples*']
         gradle_paths = []
         gradle_test_configurations = []
         for path in Path(os.path.abspath(args.scanfolder)).rglob('build.gradle'):
@@ -1784,42 +1846,79 @@ def get_detector_exclusion_args():
         for p in gradle_paths:
             with open(p, 'r') as file:
                 f = file.read()
-            #for item in re.findall("(?:testCompile|testImplementation).*'(.*)'", f):
+            # for item in re.findall("(?:testCompile|testImplementation).*'(.*)'", f):
             for item in re.findall("(?:testsupportCompile|testsupportImplementation).*configuration:\s*'(.*)'", f):
                 gradle_test_configurations.append(item)
 
-        detector_exclusion_args.append('detect.detector.search.exclusion.patterns: \'{}\''.format(','.join(detector_exclusions)))
+        detector_exclusion_args.append(
+            'detect.detector.search.exclusion.patterns: \'{}\''.format(','.join(detector_exclusions)))
 
         if gradle_test_configurations:
-            detector_exclusion_args.append('detect.gradle.excluded.configurations: \'{}\''.format(','.join(gradle_test_configurations)))
+            detector_exclusion_args.append(
+                'detect.gradle.excluded.configurations: \'{}\''.format(','.join(gradle_test_configurations)))
 
         detector_exclusion_args.append('detect.maven.excluded.scopes: test')
 
-        wl.log("Detector Search Exclusions", "sensitivity < 4", "",
-                                 "Search Exclusion Patterns set to '{}'".format(','.join(detector_exclusions)))
-        wl.log("Detector Search Exclusions", "sensitivity < 4", "",
-                                 "Gradle Configuration Exclusion set to '{}'".format(','.join(gradle_test_configurations)))
-        wl.log("Detector Search Exclusions", "sensitivity < 4", "",
-                                 "Maven Scope Exclusion set to 'test'")
-    elif args.sensitivity <= 8:
-        wl.log("Detector Search Exclusions", " 4 <= sensitivity <= 8", "",
-               "Search exclusion defaults are used")
-    else:
-        detector_exclusion_args.append('detect.detector.search.exclusion.defaults: false')
-        wl.log("Detector Search Exclusions", "sensitivity > 8", "",
-                                 "Search exclusion defaults set to FALSE")
+        return detector_exclusion_args
+
+    result = detector_exclusions_actionable.test(sensitivity=args.sensitivity, detector_exclusions_func=detector_exclusions_func)
+    print("RESULT: {}".format(result))
+    if result.outcome != "NO-OP":
+        if type(result.outcome) == list:
+            for r in result.outcome:
+                cli_msgs_dict['size'] += "{}\n".format(r)
+                c.str_add('size', r)
+
+    # if args.sensitivity < 4:
+    #     detector_exclusions = ['*test*', '*samples*', '*examples*']
+    #     gradle_paths = []
+    #     gradle_test_configurations = []
+    #     for path in Path(os.path.abspath(args.scanfolder)).rglob('build.gradle'):
+    #         gradle_paths.append(path)
+    #
+    #     for p in gradle_paths:
+    #         with open(p, 'r') as file:
+    #             f = file.read()
+    #         #for item in re.findall("(?:testCompile|testImplementation).*'(.*)'", f):
+    #         for item in re.findall("(?:testsupportCompile|testsupportImplementation).*configuration:\s*'(.*)'", f):
+    #             gradle_test_configurations.append(item)
+    #
+    #     detector_exclusion_args.append('detect.detector.search.exclusion.patterns: \'{}\''.format(','.join(detector_exclusions)))
+    #
+    #     if gradle_test_configurations:
+    #         detector_exclusion_args.append('detect.gradle.excluded.configurations: \'{}\''.format(','.join(gradle_test_configurations)))
+    #
+    #     wl.log("Detector Search Exclusions", "sensitivity < 4", "",
+    #                              "Search Exclusion Patterns set to '{}'".format(','.join(detector_exclusions)))
+    #     wl.log("Detector Search Exclusions", "sensitivity < 4", "",
+    #                              "Gradle Configuration Exclusion set to '{}'".format(','.join(gradle_test_configurations)))
+    # elif args.sensitivity <= 8:
+    #     wl.log("Detector Search Exclusions", " 4 <= sensitivity <= 8", "",
+    #            "Search exclusion defaults are used")
+    # else:
+    #     detector_exclusion_args.append('detect.detector.search.exclusion.defaults: false')
+    #     wl.log("Detector Search Exclusions", "sensitivity > 8", "",
+    #                              "Search exclusion defaults set to FALSE")
     return detector_exclusion_args
+
+
 def get_license_search_args():
     detect_license_search_args = []
     if args.focus == "l":
         detect_license_search_args.append("detect.blackduck.signature.scanner.license.search=true")
-        wl.log()
+    return detect_license_search_args
+
 def get_detector_args():
     detector_args = []
     for item in get_detector_exclusion_args():
         detector_args.append(item)
-
+    result = license_search_actionable.test(scan_focus=args.focus)
+    if result.outcome != "NO-OP":
+        cli_msgs_dict['scan'] += "{}\n".format(result.outcome)
+        c.str_add('scan', result.outcome)
+    print(detector_args)
     return detector_args
+
 
 def uncomment_line(line, key):
     if key in line:
@@ -1827,24 +1926,17 @@ def uncomment_line(line, key):
     else:
         return line
 
+
 def uncomment_min_required_options(data, start_index, end_index):
     global args
     global exclude_detector
     exclude_detector = False
-    for line in data [start_index:end_index]:
+    for line in data[start_index:end_index]:
         if "blackduck.url" in line or "detect.source.path" in line:
             data[data.index(line)] = uncomment_line(line)
             continue
         if 'detect.detector.buildless' in line:
-            if args.sensitivity > 3:
-                data[data.index(line)] = uncomment_line(line, "detect.detector.buildless")
-
-                wl.log("Buildless Mode", "sensitivity > 3", "detect.detector.buildless uncommented in config",
-                                         "Detect will run in buildless mode")
-            else :
-                wl.log("Buildless Mode", "sensitivity <= 3", "",
-                                         "Despite the option to, Detect will NOT run in buildless mode")
-
+            data[data.index(line)] = uncomment_line(line, "detect.detector.buildless")
         if 'blackduck.api.token' in line:
             data[data.index(line)] = line.replace('#', '').replace('API_TOKEN', args.api_token)
         elif 'blackduck.url' in line:
@@ -1856,7 +1948,8 @@ def uncomment_min_required_options(data, start_index, end_index):
 
 def uncomment_improve_scan_coverage_options(data, start_index, end_index):
     individual_file_matching_uncommented = False
-    for line in data [start_index:end_index]:
+    for line in data[start_index:end_index]:
+        # TODO IS THIS THE WAY IT SHOULD BE? that we don't get the chance to set this?
         if 'detect.detector.search.depth' in line and get_detector_search_depth():
             data[data.index(line)] = 'detect.detector.search.depth: {}\n'.format(get_detector_search_depth())
             data.append('detect.detector.search.continue: true\n')
@@ -1867,8 +1960,11 @@ def uncomment_improve_scan_coverage_options(data, start_index, end_index):
 
         if 'detect.blackduck.signature.scanner.snippet.matching' in line:
             data[data.index(line)] = uncomment_line(line, 'detect.blackduck.signature.scanner.snippet.matching: SNIPPET_MATCHING')
+
         if 'detect.binary.scan.file.path' in line:
             data[data.index(line)] = uncomment_line(line, 'detect.binary.scan.file.path')
+
+
 
     return data
 
@@ -1879,7 +1975,9 @@ def uncomment_reduce_sig_scan_size_options(data, start_index, end_index):
     return data
 
 def uncomment_optimize_dependency_options(data, start_index, end_index):
+    #TODO: IT DOESNT SEEM LIKE THIS EVER IS SET ANYWHERE - AND WE REWRITE THE CONFIG EVERY TIME...
     for line in data [start_index:end_index]:
+
         if args.sensitivity > 2:
             data[data.index(line)] = uncomment_line(line, 'dev.dependencies: true')
             wl.log("Dev Dependencies", "sensitivity > 2", "dev.dependencies = true",
@@ -1963,8 +2061,10 @@ def json_splitter(scan_path, maxNodeEntries=200000, maxScanSize=4500000000):
     return new_scan_files
 
 def uncomment_detect_commands(config_file):
+
     with open(config_file, 'r+') as f:
         data = f.readlines()
+    #data = c.get_lines()
 
     detector_args = get_detector_args()
 
@@ -1979,13 +2079,7 @@ def uncomment_detect_commands(config_file):
     indices = [improve_scan_coverage_idx, reduce_signature_size_idx, optimize_dependency_scan_idx, improve_license_compliance_idx, project_options_idx, reporting_options_idx, -1]
 
     data = uncomment_min_required_options(data, min_req_idx+1, next(item for item in indices if item is not None)-1)
-    if args.sensitivity > 4:
-        uncomment_line_from_data(data, "detect.docker.tar")
-        wl.log("Docker Layer Detection", ['sensitivity > 4'], "true", "{} Docker '.tar' files will be scanned specially" \
-               .format(len(cli_msgs_dict['docker'])))
-
-    else:
-        wl.log("Docker Layer Detection", ['sensitivity <= 4'], "false", "Docker '.tar' files will NOT be scanned specially")
+    uncomment_line_from_data(data, "detect.docker.tar")
 
     if improve_scan_coverage_idx:
         indices.remove(improve_scan_coverage_idx)
@@ -2013,12 +2107,11 @@ def uncomment_detect_commands(config_file):
         f.writelines(data)
 
 def run_detect(config_file):
-#    config_file = os.path.join(args.scanfolder, "application-project.yml")
-
     # print out information on what the sensitivity setting is doing
-    print(wl.make_table())
+
     uncomment_detect_commands(config_file)
     config_file = config_file.replace(" ", "\ ")
+    print(Actionable.wl.make_table(args.sensitivity))
     detect_command = cli_msgs_dict['detect'].strip() + ' ' + '--spring.profiles.active=project' + ' ' + ' --blackduck.trust.cert=true'  + ' ' + ' --spring.config.location="file:' + config_file + '"'
     print("Running command: {}\n".format(detect_command))
     p = subprocess.Popen(detect_command, shell=True, executable='/bin/bash',
@@ -2046,7 +2139,7 @@ def run_detect(config_file):
     detect_status = re.search(r'Overall Status: (.*)\n', file_contents)
     bom_location = re.search(r'Black Duck Project BOM: (.*)\n', file_contents)
 
-    if use_json_splitter and args.sensitivity > 2: # is this supposed to be gating this for only when a sig scan is happening?
+    if use_json_splitter:
         print("Using JSON splitter")
         # upload scan files
 
@@ -2059,10 +2152,8 @@ def run_detect(config_file):
             bdio_files = glob.glob('{}/bdio/*.jsonld'.format(output_directory))
             if bdio_files:
                 bdio_file = bdio_files[0]
-                #print(bdio_file)
             if json_files:
                 json_file = json_files[0]
-                #print(json_file)
 
             json_lst = json_splitter(json_file)
 
@@ -2093,126 +2184,102 @@ def run_detect(config_file):
     if bom_location:
         print("BOM location: {}".format(bom_location.group(1)))
 
+if __name__ == "__main__":
+    config_file = os.path.join(os.getcwd(), "application-project.yml")
+    c = Configuration(config_file, [PropertyGroup('detect', 'DETECT COMMAND TO RUN'),
+                                    PropertyGroup('reqd', 'MINIMUM REQUIRED OPTIONS'),
+                                    PropertyGroup('scan', 'OPTIONS TO IMPROVE SCAN COVERAGE'),
+                                    PropertyGroup('size', 'OPTIONS TO REDUCE SIGNATURE SCAN SIZE'),
+                                    PropertyGroup('dep', 'OPTIONS TO CONFIGURE DEPENDENCY SCAN'),
+                                    PropertyGroup('lic', 'OPTIONS TO IMPROVE LICENSE COMPLIANCE ANALYSIS'),
+                                    PropertyGroup('proj', 'PROJECT OPTIONS'),
+                                    PropertyGroup('docker', 'DOCKER SCANNING')])
 
-if os.environ.get('BLACKDUCK_URL') != "" and args.url == None:
-    args.url = os.environ.get('BLACKDUCK_URL')
-if os.environ.get('BLACKDUCK_API_TOKEN') != "" and args.api_token == None:
-    args.api_token = os.environ.get('BLACKDUCK_API_TOKEN')
-if args.sensitivity == None:
-    args.sensitivity = 5
-else:
-    args.sensitivity = int(args.sensitivity)
-if args.focus == None:
-    args.focus = "b"
-if args.no_scan == None:
-    args.no_scan = False
+    if os.environ.get('BLACKDUCK_URL') != "" and args.url is None:
+        args.url = os.environ.get('BLACKDUCK_URL')
+    if os.environ.get('BLACKDUCK_API_TOKEN') != "" and args.api_token is None:
+        args.api_token = os.environ.get('BLACKDUCK_API_TOKEN')
+    if args.sensitivity is None:
+        args.sensitivity = 3
+    else:
+        args.sensitivity = int(args.sensitivity)
+    if args.focus is None:
+        args.focus = "b"
+    if args.no_scan is None:
+        args.no_scan = False
 
-if args.scanfolder == "" or args.interactive:
-#     try:
-#         if args.detector_only:
-#             scantype = "d"
-#         elif args.signature_only:
-#             scantype = "s"
-#         else:
-#             scantype = "b"
-        args.scanfolder, args.url, args.api_token, \
-        args.sensitivity, args.focus, args.no_scan, args.report = interactive(args.scanfolder, args.url, args.api_token,
-                                                                              args.sensitivity, args.focus, args.no_scan, args.report)
-#         if scantype == "d":
-#             args.detector_only = True
-#         elif scantype == "s":
-#             args.signature_only = True
-#     except:
-#         sys.exit(1)
+    if args.scanfolder == "" or args.interactive:
 
-cli_msgs_dict['reqd'] = "--blackduck.url={}\n".format(args.url) + \
-"--blackduck.api.token=API_TOKEN\n"
+        args.scanfolder, args.url, args.api_token, args.sensitivity, args.focus, args.no_scan \
+            = interactive(args.scanfolder, args.url, args.api_token, args.sensitivity, args.focus, args.no_scan)
 
-if not os.path.isdir(args.scanfolder):
-    print("Scan location '{}' does not exist\nExiting".format(args.scanfolder))
-    sys.exit(1)
+    #cli_msgs_dict['reqd'] = "--blackduck.url={}\n".format(args.url) + "--blackduck.api.token=API_TOKEN\n"
 
-rep = ""
+    if not os.path.isdir(args.scanfolder):
+        print("Scan location '{}' does not exist\nExiting".format(args.scanfolder))
+        sys.exit(1)
 
-cli_msgs_dict['reqd'] += "--detect.source.path='{}'\n".format(os.path.abspath(args.scanfolder))
+    rep = ""
+    c.str_add('reqd', "--detect.source.path='{}'".format(os.path.abspath(args.scanfolder)))
+    cli_msgs_dict['reqd'] += "--detect.source.path='{}'\n".format(os.path.abspath(args.scanfolder))
 
-print("\nDETECT ADVISOR v{} - for use with Synopsys Detect versions up to v{}\n".format(advisor_version, detect_version))
+    print("\nDETECT ADVISOR v{} - for use with Synopsys Detect versions up to v{}\n".format(advisor_version, detect_version))
 
-print("PROCESSING:")
+    print("PROCESSING:")
 
-if os.path.isabs(args.scanfolder):
-    print("Working on project folder '{}'\n".format(args.scanfolder))
-else:
-    print("Working on project folder '{}' (Absolute path '{}')\n".format(args.scanfolder, os.path.abspath(args.scanfolder)))
+    if os.path.isabs(args.scanfolder):
+        print("Working on project folder '{}'\n".format(args.scanfolder))
+    else:
+        print("Working on project folder '{}' (Absolute path '{}')\n".format(args.scanfolder, os.path.abspath(args.scanfolder)))
 
-print("- Reading hierarchy          .....", end="", flush=True)
-process_dir(args.scanfolder, 0, False)
-print(" Done")
+    print("- Reading hierarchy          ..... ", end="", flush=True)
+    process_dir(args.scanfolder, 0, False)
+    print("Done")
 
-if args.report:
-    if os.path.exists(args.report):
-        backup = backup_file(args.report, "report")
-#    print("Report file '{}' already existed - backed up to {}".format(args.report, backup))
-
-    try:
-        f = open(args.report, "a")
-    except Exception as e:
-        print('ERROR: Unable to create output report file \n' + str(e))
-        sys.exit(3)
-else:
+    #if args.report:
+    #    if os.path.exists(args.report):
+    #        backup = backup_file(args.report, "report")
+    #    print("Report file '{}' already existed - backed up to {}".format(args.report, backup))
+    #
+    #    try:
+    #        f = open(args.report, "a")
+    #    except Exception as e:
+    #        print('ERROR: Unable to create output report file \n' + str(e))
+    #        sys.exit(3)
+    #else:
     f = None
 
-#if not (args.signature_only or args.docker_only):
-if not args.docker_only:
-#    if args.full:
-    if True:
+    if not args.docker_only:
         detector_process(args.scanfolder, f)
-    else:
-        detector_process(args.scanfolder, None)
-# if args.signature_only:
-#     cli_msgs_dict['reqd'] += "--detect.tools=SIGNATURE_SCAN\n"
 
-#if not args.detector_only and not args.docker_only:
-if not args.docker_only:
-#    if args.full:
-    if True:
-            use_json_splitter = signature_process(args.scanfolder, f)
-    else:
-        signature_process(args.scanfolder, None)
-# if args.detector_only:
-#     cli_msgs_dict['reqd'] += "--detect.tools=DETECTOR\n"
+    #if not args.detector_only and not args.docker_only:
+    if not args.docker_only:
+        use_json_splitter = signature_process(args.scanfolder, f)
 
-#print_summary(args.critical_only, f)
-print_summary(False, f)
+    print_summary(False, f)
 
-check_prereqs()
+    check_prereqs()
 
-if args.docker or args.docker_only:
-    check_docker_prereqs()
-if args.docker_only:
-    cli_msgs_dict['reqd'] += "--detect.tools=DOCKER\n"
+    if args.docker or args.docker_only:
+        check_docker_prereqs()
+    if args.docker_only:
+        c.str_add('reqd', "--detect.tools=DOCKER")
+        cli_msgs_dict['reqd'] += "--detect.tools=DOCKER\n"
 
-#output_recs(args.critical_only, f)
-output_recs(True, f)
+    #output_recs(args.critical_only, f)
+    output_recs(True, f)
 
-#output_cli(args.critical_only, args.report, f)
-#output_cli(False, args.report, f)
+    #output_cli(args.critical_only, args.report, f)
+    #output_cli(False, args.report, f)
 
-#if args.output_config:
-if True:
+    #if args.output_config:
     conffile = os.path.join(args.scanfolder, "application-project.yml")
     backup = backup_file(conffile, "project config")
-    output_config(conffile)
+
+    output_config(conffile, c)
     if not args.no_scan:
-        import shutil
-        shutil.copyfile(conffile, conffile + "_copy")
         run_detect(conffile)
 
-#if args.bdignore:
-if False:
-    create_bdignores()
+    if args.bdignore:
+        create_bdignores()
 
-print("")
-if f:
-    f.write("\n")
-    f.close()
