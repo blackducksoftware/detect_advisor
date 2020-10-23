@@ -714,7 +714,9 @@ def checkfile(name, path, size, size_comp, dirdepth, in_archive, filebuff=None):
         if ext in dockerext_list:
             if is_tar_docker(path):
                 # we will invoke --detect.docker.tar on these
-                retval = detect_docker_actionable.test(sensitivity=args.sensitivity, docker_tar=os.path.abspath(path))
+                #TODO - keep a list instead of overwriting with every new one.
+                retval = detect_docker_actionable.test(sensitivity=args.sensitivity, docker_tar_present=True,
+                                                       docker_tar=os.path.abspath(path))
                 if retval.outcome != "NO-OP":
                     c.str_add('docker', retval.outcome)
                     cli_msgs_dict['docker'] += retval.outcome + "\n"
