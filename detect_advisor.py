@@ -2029,13 +2029,14 @@ def run_detect(config_file):
     rc = None
     while True:
         std_out_output = stdout.readline()
-        if std_out_output == '' and p.poll is not None:
+        if (std_out_output == '' and p.poll is not None) or re.findall(r'Result code of [0-9]*, exiting', std_out_output.decode('utf-8')):
             break
         if std_out_output:
             out_file.write(std_out_output.decode('utf-8'))
             print(std_out_output.decode('utf-8').strip())
         rc = p.poll
     file_contents = out_file.read()
+    out_file.close()
     print(rc)
     global binpack
     try:
