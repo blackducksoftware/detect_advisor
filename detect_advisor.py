@@ -114,8 +114,8 @@ detect_docker_actionable = Actionable("Detect Docker TAR", {'sensitivity >= 3 an
 json_splitter_actionable = Actionable("Scanfile Splitter", {'sensitivity > 1 and scan_size >= 4.5':
                                                                 (("blackduck.offline.mode: true",
                                                                   "detect.bom.aggregate.name: detect_advisor_run_{}".format(datetime.now())),
-                                                                 "Scan (${scan_size} G) will be split up to avoid reaching scanfile size limit of (5GB)")},
-                                              default_description="Scan (${scan_size} G) is within size limit (5GB) and will NOT be split.")
+                                                                 "Scan (${scan_size}GB) will be split up to avoid reaching scanfile size limit of (5GB)")},
+                                              default_description="Scan (${scan_size}GB) is within size limit (5GB) and will NOT be split.")
 
 license_search_actionable = Actionable("License Search", {'scan_focus == "l"':
                                                               ("detect.blackduck.signature.scanner.license.search=true", 'License search WILL be used.')},
@@ -714,6 +714,7 @@ def checkfile(name, path, size, size_comp, dirdepth, in_archive, filebuff=None):
         if ext in dockerext_list:
             if is_tar_docker(path):
                 # we will invoke --detect.docker.tar on these
+                print("Found Docker layer tar at: {}".format(path))
                 #TODO - keep a list instead of overwriting with every new one.
                 retval = detect_docker_actionable.test(sensitivity=args.sensitivity, docker_tar_present=True,
                                                        docker_tar=os.path.abspath(path))
@@ -1409,32 +1410,34 @@ def detector_process(folder, f):
         c.str_add('reqd', dev_dep_result.outcome)
         cli_msgs_dict['reqd'] += "{}\n".format(dev_dep_result.outcome)
 
-    if cmds_missing1:
+    if cmds_missing1 or cmds_missingother:
         package_managers_missing.append(cmds_missing1)
-        recs_msgs_dict['crit'] += "- CRITICAL: Package manager programs ({}) missing for package files in invocation folder\n".format(cmds_missing1) + \
-        "    Impact:  Scan will fail\n" + \
-        "    Action:  Either install package manager programs or\n" + \
-        "             consider specifying --detect.detector.buildless=true\n\n"
-        cli_msgs_dict['reqd'] += "--detect.detector.buildless=true\n" + \
-        "    (OR specify --detect.XXXX.path=<LOCATION> where XXX is package manager\n" + \
-        "    OR install package managers '{}')\n".format(cmds_missing1)
+        c.add('reqd', Property(property_tuple=('detect.detector.buildless', 'true'), is_commented=True))
+        c.add('dep', Property(property_tuple=('detect.XXXX.path', '<LOCATION>'), is_commented=True))
+        #recs_msgs_dict['crit'] += "- CRITICAL: Package manager programs ({}) missing for package files in invocation folder\n".format(cmds_missing1) + \
+        #"    Impact:  Scan will fail\n" + \
+        #"    Action:  Either install package manager programs or\n" + \
+        #"             consider specifying --detect.detector.buildless=true\n\n"
+        #cli_msgs_dict['reqd'] += "--detect.detector.buildless=true\n" + \
+        #"    (OR specify --detect.XXXX.path=<LOCATION> where XXX is package manager\n" + \
+        #"    OR install package managers '{}')\n".format(cmds_missing1)
 
-    if cmds_missingother:
-        package_managers_missing.append(cmds_missingother)
-        recs_msgs_dict['imp'] += "- IMPORTANT: Package manager programs ({}) missing for package files in sub-folders\n".format(cmds_missingother) + \
-        "    Impact:  The scan will fail if the scan depth is modified from the default\n" + \
-        "    Action:  Install package manager programs\n" + \
-        "             (OR specify --detect.XXXX.path=<LOCATION> where XXX is package manager\n" + \
-        "             OR specify --detect.detector.buildless=true)\n\n"
-        if cli_msgs_dict['scan'].find("detector.buildless") < 0:
-            cli_msgs_dict['scan'] += "--detect.detector.buildless=true\n" + \
-            "    (OR install package managers '{}'\n".format(cmds_missingother) + \
-            "    (OR use --detect.XXXX.path=<LOCATION> where XXX is package manager)\n"
-
-    if counts['det'][inarc] > 0:
-        recs_msgs_dict['imp'] += "- IMPORTANT: Package manager files found in archives\n" + \
-        "    Impact:  Dependency scan not performed for projects in archives\n" + \
-        "    Action:  Extract zip archives and rescan\n\n"
+    # if cmds_missingother:
+    #     package_managers_missing.append(cmds_missingother)
+    #     recs_msgs_dict['imp'] += "- IMPORTANT: Package manager programs ({}) missing for package files in sub-folders\n".format(cmds_missingother) + \
+    #     "    Impact:  The scan will fail if the scan depth is modified from the default\n" + \
+    #     "    Action:  Install package manager programs\n" + \
+    #     "             (OR specify --detect.XXXX.path=<LOCATION> where XXX is package manager\n" + \
+    #     "             OR specify --detect.detector.buildless=true)\n\n"
+    #     if cli_msgs_dict['scan'].find("detector.buildless") < 0:
+    #         cli_msgs_dict['scan'] += "--detect.detector.buildless=true\n" + \
+    #         "    (OR install package managers '{}'\n".format(cmds_missingother) + \
+    #         "    (OR use --detect.XXXX.path=<LOCATION> where XXX is package manager)\n"
+    #
+    # if counts['det'][inarc] > 0:
+    #     recs_msgs_dict['imp'] += "- IMPORTANT: Package manager files found in archives\n" + \
+    #     "    Impact:  Dependency scan not performed for projects in archives\n" + \
+    #     "    Action:  Extract zip archives and rescan\n\n"
 
     for cmd in detectors_list:
         if cmd in detector_cli_options_dict.keys():
@@ -1517,8 +1520,6 @@ def check_prereqs():
         else:
             try:
                 javaoutput = subprocess.check_output(['java', '-version'], stderr=subprocess.STDOUT)
-                #javaoutput = 'openjdk version "13.0.1" 2019-10-15'
-                #javaoutput = 'java version "1.8.0_181"'
                 crit = True
                 if javaoutput:
                     line0 = javaoutput.decode("utf-8").splitlines()[0]

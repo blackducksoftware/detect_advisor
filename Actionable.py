@@ -43,6 +43,7 @@ def format_op_val_pair(op_val_pair: tuple):
 
 
 def format_value(val: str):
+
     if val.lower() == "true":
         return True
     elif val.lower() == "false":
@@ -52,7 +53,7 @@ def format_value(val: str):
     elif val.isdecimal():
         return int(val)
     else:
-        return float(val)
+        return round(float(val), 2)
 
 
 def parse_cause_actions(cause_action_dict: dict, vars_dict: dict):
@@ -109,7 +110,7 @@ def parse_and_replace_action_vars(action, vars_dict: dict):
                 result = vars_dict[var_name]
                 if callable(result):
                     return result
-                action = action.replace("${" + "{}".format(var_name) + "}", str(result))
+                action = action.replace("${" + "{}".format(var_name) + "}", str(format_value(str(result))))
     return action
 
 
@@ -135,7 +136,7 @@ class Actionable(object):
                     result = outcome()
                     if type(result) == list:
                         result = "\n".join(result)
-                    desc = k[1].replace("${OUT}", str(result))
+                    desc = desc.replace("${OUT}", str(result))
                 value_action = Actionable.Output(outcome=outcome, causes=v[1], description=desc)
                 true_count += 1
             else:
