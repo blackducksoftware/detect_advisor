@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 import subprocess
 import shutil
-
+import atexit
 from TarExaminer import is_tar_docker
 import re, glob
 from blackduck.HubRestApi import HubInstance
@@ -498,6 +498,8 @@ parser.add_argument("-a", "--api_token", help="Black Duck Server API Token")
 parser.add_argument("-n", "--no_scan", help="Do not run Detect scan - only create .yml project config file", action='store_true')
 parser.add_argument('--no_write', help="Do not add files to scan directory.", action='store_true')
 parser.add_argument('--aux_write_dir', help="Directory to write intermediate files.", action='store_true')
+parser.add_argument('-hp', '--hub_project', help="Hub Project Name")
+parser.add_argument('-hv', '--hub_version', help="Hub Project Version")
 args = parser.parse_args()
 
 def process_tar_entry(tinfo: tarfile.TarInfo, tarpath, dirdepth, tar):
@@ -961,6 +963,8 @@ def check_singlefiles(f):
                     sfmatch = True
                     sf_list.append(thisfile)
     if sfmatch:
+        c.str_add('scan', '--detect.blackduck.signature.scanner.individual.file.matching=SOURCE')
+        c.str_add('scan', "    (To include singleton .js files in signature scan for OSS matches)")
         if cli_msgs_dict['scan'].find("individual.file.matching") < 0:
             cli_msgs_dict['scan'] += "--detect.blackduck.signature.scanner.individual.file.matching=SOURCE\n" + \
             "    (To include singleton .js files in signature scan for OSS matches)\n"
@@ -1244,9 +1248,8 @@ def signature_process(folder, f):
             cli_msgs_dict['lic'] += "--detect.blackduck.signature.scanner.upload.source.mode=true\n" + \
             "    (CAUTION - will upload local source files)\n"
 
-        if not c.has_prop('detect.blackduck.signature.scanner.upload.source.mode'):
             c.str_add('lic', "--detect.blackduck.signature.scanner.upload.source.mode=true")
-            c.add('lic', Property(comment_line="    (CAUTION - will upload local source files)"))
+            c.str_add('lic', "    (CAUTION - will upload local source files)")
 
     check_singlefiles(f)
     result = indiv_file_match_actionable.test(sensitivity=args.sensitivity)
@@ -1299,7 +1302,7 @@ def detector_process(folder, f):
 
     if f:
         f.write("PROJECT FILES FOUND:\n")
-
+    c.clear_group('dep')
     count = 0
     det_depth1 = 0
     det_other = 0
@@ -1389,6 +1392,10 @@ def detector_process(folder, f):
         "    Action:  Specify --detect.detector.search.depth={} (although depth could be up to {})\n".format(det_min_depth, det_max_depth) + \
         "             optionally with --detect.detector.search.continue=true or scan sub-folders separately.\n\n"
 
+        c.str_add('scan', '--detect.detector.search.depth={}'.format(det_min_depth))
+        c.str_add('scan', '--detect.detector.search.continue=true')
+        c.str_add('scan', "    (To find package manager files within sub-folders; note depth {} would find\n".format(det_max_depth) + \
+            "    all PM files in sub-folders but higher level projects may already include these)\n")
         if cli_msgs_dict['scan'].find("detector.search.depth") < 0:
             cli_msgs_dict['scan'] += "--detect.detector.search.depth={}\n".format(det_min_depth) + \
             "    optionally with optionally with -detect.detector.search.continue=true\n" + \
@@ -1402,18 +1409,18 @@ def detector_process(folder, f):
 
     result = buildless_mode_actionable.test(sensitivity=args.sensitivity)
     if result.outcome != "NO-OP":
-        c.str_add('reqd', result.outcome)
-        cli_msgs_dict['reqd'] += "{}\n".format(result.outcome)
+        c.str_add('dep', result.outcome)
+        cli_msgs_dict['dep'] += "{}\n".format(result.outcome)
 
     dev_dep_result = dev_dependencies_actionable.test(sensitivity=args.sensitivity)
     if dev_dep_result.outcome != "NO-OP":
-        c.str_add('reqd', dev_dep_result.outcome)
-        cli_msgs_dict['reqd'] += "{}\n".format(dev_dep_result.outcome)
+        c.str_add('dep', dev_dep_result.outcome)
+        cli_msgs_dict['dep'] += "{}\n".format(dev_dep_result.outcome)
 
     if cmds_missing1 or cmds_missingother:
         package_managers_missing.append(cmds_missing1)
-        c.add('reqd', Property(property_tuple=('detect.detector.buildless', 'true'), is_commented=True))
-        c.add('dep', Property(property_tuple=('detect.XXXX.path', '<LOCATION>'), is_commented=True))
+        c.add('dep', Property('detect.detector.buildless', 'true', is_commented=True))
+        c.add('dep', Property('detect.XXXX.path', '<LOCATION>', is_commented=True))
         #recs_msgs_dict['crit'] += "- CRITICAL: Package manager programs ({}) missing for package files in invocation folder\n".format(cmds_missing1) + \
         #"    Impact:  Scan will fail\n" + \
         #"    Action:  Either install package manager programs or\n" + \
@@ -1447,7 +1454,7 @@ def detector_process(folder, f):
         if cmd in detector_cli_required_dict.keys():
             cli_msgs_dict['crit'] += " For {}:\n".format(cmd) + detector_cli_required_dict[cmd]
             for prop in detector_cli_required_dict[cmd].splitlines(keepends=False):
-                c.str_add('reqd', prop, is_commented=True)
+                c.str_add('dep', prop, is_commented=True)
 
     print(" Done")
 
@@ -1502,10 +1509,7 @@ def output_recs(critical_only, f):
             f.write(bpath)
 
 def check_prereqs():
-
-
     global rep
-
     global messages
 
     # Check java
@@ -1514,6 +1518,8 @@ def check_prereqs():
             recs_msgs_dict['crit'] += "- CRITICAL: Java is not installed or on the PATH\n" + \
             "    Impact:  Detect program will fail\n" + \
             "    Action:  Install OpenJDK 1.8 or 1.11\n\n"
+            c.str_add('reqd', '--detect.java.path=<PATH_TO_JAVA>')
+            c.str_add('reqd', "    (If Java installed, specify path to java executable if not on PATH)")
 #             if cli_msgs_dict['reqd'].find("detect.java.path") < 0:
 #                 cli_msgs_dict['reqd'] += ""    --detect.java.path=<PATH_TO_JAVA>\n" + \
 #                 "    (If Java installed, specify path to java executable if not on PATH)\n"
@@ -1551,6 +1557,8 @@ def check_prereqs():
                 recs_msgs_dict['crit'] += "- CRITICAL: Java program version cannot be determined\n" + \
                 "    Impact:  Scan may fail\n" + \
                 "    Action:  Check Java or OpenJDK version 1.8 or 1.11 is installed\n\n"
+                c.str_add('reqd', '--detect.java.path=<PATH_TO_JAVA>')
+                c.str_add('reqd', "    (If Java installed, specify path to java executable if not on PATH)")
 #                 if cli_msgs_dict['reqd'].find("detect.java.path") < 0:
 #                     cli_msgs_dict['reqd'] += "--detect.java.path=<PATH_TO_JAVA>\n" + \
 #                     "    (If Java installed, specify path to java executable if not on PATH)\n"
@@ -1559,6 +1567,8 @@ def check_prereqs():
         recs_msgs_dict['crit'] += "- CRITICAL: Java is not installed or on the PATH\n" + \
         "    Impact:  Detect program will fail\n" + \
         "    Action:  Install OpenJDK 1.8 or 1.11\n\n"
+        c.str_add('reqd', '--detect.java.path=<PATH_TO_JAVA>')
+        c.str_add('reqd', "    (If Java installed, specify path to java executable if not on PATH)")
 #         if cli_msgs_dict['reqd'].find("detect.java.path") < 0:
 #             cli_msgs_dict['reqd'] += "--detect.java.path=<PATH_TO_JAVA>\n" + \
 #             "    (If Java installed, specify path to java executable if not on PATH)\n"
@@ -1583,9 +1593,12 @@ def check_prereqs():
             recs_msgs_dict['crit'] += "- CRITICAL: No connection to https://detect.synopsys.com\n" + \
             "    Impact:  Detect wrapper script cannot be downloaded, Detect cannot be started\n" + \
             "    Action:  Either configure proxy (See CLI section) or download Detect manually and run offline (see docs)\n\n"
+
             cli_msgs_dict['detect'] = cli_msgs_dict["detect_" + os_platform + "_proxy"]
+            c.str_add('detect', cli_msgs_dict["detect_" + os_platform + "_proxy"], is_commented=True)
         else:
             cli_msgs_dict['detect'] = cli_msgs_dict["detect_" + os_platform]
+            c.str_add('detect', cli_msgs_dict["detect_" + os_platform], is_commented=True)
             if not check_connection("https://sig-repo.synopsys.com"):
                 recs_msgs_dict['crit'] += "- CRITICAL: No connection to https://sig-repo.synopsys.com\n" + \
                 "    Impact:  Detect jar cannot be downloaded; Detect cannot run\n" + \
@@ -1673,7 +1686,7 @@ def output_cli(critical_only, report, f):
         output += "\nDOCKER IMAGES TO SCAN:\n" + cli_msgs_dict['docker'] + "\n"
 
     output = re.sub(r"^", "    ", output, flags=re.MULTILINE)
-
+    print(output)
     if not critical_only:
         print(output)
     if f:
@@ -1722,7 +1735,6 @@ def output_config(conffile, c):
     #config_file = os.path.join(projdir, "application-project.yml")
     #config_file = os.path.join(os.getcwd(), conffile)
     #config_file = os.path "application-project.yml")
-    print(c)
     if not os.path.exists(conffile):
         config = "#\n# EXAMPLE PROJECT CONFIG FILE\n" + \
         "# Uncomment and update required options\n#\n#\n" + \
@@ -1740,9 +1752,9 @@ def output_config(conffile, c):
         config = re.sub(r"\n ", r"\n#", config, flags=re.S)
         config = re.sub(r"\n--", r"\n#", config, flags=re.S)
         try:
-            c = open(conffile, "a")
-            c.write(config)
-            c.close()
+            cf = open(conffile, "a")
+            cf.write(str(c))
+            cf.close()
 #             print("INFO: Config file 'application-project.yml' file written to project folder (Edit to uncomment options)\n" + \
 #             "      - Use '--spring.profiles.active=project' to specify this configuration")
         except Exception as e:
@@ -1790,7 +1802,7 @@ def backup_file(filename, filetype):
     return None
 
 
-def interactive(scanfolder, url, api, sensitivity, focus, no_scan):
+def interactive(scanfolder, url, api, sensitivity, focus, no_scan, project_name, project_version):
     if scanfolder is None or scanfolder == "":
         scanfolder = os.getcwd()
     try:
@@ -1809,15 +1821,14 @@ def interactive(scanfolder, url, api, sensitivity, focus, no_scan):
                                     sensitivity))
         focus = str(get_input("Scan Focus (License Compliance (l) / Security (s) / Both (b)) [{}]: ".format(focus),
                               focus))
-        #if report == None:
-        #    report = "report.txt"
-        #report = get_input("Report file name [{}]: ".format(report), report)
+        project_name = str(get_input("Hub Project Name [{}]: ".format(project_name), project_name))
+        project_version = str(get_input("Hub Project Version [{}]: ".format(project_version), project_version))
         scandef = "n" if no_scan else "y"
         no_scan = not get_input_yn("Run Detect scan (y/n) [{}]: ".format(scandef), scandef)
     except:
         print("Exiting")
         return "", "", "", 0, False, ""
-    return scanfolder, url, api, sensitivity, focus, no_scan
+    return scanfolder, url, api, sensitivity, focus, no_scan, project_name, project_version
 
 
 
@@ -1829,8 +1840,8 @@ def get_detector_search_depth():
     if result is not None and result != "NO-OP":
         cli_msgs_dict['scan'] += "detect.detector.search.depth: {}\n".format(result.outcome)
         cli_msgs_dict['scan'] += "detect.detector.search.continue: true\n"
-        c.str_add('scan', "detect.detector.search.depth: {}".format(result.outcome))
-        c.str_add('scan', "detect.detector.search.continue: true")
+        c.str_add('scan', "detect.detector.search.depth: {}".format(result.outcome), is_commented=False)
+        c.str_add('scan', "detect.detector.search.continue: true", is_commented=False)
 
     return result.outcome
 
@@ -1865,12 +1876,14 @@ def get_detector_exclusion_args():
         return detector_exclusion_args
 
     result = detector_exclusions_actionable.test(sensitivity=args.sensitivity, detector_exclusions_func=detector_exclusions_func)
-    print("RESULT: {}".format(result))
     if result.outcome != "NO-OP":
         if type(result.outcome) == list:
             for r in result.outcome:
                 cli_msgs_dict['size'] += "{}\n".format(r)
                 c.str_add('size', r)
+        else:
+            cli_msgs_dict['size'] += "{}\n".format(result.outcome)
+            c.str_add('size', result.outcome)
 
     # if args.sensitivity < 4:
     #     detector_exclusions = ['*test*', '*samples*', '*examples*']
@@ -1906,10 +1919,11 @@ def get_detector_exclusion_args():
 
 
 def get_license_search_args():
-    detect_license_search_args = []
-    if args.focus == "l":
-        detect_license_search_args.append("detect.blackduck.signature.scanner.license.search=true")
-    return detect_license_search_args
+    pass
+    #detect_license_search_args = []
+    #if args.focus == "l":
+    #    detect_license_search_args.append("detect.blackduck.signature.scanner.license.search=true")
+    #return detect_license_search_args
 
 def get_detector_args():
     detector_args = []
@@ -1919,7 +1933,6 @@ def get_detector_args():
     if result.outcome != "NO-OP":
         cli_msgs_dict['scan'] += "{}\n".format(result.outcome)
         c.str_add('scan', result.outcome)
-    print(detector_args)
     return detector_args
 
 
@@ -1933,6 +1946,12 @@ def uncomment_line(line, key):
 def uncomment_min_required_options(data, start_index, end_index):
     global args
     global exclude_detector
+
+    c.uncomment_like('blackduck.url')
+    c.uncomment_like('blackduck.api.token')
+    c.uncomment_like('detect.source.path')
+    c.uncomment_like('detect.detector.buildless')
+
     exclude_detector = False
     for line in data[start_index:end_index]:
         if "blackduck.url" in line or "detect.source.path" in line:
@@ -1972,6 +1991,7 @@ def uncomment_improve_scan_coverage_options(data, start_index, end_index):
     return data
 
 def uncomment_reduce_sig_scan_size_options(data, start_index, end_index):
+    c.uncomment_property('detect.tools.excluded')
     for line in data[start_index:end_index]:
          if 'detect.tools.excluded' in line:
              data[data.index(line)] = uncomment_line(line, 'detect.tools.excluded')
@@ -2083,6 +2103,11 @@ def uncomment_detect_commands(config_file):
 
     data = uncomment_min_required_options(data, min_req_idx+1, next(item for item in indices if item is not None)-1)
     uncomment_line_from_data(data, "detect.docker.tar")
+    c.uncomment_property('detect.docker.tar')
+    if args.hub_project is not None:
+        c.str_add('proj', 'detect.project.name: \'{}\''.format(args.hub_project), should_update=True)
+    if args.hub_version is not None:
+        c.str_add('proj', 'detect.project.version.name: \'{}\''.format(args.hub_version), should_update=True)
 
     if improve_scan_coverage_idx:
         indices.remove(improve_scan_coverage_idx)
@@ -2101,21 +2126,24 @@ def uncomment_detect_commands(config_file):
         data.append(arg + '\n')
 
     if use_json_splitter:
+        c.str_add('size', 'blackduck.offline.mode: true', is_commented=False)
+        c.str_add('size', 'detect.bom.aggregate.name: detect_advisor_run_{}'.format(datetime.now()), is_commented=False)
         data.append('blackduck.offline.mode: true\n')
         data.append('detect.bom.aggregate.name: detect_advisor_run_{}\n'.format(datetime.now()))
 
-
-
     with open(config_file, 'w') as f:
-        f.writelines(data)
+        f.writelines(str(c))
 
 def run_detect(config_file):
     # print out information on what the sensitivity setting is doing
-
     uncomment_detect_commands(config_file)
     config_file = config_file.replace(" ", "\ ")
+
     print(Actionable.wl.make_table(args.sensitivity))
-    detect_command = cli_msgs_dict['detect'].strip() + ' ' + '--spring.profiles.active=project' + ' ' + ' --blackduck.trust.cert=true'  + ' ' + ' --spring.config.location="file:' + config_file + '"'
+    detect_command = c['detect'].get_line(1).strip() + ' ' \
+                     + '--spring.profiles.active=project' + ' ' \
+                     + ' --blackduck.trust.cert=true'  + ' ' \
+                     + ' --spring.config.location="file:' + config_file + '"'
     print("Running command: {}\n".format(detect_command))
     p = subprocess.Popen(detect_command, shell=True, executable='/bin/bash',
                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
@@ -2125,20 +2153,14 @@ def run_detect(config_file):
     rc = None
     while True:
         std_out_output = stdout.readline()
-        if std_out_output == '' and p.poll is not None:
+        if std_out_output == '' and (rc := p.poll()) is not None:
             break
         if std_out_output:
             out_file.write(std_out_output.decode('utf-8'))
             print(std_out_output.decode('utf-8').strip())
-        rc = p.poll
     file_contents = out_file.read()
     print(rc)
-    global binpack
-    try:
-        if binpack is not None:
-            os.remove(binpack) # clean up binary zip archive
-    except:
-        pass
+
     detect_status = re.search(r'Overall Status: (.*)\n', file_contents)
     bom_location = re.search(r'Black Duck Project BOM: (.*)\n', file_contents)
 
@@ -2187,7 +2209,19 @@ def run_detect(config_file):
     if bom_location:
         print("BOM location: {}".format(bom_location.group(1)))
 
+
+@atexit.register
+def cleanup():
+    global binpack
+    try:
+        if binpack is not None:
+            os.remove(binpack)  # clean up binary zip archive
+    except:
+        pass
+
+
 if __name__ == "__main__":
+
     config_file = os.path.join(os.getcwd(), "application-project.yml")
     c = Configuration(config_file, [PropertyGroup('detect', 'DETECT COMMAND TO RUN'),
                                     PropertyGroup('reqd', 'MINIMUM REQUIRED OPTIONS'),
@@ -2195,7 +2229,36 @@ if __name__ == "__main__":
                                     PropertyGroup('size', 'OPTIONS TO REDUCE SIGNATURE SCAN SIZE'),
                                     PropertyGroup('dep', 'OPTIONS TO CONFIGURE DEPENDENCY SCAN'),
                                     PropertyGroup('lic', 'OPTIONS TO IMPROVE LICENSE COMPLIANCE ANALYSIS'),
-                                    PropertyGroup('proj', 'PROJECT OPTIONS'),
+                                    PropertyGroup('proj', 'PROJECT OPTIONS', defaults="--detect.project.name=PROJECT_NAME\n" + \
+"--detect.project.version.name=VERSION_NAME\n" + \
+"    (OPTIONAL Specify project and version names)\n" + \
+"--detect.project.version.update=true\n" + \
+"    (OPTIONAL Update project and version parameters below for existing projects)\n" + \
+"--detect.project.tier=X\n" + \
+"    (OPTIONAL Define project tier numeric for new project)\n" + \
+"--detect.project.version.phase=ARCHIVED/DEPRECATED/DEVELOPMENT/PLANNING/PRERELEASE/RELEASED\n" + \
+"    (OPTIONAL Specify project phase for new project - default DEVELOPMENT)\n" + \
+"--detect.project.version.distribution=EXTERNAL/SAAS/INTERNAL/OPENSOURCE\n" + \
+"    (OPTIONAL Specify version distribution for new project - default EXTERNAL)\n" + \
+"--detect.project.user.groups='GROUP1,GROUP2'\n" + \
+"    (OPTIONAL Define group access for project for new project)\n"),
+                                    PropertyGroup('rep', 'REPORTING OPTIONS', defaults="--detect.wait.for.results=true\n" + \
+"    (OPTIONAL Wait for server-side analysis to complete - useful for script execution after scan)\n" + \
+"--detect.cleanup=false\n" + \
+"    (OPTIONAL Retain scan results in $HOME/blackduck folder)\n" + \
+"--detect.policy.check.fail.on.severities='ALL,NONE,UNSPECIFIED,TRIVIAL,MINOR,MAJOR,CRITICAL,BLOCKER'\n" + \
+"    (OPTIONAL Comma-separated list of policy violation severities that will cause Detect to return fail code\n" + \
+"--detect.notices.report=true\n" + \
+"    (OPTIONAL Generate Notices Report in text form in project directory)\n" + \
+"--detect.notices.report.path=NOTICES_PATH\n" + \
+"    (OPTIONAL The output directory for notices report. Default is the project directory)\n" + \
+"--detect.risk.report.pdf=true\n" + \
+"    (OPTIONAL Black Duck risk report in PDF form will be created in project directory)\n" + \
+"--detect.risk.report.pdf.path=PDF_PATH\n" + \
+"    (OPTIONAL Output directory for risk report in PDF. Default is the project directory.\n"
+"--detect.report.timeout=XXX\n" + \
+"    (OPTIONAL Amount of time in seconds Detect will wait for scans to finish and to generate reports (default 300).\n" + \
+"    300 seconds may be sufficient, but very large scans can take up to 20 minutes (1200 seconds) or longer)\n"),
                                     PropertyGroup('docker', 'DOCKER SCANNING')])
 
     if os.environ.get('BLACKDUCK_URL') != "" and args.url is None:
@@ -2210,12 +2273,19 @@ if __name__ == "__main__":
         args.focus = "b"
     if args.no_scan is None:
         args.no_scan = False
+    if args.hub_project is None:
+        args.hub_project = None
+    if args.hub_version is None:
+        args.hub_version = None
 
     if args.scanfolder == "" or args.interactive:
+        args.scanfolder, args.url, args.api_token, args.sensitivity, args.focus, args.no_scan, \
+        args.hub_project, args.hub_version \
+            = interactive(args.scanfolder, args.url, args.api_token, args.sensitivity, args.focus, args.no_scan,
+                          args.hub_project, args.hub_version)
 
-        args.scanfolder, args.url, args.api_token, args.sensitivity, args.focus, args.no_scan \
-            = interactive(args.scanfolder, args.url, args.api_token, args.sensitivity, args.focus, args.no_scan)
-
+    c.str_add('reqd', "--blackduck.url={}\n".format(args.url), should_update=True)
+    c.str_add('reqd', "--blackduck.api.token={}\n".format(args.api_token), should_update=True)
     #cli_msgs_dict['reqd'] = "--blackduck.url={}\n".format(args.url) + "--blackduck.api.token=API_TOKEN\n"
 
     if not os.path.isdir(args.scanfolder):
@@ -2223,7 +2293,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     rep = ""
-    c.str_add('reqd', "--detect.source.path='{}'".format(os.path.abspath(args.scanfolder)))
+    c.str_add('reqd', "--detect.source.path='{}'".format(os.path.abspath(args.scanfolder)), should_update=True)
     cli_msgs_dict['reqd'] += "--detect.source.path='{}'\n".format(os.path.abspath(args.scanfolder))
 
     print("\nDETECT ADVISOR v{} - for use with Synopsys Detect versions up to v{}\n".format(advisor_version, detect_version))

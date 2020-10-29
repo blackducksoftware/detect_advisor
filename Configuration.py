@@ -14,15 +14,16 @@ class Property(object):
             result = re.match(r"([a-z0-9.]+):\s*(.+)", property_str)
 
         if result is not None:
-            return Property(property_tuple=(result.groups()[0], result.groups()[1]), is_commented=is_commented, position=position)
+            return Property(result.groups()[0], result.groups()[1], is_commented=is_commented, position=position)
         else:
             return None
 
-    def __init__(self, property_tuple=None, is_commented=False, position=None):
+    def __init__(self, property_name, property_value,
+                 is_commented=False, position=None):
         self.position = position
-        if property_tuple is not None:
-            self.property_name, self.value = property_tuple
-            self.property_key = "{}:{}".format(self.position, self.property_name)
+        self.property_name = property_name
+        self.value = property_value
+        self.property_key = "{}:{}".format(self.position, self.property_name)
         self.is_commented = is_commented
 
     def __str__(self):
@@ -38,18 +39,30 @@ class Property(object):
 class PropertyGroup(object):
     @staticmethod
     def look_for_group_def_title(line_str: str):
-        if result := re.match(r'#\s(.*):$', line_str):
+        if result := re.match(r'#\s+([A-Z0-9\- ]*):$', line_str):
             return result.group(1)
         return None
 
-    def __init__(self, key, title):
+    @property
+    def num_defined(self):
+        return len(self.properties_dict)
+
+    def __init__(self, key, title, defaults=None):
         self.key = key
         self.title = title
         self.line_no_offset = None
-        self.line_objects = []
+        self.defaults = defaults
+        self.line_objects = ["#    {}:".format(self.title), "#    "]
         self.properties_dict = OrderedDict()
+        if defaults is not None:
+            for l_o in defaults.split('\n'):
+                if (result := Property.parse(l_o)) is not None:
+                    result.is_commented=True
+                    self.add_property(result)
+                else:
+                    self.add_comment_line(l_o)
 
-    def add_property(self, prop: Property, should_update=True):
+    def add_property(self, prop: Property, should_update=False):
         if prop.property_name not in self.properties_dict:
             self.properties_dict[prop.property_name] = prop
             self.line_objects.append(prop)
@@ -59,12 +72,30 @@ class PropertyGroup(object):
             self.line_objects.insert(i, prop)
             self.properties_dict[prop.property_name] = prop
 
-
     def add_comment_line(self, comment: str):
+        if not comment.startswith("#"):
+            comment = "#" + comment
         comment = re.sub(r'#\s*', "#    ", comment)
         comment.replace("\n", "")
-        if comment not in self.line_objects:
+        if comment not in self.line_objects and self.title not in comment:
             self.line_objects.append(comment)
+
+    def get_line(self, num, strip_comment=True):
+        line = self.line_objects[num+1]
+        if strip_comment and '#' in line:
+            line = re.sub(r"^\s*#\s*", "", line)
+        return line
+
+    def clear(self, with_defaults=True):
+        self.line_objects = ["#    {}:".format(self.title), "#    "]
+        self.properties_dict = OrderedDict()
+        if self.defaults is not None:
+            for l_o in self.defaults.split('\n'):
+                if (result := Property.parse(l_o)) is not None:
+                    result.is_commented=True
+                    self.add_property(result)
+                else:
+                    self.add_comment_line(l_o)
 
     def __len__(self):
         return len(self.line_objects)
@@ -90,36 +121,33 @@ class Configuration(object):
         try:
             self.file = open(self.filename, 'r')
             current_key = None
+
             for (i, line) in enumerate(self.file.readlines()):
                 line = line[0:len(line)-1]
-                #print("LINE({}): [{}]".format(i, line))
                 potential_prop_grp = PropertyGroup.look_for_group_def_title(line)
-
+                # See if we've switched property groups (by title)
                 if potential_prop_grp in self.property_groups_title:
                     current_key = self.property_groups_title[potential_prop_grp].key
-                    self.property_groups[current_key].line_no_offset = i
-                ind = i
+                    self.property_groups[current_key].line_no_offset = i # set the offset in the original config to where we are now
+
                 if current_key is not None:
-                    ind = i - self.property_groups[current_key].line_no_offset
-                result = Property.parse(line, position=ind)
-                if current_key is not None:
-                    if result is not None:
-                        self.property_groups[current_key].add_property(result)
+                    if (result := Property.parse(line)) is not None:
+                        # Add legit property
+                        self.property_groups[current_key].add_property(result, should_update=True)
                     else:
+                        # add a comment line
                         self.property_groups[current_key].add_comment_line(line)
-                #print("-"*40)
+
         except FileNotFoundError:
             self.file = open(self.filename, 'w')
 
-    def str_add(self, property_class, property_str, is_commented=False):
-        property = Property.parse(property_str, position=len(self.property_groups[property_class]))
+    def str_add(self, property_class, property_str, is_commented=False, should_update=False):
+        property = Property.parse(property_str)
         if property is None:
-            if not property_str.startswith("#"):
-                property_str = "#" + property_str
             self.property_groups[property_class].add_comment_line(property_str)
         else:
             property.is_commented = is_commented
-            self.property_groups[property_class].add_property(property)
+            self.property_groups[property_class].add_property(property, should_update=should_update)
 
     def add(self, property_class, property: Property):
         property.position = len(self.property_groups[property_class])
@@ -127,10 +155,44 @@ class Configuration(object):
 
     def has_prop(self, property_name):
         for v in self.property_groups.values():
-            for p in v.properties:
+            for p in v.properties_dict.values():
                 if p.property_name is not None and p.property_name == property_name:
                     return True
         return False
+
+    def get_prop(self, property_name):
+        for v in self.property_groups.values():
+            for p in v.properties_dict.values():
+                if p.property_name is not None and p.property_name == property_name:
+                    return p
+        return None
+
+    def get_props_like(self, property_name_expr):
+        prop_list = []
+        for v in self.property_groups.values():
+            for p in v.properties_dict.values():
+                if p.property_name is not None and property_name_expr in p.property_name:
+                    prop_list.append(p)
+        return prop_list
+
+    def uncomment_property(self, property_name, assert_value=None):
+        if result := self.get_prop(property_name) is not None:
+            if assert_value is not None and result.value != assert_value:
+                return False
+            else:
+                result.is_commented=False
+                return True
+        return False
+
+    def uncomment_like(self, property_name_expr):
+        result = self.get_props_like(property_name_expr)
+        for p in result:
+            p.is_commented=False
+        return len(result)
+
+    def clear_group(self, group_key):
+        if group_key in self.property_groups:
+            self.property_groups[group_key].clear()
 
     def get_lines(self):
         lines = []
@@ -138,6 +200,14 @@ class Configuration(object):
             for l_o in pg.line_objects:
                 lines.append("{}\n".format(l_o))
         return lines
+
+    def __contains__(self, item):
+        return self.has_prop(item)
+
+    def __getitem__(self, item):
+        if item in self.property_groups:
+            return self.property_groups[item]
+        return self.get_prop(item)
 
     def __repr__(self):
         outstr = ""
@@ -148,12 +218,13 @@ class Configuration(object):
     def __str__(self):
         outstr = ""
         for _, pg in self.property_groups.items():
+            #if pg.num_defined > 0:
             outstr += "{}\n".format(str(pg))
         return outstr
 
 
 if __name__ == "__main__":
-    c = Configuration('application-project.yml', [PropertyGroup('detect', 'DETECT COMMAND TO RUN'),
+    c = Configuration('application-project_good.yml', [PropertyGroup('detect', 'DETECT COMMAND TO RUN'),
                                                   PropertyGroup('reqd', 'MINIMUM REQUIRED OPTIONS'),
                                                   PropertyGroup('scan', 'OPTIONS TO IMPROVE SCAN COVERAGE'),
                                                   PropertyGroup('size', 'OPTIONS TO REDUCE SIGNATURE SCAN SIZE'),
@@ -161,6 +232,4 @@ if __name__ == "__main__":
                                                   PropertyGroup('lic', 'OPTIONS TO IMPROVE LICENSE COMPLIANCE ANALYSIS'),
                                                   PropertyGroup('proj', 'PROJECT OPTIONS'),
                                                   PropertyGroup('docker', 'DOCKER SCANNING')])
-    c.str_add('reqd', "detect.fun.time: happy")
-
     print(c)

@@ -53,7 +53,11 @@ def format_value(val: str):
     elif val.isdecimal():
         return int(val)
     else:
-        return round(float(val), 2)
+        try:
+            return round(float(val), 2)
+        except ValueError:
+            return val
+
 
 
 def parse_cause_actions(cause_action_dict: dict, vars_dict: dict):
