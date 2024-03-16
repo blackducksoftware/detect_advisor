@@ -1,11 +1,14 @@
 import os
 # import tempfile
-import re
-import platform, sys
+# import re
+import platform
+import sys
 import global_values
 import config
 import process
 import output
+import data
+
 
 def check_prereqs():
     import subprocess
@@ -24,41 +27,38 @@ def check_prereqs():
         # 				"    (If Java installed, specify path to java executable if not on PATH)\n"
         else:
             try:
-                javaoutput = subprocess.check_output(['java', '-version'], stderr=subprocess.STDOUT)
+                subprocess.check_output(['java', '-version'], stderr=subprocess.STDOUT)
                 # javaoutput = 'openjdk version "13.0.1" 2019-10-15'
                 # javaoutput = 'java version "1.8.0_181"'
-                crit = True
-                if javaoutput:
-                    line0 = javaoutput.decode("utf-8").splitlines()[0]
-                    prog = line0.split(" ")[0].lower()
-                    if prog:
-                        version_string = line0.split('"')[1]
-                        if version_string:
-                            major, minor, _ = version_string.split('.')
-                            if prog == "openjdk":
-                                crit = False
-                                if major == "8" or major == "11":
-                                    rec = "none"
-                                else:
-                                    global_values.recs_msgs_dict[
-                                        'imp'] += "- IMPORTANT: OpenJDK version {} is not documented as supported by Detect\n".format(
-                                        version_string) + \
-                                                  "    Impact:  Scan may fail\n" + \
-                                                  "    Action:  Check that Detect operates correctly\n\n"
-                            elif prog == "java":
-                                crit = False
-                                if major == "1" and (minor == "8" or minor == "11"):
-                                    rec = "none"
-                                else:
-                                    global_values.recs_msgs_dict[
-                                        'imp'] += "- IMPORTANT: Java version {} is not documented as supported by Detect\n".format(
-                                        version_string) + \
-                                                  "    Impact:  Scan may fail\n" + \
-                                                  "    Action:  Check that Detect operates correctly\n\n"
-            except:
-                crit = True
-
-            if crit:
+                # crit = True
+                # if javaoutput:
+                #     line0 = javaoutput.decode("utf-8").splitlines()[0]
+                #     prog = line0.split(" ")[0].lower()
+                #     if prog:
+                #         version_string = line0.split('"')[1]
+                #         if version_string:
+                #             major, minor, _ = version_string.split('.')
+                #             if prog == "openjdk":
+                #                 crit = False
+                #                 if major == "8" or major == "11":
+                #                     rec = "none"
+                #                 else:
+                #                     global_values.recs_msgs_dict[
+                #                         'imp'] += "- IMPORTANT: OpenJDK version {} is not documented as supported by Detect\n".format(
+                #                         version_string) + \
+                #                                   "    Impact:  Scan may fail\n" + \
+                #                                   "    Action:  Check that Detect operates correctly\n\n"
+                #             elif prog == "java":
+                #                 crit = False
+                #                 if major == "1" and (minor == "8" or minor == "11"):
+                #                     rec = "none"
+                #                 else:
+                #                     global_values.recs_msgs_dict[
+                #                         'imp'] += "- IMPORTANT: Java version {} is not documented as supported by Detect\n".format(
+                #                         version_string) + \
+                #                                   "    Impact:  Scan may fail\n" + \
+                #                                   "    Action:  Check that Detect operates correctly\n\n"
+            except subprocess.CalledProcessError:
                 global_values.recs_msgs_dict['crit'] += "- CRITICAL: Java program version cannot be determined\n" + \
                                           "    Impact:  Scan may fail\n" + \
                                           "    Action:  Check Java or OpenJDK version 1.8 or 1.11 is installed\n\n"
@@ -66,7 +66,7 @@ def check_prereqs():
     # 					global_values.cli_msgs_dict['reqd'] += "--detect.java.path=<PATH_TO_JAVA>\n" + \
     # 					"    (If Java installed, specify path to java executable if not on PATH)\n"
 
-    except:
+    except shutil.Error:
         global_values.recs_msgs_dict['crit'] += "- CRITICAL: Java is not installed or on the PATH\n" + \
                                   "    Impact:  Detect program will fail\n" + \
                                   "    Action:  Install OpenJDK 1.8 or 1.11\n\n"
@@ -85,23 +85,25 @@ def check_prereqs():
     else:
         os_platform = "win"
 
-    if shutil.which("curl") is None:
-        global_values.recs_msgs_dict['crit'] += "- CRITICAL: Curl is not installed or on the PATH\n" + \
-                                  "    Impact:  Detect program will fail\n" + \
-                                  "    Action:  Install Curl or add to PATH\n\n"
-    else:
-        if not check_connection("https://detect.synopsys.com"):
-            global_values.recs_msgs_dict['crit'] += "- CRITICAL: No connection to https://detect.synopsys.com\n" + \
-                                      "    Impact:  Detect wrapper script cannot be downloaded, Detect cannot be started\n" + \
-                                      "    Action:  Either configure proxy (See CLI section) or download Detect manually and run offline (see docs)\n\n"
-            global_values.cli_msgs_dict['detect'] = global_values.cli_msgs_dict["detect_" + os_platform + "_proxy"]
+    try:
+        if shutil.which("curl") is None:
+            global_values.recs_msgs_dict['crit'] += "- CRITICAL: Curl is not installed or on the PATH\n" + \
+                                      "    Impact:  Detect program will fail\n" + \
+                                      "    Action:  Install Curl or add to PATH\n\n"
         else:
-            global_values.cli_msgs_dict['detect'] = global_values.cli_msgs_dict["detect_" + os_platform]
-            if not check_connection("https://sig-repo.synopsys.com"):
-                global_values.recs_msgs_dict['crit'] += "- CRITICAL: No connection to https://sig-repo.synopsys.com\n" + \
-                                          "    Impact:  Detect jar cannot be downloaded; Detect cannot run\n" + \
+            if not check_connection("https://detect.synopsys.com"):
+                global_values.recs_msgs_dict['crit'] += "- CRITICAL: No connection to https://detect.synopsys.com\n" + \
+                                          "    Impact:  Detect wrapper script cannot be downloaded, Detect cannot be started\n" + \
                                           "    Action:  Either configure proxy (See CLI section) or download Detect manually and run offline (see docs)\n\n"
-
+                global_values.cli_msgs_dict['detect'] = global_values.cli_msgs_dict["detect_" + os_platform + "_proxy"]
+            else:
+                global_values.cli_msgs_dict['detect'] = global_values.cli_msgs_dict["detect_" + os_platform]
+                if not check_connection("https://sig-repo.synopsys.com"):
+                    global_values.recs_msgs_dict['crit'] += "- CRITICAL: No connection to https://sig-repo.synopsys.com\n" + \
+                                              "    Impact:  Detect jar cannot be downloaded; Detect cannot run\n" + \
+                                              "    Action:  Either configure proxy (See CLI section) or download Detect manually and run offline (see docs)\n\n"
+    except shutil.Error:
+        pass
 
 def check_connection(url):
     import subprocess
@@ -109,7 +111,7 @@ def check_connection(url):
     try:
         output = subprocess.check_output(['curl', '-s', '-m', '5', url], stderr=subprocess.STDOUT)
         return True
-    except:
+    except subprocess.SubprocessError:
         return False
 
 
@@ -124,6 +126,8 @@ def main():
             global_values.advisor_version, global_values.detect_version))
 
     print("PROCESSING:")
+
+    data.process_pmdata()
 
     if os.path.isabs(args.scanfolder):
         print("Working on project folder '{}'\n".format(args.scanfolder))

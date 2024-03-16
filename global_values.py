@@ -23,7 +23,8 @@ ext_list = {
     'jar': ['.jar', '.ear', '.war'],
     'zip': ['.jar', '.ear', '.war', '.zip'],
     'pkg': ['.rpm', '.deb', '.dmg', '.pki'],
-    'lic': ['LICENSE', 'LICENSE.txt', 'notice.txt', 'license.txt', 'license.html', 'NOTICE', 'NOTICE.txt']
+    'lic': ['LICENSE', 'LICENSE.txt', 'notice.txt', 'license.txt', 'license.html', 'NOTICE', 'NOTICE.txt',
+            'COPYRIGHTS', 'COPYRIGHTS.txt']
 }
 
 detectors_file_dict = {
@@ -106,6 +107,251 @@ detectors_ext_dict = {
     '.mk': ['cpp'],
     '.xcworkspace': ['xcode'],
     '.xcodeproj': ['xcode']
+}
+
+pm_dict = {
+'BITBAKE':
+	{
+		'files': ['oe-init-build-env'],
+		'exts': [],
+		'execs': ['bitbake'],
+		'accuracy': 'HIGH',
+	},
+
+'CARGO':
+	{
+		'files': ['Cargo.lock', 'Cargo.toml'],
+		'exts': [],
+		'execs': ['cargo'],
+        'accuracy': 'HIGH',
+	},
+
+'CARTHAGE':
+	{
+		'files': ['Cartfile', 'Cartfile.resolved'],
+		'exts': [],
+		'execs': ['carthage'],
+        'accuracy': 'HIGH',
+	},
+
+'CLANG':
+	{
+		'files': ['compile_commands.json'],
+		'exts': [],
+		'execs': ['clang'],
+        'accuracy': 'HIGH',
+	},
+
+'COCOAPODS':
+	{
+		'files': ['Podfile.lock'],
+		'exts': [],
+		'execs': ['pop'],
+        'accuracy': 'HIGH',
+	},
+
+'CONAN':
+	{
+		'files': ['conanfile.txt', 'conanfile.py', 'conan.lock'],
+		'exts': [],
+		'execs': ['conan'],
+        'accuracy': 'HIGH',
+	},
+
+'CONDA':
+	{
+		'files': ['environment.yml'],
+		'exts': [],
+		'execs': ['conda'],
+        'accuracy': 'HIGH',
+	},
+
+'CPAN':
+	{
+		'files': ['Makefile.PL'],
+		'exts': [],
+		'execs': ['cpan', 'cpanm'],
+        'accuracy': 'HIGH',
+	},
+
+'CRAN':
+	{
+		'files': ['packrat.lock'],
+		'exts': [],
+		'execs': ['cran'],
+        'accuracy': 'HIGH',
+	},
+
+'DART':
+	{
+		'files': ['pubspec.yaml', 'pubspec.lock'],
+		'exts': [],
+		'execs': ['dart', 'flutter'],
+        'accuracy': 'HIGH',
+	},
+
+'GO':
+	{
+		'files': ['Gopkg.lock', 'gogradle.lock', 'go.mod', 'vendor.json', 'vendor.conf'],
+		'exts': [],
+		'execs': ['go'],
+        'accuracy': 'HIGH',
+	},
+
+'GRADLE':
+	{
+		'files': ['build.gradle', 'build.gradle.kts'],
+		'exts': [],
+		'execs': ['go'],
+        'accuracy': 'LOW',
+	},
+
+'HEX':
+	{
+		'files': ['rebar.config'],
+		'exts': [],
+		'execs': ['rebar3'],
+        'accuracy': 'HIGH',
+	},
+
+'IVY':
+	{
+		'files': ['ivy.xml', 'build.xml'],
+		'exts': [],
+		'execs': ['ivy'],
+        'accuracy': 'LOW',
+	},
+
+'LERNA':
+	{
+		'files': ['lerna.json'],
+		'exts': [],
+		'execs': ['lerna'],
+        'accuracy': 'HIGH',
+	},
+
+'MAVEN':
+	{
+		'files': ['pom.xml', 'pom.groovy'],
+		'exts': [],
+		'execs': ['mvn', 'mvnw'],
+        'accuracy': 'LOW',
+	},
+
+'NPM':
+	{
+		'files': ['npm-shrinkwrap.json', 'package.json', 'package-lock.json'],
+		'exts': [],
+		'execs': ['npm'],
+        'accuracy': 'LOW',
+	},
+
+'NUGET':
+	{
+		'files': [],
+		'exts': ['.sln', '.csproj', '.fsproj', '.vbproj', '.asaproj', '.dcproj', '.shproj',
+		'.ccproj', '.sfproj', '.njsproj', '.vcxproj', '.vcproj', '.xproj', '.pyproj',
+		'.hiveproj', '.pigproj', '.jsproj', '.usqlproj', '.deployproj', '.msbuildproj',
+		'.sqlproj', '.dbproj', '.rproj'],
+		'execs': ['nuget'],
+        'accuracy': 'LOW',
+	},
+
+'PACKAGIST':
+	{
+		'files': ['composer.lock', 'composer.json'],
+		'exts': [],
+		'execs': ['composer'],
+        'accuracy': 'HIGH',
+	},
+
+'PEAR':
+	{
+		'files': ['package.xml'],
+		'exts': [],
+		'execs': ['pear'],
+        'accuracy': 'HIGH',
+	},
+
+'PIP':
+	{
+		'files': ['pipfile', 'pipfile.lock', 'setup.py', 'pyproject.toml'],
+		'exts': [],
+		'execs': ['python', 'python3', 'pipenv', 'pip', 'pip3'],
+        'accuracy': 'HIGH',
+	},
+
+'PYTHON':
+	{
+		'files': ['requirements.txt'],
+		'exts': [],
+		'execs': ['python', 'python3'],
+        'accuracy': 'LOW',
+	},
+
+'PNPM':
+	{
+		'files': ['pnpm-lock.yaml'],
+		'exts': [],
+		'execs': ['pnpm'],
+        'accuracy': 'HIGH',
+	},
+
+'POETRY':
+	{
+		'files': ['Poetry.lock', 'pyproject.toml'],
+		'exts': [],
+		'execs': ['pypi'],
+        'accuracy': 'HIGH',
+	},
+
+'RUBYGEMS':
+	{
+		'files': ['Gemfile.lock'],
+		'exts': [],
+		'execs': ['gem'],
+        'accuracy': 'HIGH',
+	},
+
+'GEMSPEC':
+	{
+		'files': [],
+		'exts': ['.gemspec'],
+		'execs': ['gem'],
+        'accuracy': 'LOW',
+	},
+
+'SBT':
+	{
+		'files': ['build.sbt'],
+		'exts': [],
+		'execs': ['sbt'],
+        'accuracy': 'HIGH',
+	},
+
+'SWIFT':
+	{
+		'files': ['Package.swift', 'Package.resolved'],
+		'exts': [],
+		'execs': ['swift'],
+        'accuracy': 'HIGH',
+	},
+
+'XCODE':
+	{
+		'files': [],
+		'exts': ['.xcworkspace', '.xcodeproj'],
+		'execs': ['xcode'],
+        'accuracy': 'HIGH',
+	},
+
+'YARN':
+	{
+		'files': ['yarn.lock'],
+		'exts': [],
+		'execs': ['yarn'],
+        'accuracy': 'HIGH',
+	},
 }
 
 detector_cli_options_dict = {
