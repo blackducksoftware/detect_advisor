@@ -4,6 +4,7 @@ import os
 import io
 from math import trunc
 import platform
+import messages
 
 
 def process_nested_zip(z, zippath, zipdepth, dirdepth):
@@ -12,7 +13,7 @@ def process_nested_zip(z, zippath, zipdepth, dirdepth):
 
     zipdepth += 1
     if zipdepth > global_values.max_arc_depth:
-        max_arc_depth = zipdepth
+        global_values.max_arc_depth = zipdepth
 
     # print("ZIP:{}:{}".format(zipdepth, zippath))
     z2_filedata = io.BytesIO(z.read())
@@ -82,6 +83,9 @@ def process_zip(zippath, zipdepth, dirdepth):
 
 
 def checkfile(name, path, size, size_comp, dirdepth, in_archive):
+
+    pm_allfiles, pm_allexts = process_pmdata()
+
     ext = os.path.splitext(name)[1]
     #	print(ext)
     if ext != ".zip":
@@ -113,7 +117,7 @@ def checkfile(name, path, size, size_comp, dirdepth, in_archive):
                 global_values.sizes['large'][global_values.inarcunc] += size
                 global_values.sizes['large'][global_values.inarccomp] += size_comp
 
-    if name in global_values.detectors_file_dict.keys() and path.find("node_modules") < 0:
+    if name in pm_allfiles.keys() and path.find("node_modules") < 0:
         if not in_archive:
             global_values.det_dict[path] = dirdepth
         ftype = 'det'
@@ -122,7 +126,7 @@ def checkfile(name, path, size, size_comp, dirdepth, in_archive):
         ftype = 'other'
         global_values.counts['lic'][global_values.notinarc] += 1
     elif ext != "":
-        if ext in global_values.detectors_ext_dict.keys():
+        if ext in pm_allexts.keys():
             if not in_archive:
                 global_values.det_dict[path] = dirdepth
             ftype = 'det'
@@ -228,13 +232,7 @@ def check_singlefiles(f):
                     sfmatch = True
                     sf_list.append(thisfile)
     if sfmatch:
-        global_values.recs_msgs_dict['info'] += "- INFORMATION: {} singleton .js files found\n".format(len(sf_list)) + \
-                                  "    Impact:  OSS components within JS files may not be detected\n" + \
-                                  "    Action:  Consider specifying Single file matching in Signature scan\n" + \
-                                  "             (--detect.blackduck.signature.scanner.individual.file.matching=SOURCE)\n\n"
-        if global_values.cli_msgs_dict['scan'].find("individual.file.matching") < 0:
-            global_values.cli_msgs_dict['scan'] += "--detect.blackduck.signature.scanner.individual.file.matching=SOURCE\n" + \
-                                     "    (To include singleton .js files in signature scan for OSS matches)\n"
+        messages.message('FILES1', len(sf_list))
 
     # if f:
     #	f.write("\nSINGLE JS FILES:\n")
@@ -277,50 +275,34 @@ def signature_process(folder, f):
 
     # Produce Recommendations
     if global_values.sizes['file'][global_values.notinarc] + global_values.sizes['arc'][global_values.notinarc] > 5000000000:
-        global_values.recs_msgs_dict['crit'] += "- CRITICAL: Overall scan size ({:>,d} MB) is too large\n".format(
-            trunc((global_values.sizes['file'][global_values.notinarc] + global_values.sizes['arc'][global_values.notinarc]) / 1000000)) + \
-                                  "    Impact:  Scan will fail\n" + \
-                                  "    Action:  Ignore folders, remove large files or use repeated scans of sub-folders (Also consider detect_advisor -b option to create multiple .bdignore files to ignore duplicate folders)\n\n"
+        messages.message('SCAN1',
+            trunc((global_values.sizes['file'][global_values.notinarc] + global_values.sizes['arc'][global_values.notinarc]) / 1000000))
     elif global_values.sizes['file'][global_values.notinarc] + global_values.sizes['arc'][global_values.notinarc] > 2000000000:
-        global_values.recs_msgs_dict['imp'] += "- IMPORTANT: Overall scan size ({:>,d} MB) is large\n".format(
-            trunc((global_values.sizes['file'][global_values.notinarc] + global_values.sizes['arc'][global_values.notinarc]) / 1000000)) + \
-                                 "    Impact:  Will impact Capacity license usage\n" + \
-                                 "    Action:  Ignore folders, remove large files or use repeated scans of sub-folders (Also consider detect_advisor -b option to create multiple .bdignore files to ignore duplicate folders)\n\n"
+        messages.message('SCAN2',
+            trunc((global_values.sizes['file'][global_values.notinarc] + global_values.sizes['arc'][global_values.notinarc]) / 1000000))
 
     if global_values.counts['file'][global_values.notinarc] + global_values.counts['file'][global_values.inarc] > 1000000:
-        global_values.recs_msgs_dict['imp'] += "- IMPORTANT: Overall number of files ({:>,d}) is very large\n".format(
-            trunc((global_values.counts['file'][global_values.notinarc] + global_values.counts['file'][global_values.inarc]))) + \
-                                 "    Impact:  Scan time could be VERY long\n" + \
-                                 "    Action:  Ignore folders or split project (scan sub-projects or consider detect_advisor -b option to create multiple .bdignore files to ignore duplicate folders)\n\n"
+        messages.message('SCAN3',
+            trunc((global_values.counts['file'][global_values.notinarc] + global_values.counts['file'][global_values.inarc])))
     elif global_values.counts['file'][global_values.notinarc] + global_values.counts['file'][global_values.inarc] > 200000:
-        global_values.recs_msgs_dict['info'] += "- INFORMATION: Overall number of files ({:>,d}) is large\n".format(
-            trunc((global_values.counts['file'][global_values.notinarc] + global_values.counts['file'][global_values.inarc]))) + \
-                                  "    Impact:  Scan time could be long\n" + \
-                                  "    Action:  Ignore folders or split project (scan sub-projects or consider detect_advisor -b option to create multiple .bdignore files to ignore duplicate folders)\n\n"
+        messages.message('SCAN4',
+            trunc((global_values.counts['file'][global_values.notinarc] + global_values.counts['file'][global_values.inarc])))
 
     #
     # Need to add check for nothing to scan (no supported scan files)
     if global_values.counts['src'][global_values.notinarc] + global_values.counts['src'][global_values.inarc] + global_values.counts['jar'][global_values.notinarc] + global_values.counts['jar'][global_values.inarc] + \
             global_values.counts['other'][global_values.notinarc] + global_values.counts['other'][global_values.inarc] == 0:
-        global_values.recs_msgs_dict['info'] += "- INFORMATION: No source, jar or other files found\n".format(
-            trunc((global_values.counts['file'][global_values.notinarc] + global_values.sizes['file'][global_values.inarc]))) + \
-                                  "    Impact:  Scan may not detect any OSS from files (dependencies only)\n" + \
-                                  "    Action:  Check scan location is correct\n"
+        messages.message('SCAN5')
 
     if global_values.sizes['bin'][global_values.notinarc] + global_values.sizes['bin'][global_values.inarc] > 20000000:
-        global_values.recs_msgs_dict['imp'] += "- IMPORTANT: Large amount of data ({:>,d} MB) in {} binary files found\n".format(
-            trunc((global_values.sizes['bin'][global_values.notinarc] + global_values.sizes['bin'][global_values.inarc]) / 1000000), len(global_values.file_list['bin'])) + \
-                                 "    Impact:  Binary files not analysed by standard scan, will impact Capacity license usage\n" + \
-                                 "    Action:  Remove files or ignore folders (using .bdignore files), also consider zipping\n" + \
-                                 "             files and using Binary scan (See report file produced with -r option)\n\n"
-        global_values.cli_msgs_dict['scan'] += "--detect.binary.scan.file.path=binary_files.zip\n" + \
-                                 "    (See report file produced with -r option for how to zip binary files; binary scan license required)\n"
+        messages.message('SCAN6',
+            trunc((global_values.sizes['bin'][global_values.notinarc] + global_values.sizes['bin'][global_values.inarc]) / 1000000), len(global_values.file_list['bin']))
         if f and len(global_values.bin_large_dict) > 0:
             f.write("\nLARGE BINARY FILES:\n")
             for fbin in global_values.bin_large_dict.keys():
                 f.write("    {} (Size {:d}MB)\n".format(fbin, int(global_values.bin_large_dict[fbin] / 1000000)))
             f.write(
-                "\nConsider using the following command to zip binary files and send to binary scan (subject to license):\n    zip binary_files.zip \\\n")
+                "\nConsider using the following command to zip binary files and send to binary scan (subject to license):\n    zip binary_files.zip \n")
             binzip_list = []
             for fbin in global_values.bin_large_dict.keys():
                 if fbin.find("##") < 0:
@@ -337,38 +319,25 @@ def signature_process(folder, f):
                 "\n\nThen run Detect with the following options to send the archive for binary scan:\n    --detect.tools=BINARY_SCAN --detect.binary.scan.file.path=binary_files.zip\n\n")
 
     if global_values.counts['lic'][global_values.notinarc] > 10:
-        global_values.recs_msgs_dict['info'] += "- INFORMATION: License or notices files found\n" + \
-                                  "    Impact:  Local license text may need to be scanned\n" + \
-                                  "    Action:  Add options --detect.blackduck.signature.scanner.license.search=true\n" + \
-                                  "             and optionally --detect.blackduck.signature.scanner.upload.source.mode=true\n\n"
-        global_values.cli_msgs_dict['lic'] += "--detect.blackduck.signature.scanner.license.search=true\n" + \
-                                "    (To perform client-side scanning for license files and references)\n"
-        if global_values.cli_msgs_dict['lic'].find("upload.source.mode") < 0:
-            global_values.cli_msgs_dict['lic'] += "--detect.blackduck.signature.scanner.upload.source.mode=true\n" + \
-                                    "    (CAUTION - will upload local source files)\n"
+        messages.message('FILES2')
 
     if global_values.counts['src'][global_values.notinarc] + global_values.counts['src'][global_values.inarc] > 10:
-        global_values.recs_msgs_dict['info'] += "- INFORMATION: Source files found for which Snippet analysis supported\n" + \
-                                  "    Impact:  Snippet analysis can discover copied OSS source files and functions\n" + \
-                                  "    Action:  Add options --detect.blackduck.signature.scanner.snippet.matching=SNIPPET_MATCHING\n\n"
-        global_values.cli_msgs_dict['lic'] += "--detect.blackduck.signature.scanner.snippet.matching=SNIPPET_MATCHING\n" + \
-                                "    (To search for copied OSS source files and functions within source files)\n"
-        if global_values.cli_msgs_dict['lic'].find("upload.source.mode") < 0:
-            global_values.cli_msgs_dict['lic'] += "--detect.blackduck.signature.scanner.upload.source.mode=true\n" + \
-                                    "    (CAUTION - will upload local source files)\n"
+        messages.message('FILES3')
 
     check_singlefiles(f)
     print(" Done")
     print("")
 
 
-def detector_process(folder, f):
+def detector_process(f):
     import shutil
 
-    print("- Processing Dependency Scan .....", end="", flush=True)
+    print("- Processing Package Manager Configurations .....", end="", flush=True)
+
+    pm_allfiles, pm_allexts = process_pmdata()
 
     if f:
-        f.write("PROJECT FILES FOUND:\n")
+        f.write("PACKAGE MANAGER CONFIG FILES FOUND:\n")
 
     count = 0
     det_depth1 = 0
@@ -396,36 +365,30 @@ def detector_process(folder, f):
                     det_min_depth = depth
                 fname = os.path.basename(detpath)
                 exes = ""
-                if fname in global_values.detectors_file_dict.keys():
-                    exes = global_values.detectors_file_dict[fname]
-                elif os.path.splitext(fname)[1] in global_values.detectors_ext_dict.keys():
-                    exes = global_values.detectors_ext_dict[os.path.splitext(fname)[1]]
+                if fname in pm_allfiles.keys():
+                    pm = pm_allfiles[fname]
+                    exes = global_values.pm_dict[pm]['execs']
+                elif os.path.splitext(fname)[1] in pm_allexts.keys():
+                    pm = pm_allexts[os.path.splitext(fname)[1]]
+                    exes = global_values.pm_dict[pm]['execs']
                 missing_cmds = ""
                 for exe in exes:
                     if exe not in global_values.detectors_list:
                         global_values.detectors_list.append(exe)
-                        if platform.system() != "Linux" and exe in global_values.linux_only_detectors:
-                            if depth == 1:
-                                global_values.recs_msgs_dict[
-                                    'crit'] += "- CRITICAL: Package manager '{}' requires scanning on a Linux platform\n".format(
-                                    exe) + \
-                                               "    Impact:  Scan will fail\n" + \
-                                               "    Action:  Re-run Detect scan on Linux\n\n"
-                            else:
-                                global_values.recs_msgs_dict[
-                                    'imp'] += "- IMPORTANT: Package manager '{}' requires scanning on a Linux platform\n".format(
-                                    exe) + \
-                                              "    Impact:  Scan may fail if detector depth changed from default value 0\n" + \
-                                              "    Action:  Re-run Detect scan on Linux\n\n"
-                    if shutil.which(exe) is not None:
-                        command_exists = True
-                    else:
-                        if exe not in cmds_missing_list:
-                            cmds_missing_list.append(exe)
-                            if missing_cmds:
-                                missing_cmds += " OR " + exe
-                            else:
-                                missing_cmds = exe
+                        if shutil.which(exe) is not None:
+                            command_exists = True
+                            if platform.system() != "Linux" and exe in global_values.linux_only_detectors:
+                                if depth == 1:
+                                    messages.message('PLATFORM3', exe)
+                                else:
+                                    messages.message('PLATFORM4', exe)
+                        else:
+                            if exe not in cmds_missing_list:
+                                cmds_missing_list.append(exe)
+                                if missing_cmds:
+                                    missing_cmds += " OR " + exe
+                                else:
+                                    missing_cmds = exe
                 if f:
                     f.write("{}\n".format(detpath))
                     count += 1
@@ -458,59 +421,42 @@ def detector_process(folder, f):
         f.write("    None\n")
 
     if det_depth1 == 0 and det_other > 0:
-        global_values.recs_msgs_dict[
-            'imp'] += "- IMPORTANT: No package manager files found in invocation folder but do exist in sub-folders\n" + \
-                      "    Impact:  Dependency scan will not be run\n" + \
-                      "    Action:  Specify --detect.detector.search.depth={} (although depth could be up to {})\n".format(
-                          det_min_depth, det_max_depth) + \
-                      "             optionally with -detect.detector.search.continue=true or scan sub-folders separately.\n\n"
-        if global_values.cli_msgs_dict['scan'].find("detector.search.depth") < 0:
-            global_values.cli_msgs_dict['scan'] += "--detect.detector.search.depth={}\n".format(det_min_depth) + \
-                                     "    optionally with optionally with -detect.detector.search.continue=true\n" + \
-                                     "    (To find package manager files within sub-folders; note depth {} would find\n".format(
-                                         det_max_depth) + \
-                                     "    all PM files in sub-folders but higher level projects may already include these)\n"
+        messages.message('PACKAGES1', det_min_depth, det_max_depth)
 
     if det_depth1 == 0 and det_other == 0:
-        global_values.recs_msgs_dict['info'] += "- INFORMATION: No package manager files found in project at all\n" + \
-                                  "    Impact:  No dependency scan will be performed\n" + \
-                                  "    Action:  This may be expected, but ensure you are scanning the correct location\n\n"
+        messages.message('PACKAGES2')
 
     if cmds_missing1:
-        global_values.recs_msgs_dict[
-            'crit'] += "- CRITICAL: Package manager programs ({}) missing for package files in invocation folder\n".format(
-            cmds_missing1) + \
-                       "    Impact:  Scan will fail\n" + \
-                       "    Action:  Either install package manager programs or\n" + \
-                       "             consider specifying --detect.detector.buildless=true\n\n"
-        global_values.cli_msgs_dict['reqd'] += "--detect.detector.buildless=true\n" + \
-                                 "    (OR specify --detect.XXXX.path=<LOCATION> where XXX is package manager\n" + \
-                                 "    OR install package managers '{}')\n".format(cmds_missing1)
+        messages.message('PACKAGES3', cmds_missing1)
 
     if cmds_missingother:
-        global_values.recs_msgs_dict[
-            'imp'] += "- IMPORTANT: Package manager programs ({}) missing for package files in sub-folders\n".format(
-            cmds_missingother) + \
-                      "    Impact:  The scan will fail if the scan depth is modified from the default\n" + \
-                      "    Action:  Install package manager programs\n" + \
-                      "             (OR specify --detect.XXXX.path=<LOCATION> where XXX is package manager\n" + \
-                      "             OR specify --detect.detector.buildless=true)\n\n"
-        if global_values.cli_msgs_dict['scan'].find("detector.buildless") < 0:
-            global_values.cli_msgs_dict['scan'] += "--detect.detector.buildless=true\n" + \
-                                     "    (OR install package managers '{}'\n".format(cmds_missingother) + \
-                                     "    (OR use --detect.XXXX.path=<LOCATION> where XXX is package manager)\n"
+        messages.message('PACKAGES4', cmds_missingother)
 
     if global_values.counts['det'][global_values.inarc] > 0:
-        global_values.recs_msgs_dict['imp'] += "- IMPORTANT: Package manager files found in archives\n" + \
-                                 "    Impact:  Dependency scan not performed for projects in archives\n" + \
-                                 "    Action:  Extract zip archives and rescan\n\n"
+        messages.message('PACKAGES5')
 
     for cmd in global_values.detectors_list:
         if cmd in global_values.detector_cli_options_dict.keys() and 'dep' in global_values.cli_msgs_dict:
-            global_values.cli_msgs_dict['dep'] += " For {}:\n".format(cmd) + global_values.detector_cli_options_dict[cmd]
+            global_values.cli_msgs_dict['dep'] += "For {}:\n".format(cmd) + global_values.detector_cli_options_dict[cmd] + '\n'
         if cmd in global_values.detector_cli_required_dict.keys() and 'crit' in global_values.cli_msgs_dict:
-            global_values.cli_msgs_dict['crit'] += " For {}:\n".format(cmd) + global_values.detector_cli_required_dict[cmd]
+            global_values.cli_msgs_dict['crit'] += "For {}:\n".format(cmd) + global_values.detector_cli_required_dict[cmd] + '\n'
 
     print(" Done")
 
     return
+
+
+def process_pmdata():
+    pm_allfiles = {}
+    pm_allexts = {}
+
+    for pm in global_values.pm_dict.keys():
+        if len(global_values.pm_dict[pm]['files']) > 0:
+            for ffile in global_values.pm_dict[pm]['files']:
+                pm_allfiles[ffile] = pm
+
+        if len(global_values.pm_dict[pm]['exts']) > 0:
+            for fext in global_values.pm_dict[pm]['exts']:
+                pm_allexts[fext] = pm
+
+    return pm_allfiles, pm_allexts

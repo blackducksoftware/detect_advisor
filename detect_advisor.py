@@ -7,7 +7,7 @@ import global_values
 import config
 import process
 import output
-import data
+import messages
 
 
 def check_prereqs():
@@ -19,9 +19,7 @@ def check_prereqs():
     # Check java
     try:
         if shutil.which("java") is None:
-            global_values.recs_msgs_dict['crit'] += "- CRITICAL: Java is not installed or on the PATH\n" + \
-                                      "    Impact:  Detect program will fail\n" + \
-                                      "    Action:  Install OpenJDK 1.8 or 1.11\n\n"
+            messages.message('JAVA1')
         # 			if global_values.cli_msgs_dict['reqd'].find("detect.java.path") < 0:
         # 				global_values.cli_msgs_dict['reqd'] += ""    --detect.java.path=<PATH_TO_JAVA>\n" + \
         # 				"    (If Java installed, specify path to java executable if not on PATH)\n"
@@ -59,17 +57,14 @@ def check_prereqs():
                 #                                   "    Impact:  Scan may fail\n" + \
                 #                                   "    Action:  Check that Detect operates correctly\n\n"
             except subprocess.CalledProcessError:
-                global_values.recs_msgs_dict['crit'] += "- CRITICAL: Java program version cannot be determined\n" + \
-                                          "    Impact:  Scan may fail\n" + \
-                                          "    Action:  Check Java or OpenJDK version 1.8 or 1.11 is installed\n\n"
+                messages.message('JAVA2')
+
     # 				if global_values.cli_msgs_dict['reqd'].find("detect.java.path") < 0:
     # 					global_values.cli_msgs_dict['reqd'] += "--detect.java.path=<PATH_TO_JAVA>\n" + \
     # 					"    (If Java installed, specify path to java executable if not on PATH)\n"
 
     except shutil.Error:
-        global_values.recs_msgs_dict['crit'] += "- CRITICAL: Java is not installed or on the PATH\n" + \
-                                  "    Impact:  Detect program will fail\n" + \
-                                  "    Action:  Install OpenJDK 1.8 or 1.11\n\n"
+        messages.message('JAVA3')
     # 		if global_values.cli_msgs_dict['reqd'].find("detect.java.path") < 0:
     # 			global_values.cli_msgs_dict['reqd'] += "--detect.java.path=<PATH_TO_JAVA>\n" + \
     # 			"    (If Java installed, specify path to java executable if not on PATH)\n"
@@ -79,29 +74,21 @@ def check_prereqs():
         os_platform = "linux"
         # check for bash and curl
         if shutil.which("bash") is None:
-            global_values.recs_msgs_dict['crit'] += "- CRITICAL: Bash is not installed or on the PATH\n" + \
-                                      "    Impact:  Detect program will fail\n" + \
-                                      "    Action:  Install Bash or add to PATH\n\n"
+            messages.message('PLATFORM1')
     else:
         os_platform = "win"
 
     try:
         if shutil.which("curl") is None:
-            global_values.recs_msgs_dict['crit'] += "- CRITICAL: Curl is not installed or on the PATH\n" + \
-                                      "    Impact:  Detect program will fail\n" + \
-                                      "    Action:  Install Curl or add to PATH\n\n"
+            messages.message('PLATFORM2')
         else:
             if not check_connection("https://detect.synopsys.com"):
-                global_values.recs_msgs_dict['crit'] += "- CRITICAL: No connection to https://detect.synopsys.com\n" + \
-                                          "    Impact:  Detect wrapper script cannot be downloaded, Detect cannot be started\n" + \
-                                          "    Action:  Either configure proxy (See CLI section) or download Detect manually and run offline (see docs)\n\n"
+                messages.message('NETWORK1')
                 global_values.cli_msgs_dict['detect'] = global_values.cli_msgs_dict["detect_" + os_platform + "_proxy"]
             else:
                 global_values.cli_msgs_dict['detect'] = global_values.cli_msgs_dict["detect_" + os_platform]
                 if not check_connection("https://sig-repo.synopsys.com"):
-                    global_values.recs_msgs_dict['crit'] += "- CRITICAL: No connection to https://sig-repo.synopsys.com\n" + \
-                                              "    Impact:  Detect jar cannot be downloaded; Detect cannot run\n" + \
-                                              "    Action:  Either configure proxy (See CLI section) or download Detect manually and run offline (see docs)\n\n"
+                    messages.message('NETWORK2')
     except shutil.Error:
         pass
 
@@ -127,8 +114,6 @@ def main():
 
     print("PROCESSING:")
 
-    data.process_pmdata()
-
     if os.path.isabs(args.scanfolder):
         print("Working on project folder '{}'\n".format(args.scanfolder))
     else:
@@ -150,7 +135,7 @@ def main():
 
     if not args.signature_only:
         #	if args.full:
-        process.detector_process(args.scanfolder, f)
+        process.detector_process(f)
     if args.signature_only:
         global_values.cli_msgs_dict['reqd'] += "--detect.tools=SIGNATURE_SCAN\n"
 

@@ -27,88 +27,6 @@ ext_list = {
             'COPYRIGHTS', 'COPYRIGHTS.txt']
 }
 
-detectors_file_dict = {
-    'build.env': ['bitbake'],
-    'cargo.toml': ['cargo'],
-    'cargo.lock': ['cargo'],
-    'Cartfile': ['carthage'],
-    'Cartfile.resolved': ['carthage'],
-    'conanfile.txt': ['conan'],
-    'conan.lock': ['conan'],
-    'pubspec.yaml': ['dart'],
-    'pubspec.lock': ['dart'],
-    'compile_commands.json': ['clang'],
-    'Podfile.lock': ['pod'],
-    'environment.yml': ['conda'],
-    'Makefile.PL': ['cpan'],
-    'packrat.lock': ['rtools'],
-    'Gopkg.lock': ['go'],
-    'gogradle.lock': ['go'],
-    'go.mod': ['go'],
-    'vendor.json': ['go'],
-    'vendor.conf': ['go'],
-    'build.gradle': ['gradlew', 'gradle'],
-    'build.gradle.kts': ['gradlew', 'gradle'],
-    'ivy.xml': ['ivy'],
-    'build.xml': ['ivy'],
-    'lerna.json': ['lerna'],
-    'rebar.config': ['rebar3'],
-    'pom.xml': ['mvnw', 'mvn'],
-    'pom.groovy': ['mvnw', 'mvn'],
-    'node_modules': ['npm'],
-    'package.json': ['npm'],
-    'package-lock.json': ['npm'],
-    'npm-shrinkwrap.json': ['npm'],
-    'composer.lock': ['composer'],
-    'composer.json': ['composer'],
-    'Package.swift': ['swift'],
-    'Package.resolved': ['swift', 'xcode'],
-    'package.xml': ['pear'],
-    'pipfile': ['python', 'python3', 'pipenv'],
-    'pipfile.lock': ['python', 'python3', 'pipenv'],
-    'pnpm-lock.yaml': ['pnpm'],
-    'pyproject.toml': ['poetry'],
-    'setup.py': ['python', 'python3', 'pip'],
-    'requirements.txt': ['python', 'python3', 'pip'],
-    'Gemfile.lock': ['gem'],
-    'build.sbt': ['sbt'],
-    'yarn.lock': ['yarn'],
-    'Makefile': ['cpp'],
-    'makefile': ['cpp'],
-    'GNUmakefile': ['cpp'],
-    'recipe-depends.dot': ['bitbake'],
-    'task-depends.dot': ['bitbake']
-}
-
-detectors_ext_dict = {
-    '.csproj': ['dotnet'],
-    '.fsproj': ['dotnet'],
-    '.vbproj': ['dotnet'],
-    '.asaproj': ['dotnet'],
-    '.dcproj': ['dotnet'],
-    '.shproj': ['dotnet'],
-    '.ccproj': ['dotnet'],
-    '.sfproj': ['dotnet'],
-    '.njsproj': ['dotnet'],
-    '.vcxproj': ['dotnet'],
-    '.vcproj': ['dotnet'],
-    '.xproj': ['dotnet'],
-    '.pyproj': ['dotnet'],
-    '.hiveproj': ['dotnet'],
-    '.pigproj': ['dotnet'],
-    '.jsproj': ['dotnet'],
-    '.usqlproj': ['dotnet'],
-    '.deployproj': ['dotnet'],
-    '.msbuildproj': ['dotnet'],
-    '.sqlproj': ['dotnet'],
-    '.dbproj': ['dotnet'],
-    '.rproj': ['dotnet'],
-    '.sln': ['dotnet'],
-    '.mk': ['cpp'],
-    '.xcworkspace': ['xcode'],
-    '.xcodeproj': ['xcode']
-}
-
 pm_dict = {
 'BITBAKE':
 	{
@@ -299,7 +217,7 @@ pm_dict = {
 
 'POETRY':
 	{
-		'files': ['Poetry.lock', 'pyproject.toml'],
+		'files': ['Poetry.lock'],
 		'exts': [],
 		'execs': ['pypi'],
         'accuracy': 'HIGH',
@@ -526,10 +444,10 @@ bin_large_dict = {}
 det_dict = {}
 detectors_list = []
 
-crc_dict = {}
+# crc_dict = {}
 
-dup_dir_dict = {}
-dup_large_dict = {}
+# dup_dir_dict = {}
+# dup_large_dict = {}
 
 dir_dict = {}
 large_dict = {}
