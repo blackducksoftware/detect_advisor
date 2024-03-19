@@ -4,6 +4,8 @@ import os
 import io
 from math import trunc
 import platform
+import hashlib
+
 import messages
 
 
@@ -41,18 +43,22 @@ def process_zip_entry(zinfo, zippath, dirdepth):
 
     dirdepth = dirdepth + depthinzip
     tdir = zippath + "##" + os.path.dirname(zinfo.filename)
-    if tdir not in global_values.dir_dict.keys():
+    hash = get_path_hash(tdir)
+
+    if hash not in global_values.dir_dict.keys():
         global_values.counts['dir'][global_values.inarc] += 1
-        global_values.dir_dict[tdir] = {}
-        global_values.dir_dict[tdir]['num_entries'] = 1
-        global_values.dir_dict[tdir]['size'] = zinfo.file_size
-        global_values.dir_dict[tdir]['depth'] = dirdepth
-        global_values.dir_dict[tdir]['filenamesstring'] = zinfo.filename + ";"
+        global_values.dir_dict[hash] = {
+            'path': tdir,
+            'num_entries': 1,
+            'size': zinfo.file_size,
+            'depth': dirdepth,
+            'filenamesstring': zinfo.filename + ";",
+        }
     else:
-        global_values.dir_dict[tdir]['num_entries'] += 1
-        global_values.dir_dict[tdir]['size'] += zinfo.file_size
-        global_values.dir_dict[tdir]['depth'] = dirdepth
-        global_values.dir_dict[tdir]['filenamesstring'] += zinfo.filename + ";"
+        global_values.dir_dict[hash]['num_entries'] += 1
+        global_values.dir_dict[hash]['size'] += zinfo.file_size
+        global_values.dir_dict[hash]['depth'] = dirdepth
+        global_values.dir_dict[hash]['filenamesstring'] += zinfo.filename + ";"
 
     global_values.arc_files_dict[fullpath] = zinfo.CRC
     checkfile(zinfo.filename, fullpath, zinfo.file_size, zinfo.compress_size, dirdepth, True)
@@ -117,9 +123,15 @@ def checkfile(name, path, size, size_comp, dirdepth, in_archive):
                 global_values.sizes['large'][global_values.inarcunc] += size
                 global_values.sizes['large'][global_values.inarccomp] += size_comp
 
+    ftype = ''
+    hash = get_path_hash(path)
+
     if name in pm_allfiles.keys() and path.find("node_modules") < 0:
         if not in_archive:
-            global_values.det_dict[path] = dirdepth
+            global_values.det_dict[hash] = {
+                'path': path,
+                'depth': dirdepth,
+            }
         ftype = 'det'
     elif os.path.basename(name) in global_values.ext_list['lic']:
         global_values.file_list['other'].append(path)
@@ -128,32 +140,23 @@ def checkfile(name, path, size, size_comp, dirdepth, in_archive):
     elif ext != "":
         if ext in pm_allexts.keys():
             if not in_archive:
-                global_values.det_dict[path] = dirdepth
+                global_values.det_dict[hash] = {
+                    'path': path,
+                    'depth': dirdepth,
+                }
             ftype = 'det'
-        elif ext in global_values.ext_list['src']:
-            global_values.file_list['src'].append(path)
-            ftype = 'src'
-        elif ext in global_values.ext_list['jar']:
-            global_values.file_list['jar'].append(path)
-            ftype = 'jar'
-        elif ext in global_values.ext_list['bin']:
-            global_values.file_list['bin'].append(path)
-            if size > global_values.largesize:
-                global_values.bin_large_dict[path] = size
-            ftype = 'bin'
-        elif ext in global_values.ext_list['arc']:
-            global_values.file_list['arc'].append(path)
-            ftype = 'arc'
-        elif ext in global_values.ext_list['pkg']:
-            global_values.file_list['pkg'].append(path)
-            ftype = 'pkg'
         else:
-            global_values.file_list['other'].append(path)
-            ftype = 'other'
-    else:
+            ftype = ''
+            for ltype in ['src', 'jar', 'bin', 'arc', 'pkg']:
+                if ext in global_values.ext_list[ltype]:
+                    global_values.file_list[ltype].append(path)
+                    ftype = ltype
+                    break
+    if ftype == '':
         global_values.file_list['other'].append(path)
         ftype = 'other'
-    # print("path:{} type:{}, size_comp:{}, size:{}".format(path, ftype, size_comp, size))
+        # print("path:{} type:{}, size_comp:{}, size:{}".format(path, ftype, size_comp, size))
+
     if not in_archive:
         global_values.counts[ftype][global_values.notinarc] += 1
         global_values.sizes[ftype][global_values.notinarc] += size
@@ -167,13 +170,18 @@ def checkfile(name, path, size, size_comp, dirdepth, in_archive):
     return ftype
 
 
+def get_path_hash(path):
+    m = hashlib.sha256()
+    m.update(path.encode())
+    return m.hexdigest()
+
+
 def process_dir(path, dirdepth, ignore):
     dir_size = 0
     dir_entries = 0
     filenames_string = ""
     # global global_values.messages
 
-    global_values.dir_dict[path] = {}
     dirdepth += 1
 
     # all_bin = False
@@ -203,10 +211,14 @@ def process_dir(path, dirdepth, ignore):
         global_values.messages += "ERROR: Unable to open folder {}\n".format(path)
         return 0
 
-    global_values.dir_dict[path]['num_entries'] = dir_entries
-    global_values.dir_dict[path]['size'] = dir_size
-    global_values.dir_dict[path]['depth'] = dirdepth
-    global_values.dir_dict[path]['filenamesstring'] = filenames_string
+    hash = get_path_hash(path)
+    global_values.dir_dict[hash] = {
+        'path': path,
+        'num_entries': dir_entries,
+        'size': dir_size,
+        'depth': dirdepth,
+        'filenamesstring': filenames_string,
+    }
     return dir_size
 
 
@@ -219,7 +231,9 @@ def check_singlefiles(f):
         if ext == '.js':
             # get dir
             # check for .js in filenamesstring
-            thisdir = global_values.dir_dict.get(os.path.dirname(thisfile))
+            hash = get_path_hash(os.path.dirname(thisfile))
+
+            thisdir = global_values.dir_dict[hash]
             if thisfile.find("node_modules") > 0:
                 continue
             if thisdir is not None:
@@ -259,7 +273,7 @@ def get_crc(myfile):
     return crcvalue
 
 
-def signature_process(folder, f):
+def signature_process(f):
     # print("SIGNATURE SCAN ANALYSIS:")
 
     # Find duplicates without expanding archives - to avoid processing dups
@@ -271,7 +285,7 @@ def signature_process(folder, f):
     # num_dups, size_dups = process_largefiledups(f)
     # print(" Done")
     #
-    print("- Processing Signature Scan  .....", end="", flush=True)
+    print("- Processing Signature Scan    .....", end="", flush=True)
 
     # Produce Recommendations
     if global_values.sizes['file'][global_values.notinarc] + global_values.sizes['arc'][global_values.notinarc] > 5000000000:
@@ -332,7 +346,7 @@ def signature_process(folder, f):
 def detector_process(f):
     import shutil
 
-    print("- Processing Package Manager Configurations .....", end="", flush=True)
+    print("- Processing PM Configurations .....", end="", flush=True)
 
     pm_allfiles, pm_allexts = process_pmdata()
 
@@ -348,9 +362,13 @@ def detector_process(f):
     det_max_depth = 0
     det_min_depth = 100
     det_in_arc = 0
+
+    pm_dict = {}
     if len(global_values.det_dict) > 0:
-        for detpath, depth in global_values.det_dict.items():
+        for dethash in global_values.det_dict.keys():
             command_exists = False
+            detpath = global_values.det_dict[dethash]['path']
+            depth = global_values.det_dict[dethash]['depth']
             if detpath.find("##") > 0:
                 # in archive
                 det_in_arc += 1
@@ -364,13 +382,27 @@ def detector_process(f):
                 if depth < det_min_depth:
                     det_min_depth = depth
                 fname = os.path.basename(detpath)
-                exes = ""
+                exes = ''
+                pm = ''
                 if fname in pm_allfiles.keys():
                     pm = pm_allfiles[fname]
-                    exes = global_values.pm_dict[pm]['execs']
                 elif os.path.splitext(fname)[1] in pm_allexts.keys():
                     pm = pm_allexts[os.path.splitext(fname)[1]]
+                if pm != '':
+                    if pm in pm_dict.keys():
+                        pm_dict[pm]['count'] += 1
+                        if depth < pm_dict[pm]['mindepth']:
+                            pm_dict[pm]['mindepth'] = depth
+                        if depth > pm_dict[pm]['maxdepth']:
+                            pm_dict[pm]['maxdepth'] = depth
+                    else:
+                        pm_dict[pm] = {
+                            'count': 1,
+                            'mindepth': depth,
+                            'maxdepth': depth,
+                        }
                     exes = global_values.pm_dict[pm]['execs']
+
                 missing_cmds = ""
                 for exe in exes:
                     if exe not in global_values.detectors_list:
@@ -379,9 +411,9 @@ def detector_process(f):
                             command_exists = True
                             if platform.system() != "Linux" and exe in global_values.linux_only_detectors:
                                 if depth == 1:
-                                    messages.message('PLATFORM3', exe)
+                                    messages.message('PLATFORM3', pm)
                                 else:
-                                    messages.message('PLATFORM4', exe)
+                                    messages.message('PLATFORM4', pm)
                         else:
                             if exe not in cmds_missing_list:
                                 cmds_missing_list.append(exe)
@@ -407,15 +439,23 @@ def detector_process(f):
                         else:
                             cmds_missingother = missing_cmds
 
-        global_values.rep += "\nPACKAGE MANAGER CONFIG FILES:\n" + \
-              "- In invocation folder:   {}\n".format(det_depth1) + \
-              "- In sub-folders:         {}\n".format(det_other) + \
-              "- In archives:            {}\n".format(det_in_arc) + \
-              "- Minimum folder depth:   {}\n".format(det_min_depth) + \
-              "- Maximum folder depth:   {}\n".format(det_max_depth) + \
-              "---------------------------------\n" + \
-              "- Total discovered:       {}\n\n".format(len(global_values.det_dict)) + \
-              "Config files for the following Package Managers found: {}\n".format(', '.join(global_values.detectors_list))
+        global_values.rep += ("\nPACKAGE MANAGER CONFIG FILES:\n" +
+              f"- In invocation folder:   {det_depth1}\n" +
+              f"- In sub-folders:         {det_other}\n" +
+              f"- In archives:            {det_in_arc}\n" +
+              f"- Minimum folder depth:   {det_min_depth}\n" +
+              f"- Maximum folder depth:   {det_max_depth}\n" +
+              "---------------------------------\n" +
+              f"- Total discovered:       {len(global_values.det_dict)}\n\n")
+
+        def value_getter(item):
+            return item[1]['mindepth']
+
+        global_values.rep += "  Config files for the following Package Managers found:\n                Count  MinDepth  MaxDepth\n"
+        for item in sorted(pm_dict.items(), key=value_getter):
+            global_values.rep += \
+                "  - {:11} {:>5,d}  {:>8d}  {:>8d}\n".format(
+                    item[0], item[1]['count'], item[1]['mindepth'], item[1]['maxdepth'])
 
     if f and count == 0:
         f.write("    None\n")
@@ -435,7 +475,7 @@ def detector_process(f):
     if global_values.counts['det'][global_values.inarc] > 0:
         messages.message('PACKAGES5')
 
-    for cmd in global_values.detectors_list:
+    for pm in global_values.detectors_list:
         if cmd in global_values.detector_cli_options_dict.keys() and 'dep' in global_values.cli_msgs_dict:
             global_values.cli_msgs_dict['dep'] += "For {}:\n".format(cmd) + global_values.detector_cli_options_dict[cmd] + '\n'
         if cmd in global_values.detector_cli_required_dict.keys() and 'crit' in global_values.cli_msgs_dict:

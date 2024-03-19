@@ -120,7 +120,7 @@ def main():
         print("Working on project folder '{}' (Absolute path '{}')\n".format(args.scanfolder,
                                                                              os.path.abspath(args.scanfolder)))
 
-    print("- Reading hierarchy          .....", end="", flush=True)
+    print("- Reading Folder Hierarchy     .....", end="", flush=True)
     process.process_dir(args.scanfolder, 0, False)
     print(" Done")
 
@@ -141,7 +141,7 @@ def main():
 
     if not args.detector_only:
         #	if args.full:
-        process.signature_process(args.scanfolder, f)
+        process.signature_process(f)
     if args.detector_only:
         global_values.cli_msgs_dict['reqd'] += "--detect.tools=DETECTOR\n"
 

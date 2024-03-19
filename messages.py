@@ -45,7 +45,7 @@ messages_dict = {
 
     'PLATFORM4': {
         'level': 'imp',
-        'desc': 'Package manager "{}" required for package config found ower than level 0 requires scanning on a Linux platform',
+        'desc': 'Package manager "{}" required for package config found lower than level 0 requires scanning on a Linux platform',
         'impact': 'Scan may fail if detector depth changed from default value 0',
         'action': 'Re-run Detect scan on Linux'
     },
@@ -96,9 +96,9 @@ messages_dict = {
 
     'SCAN1': {
         'level': 'crit',
-        'desc': 'Overall scan size {:>,d}} MB) is too large',
+        'desc': 'Overall scan size {:>,d} MB) is too large (default max scan size 5GB)',
         'impact': 'Scan will fail',
-        'action': 'Ignore folders, remove large files or use repeated scans of sub-folders)',
+        'action': 'Ignore folders, remove large files or use repeated scans of sub-folders',
     },
 
     'SCAN2': {
