@@ -2,7 +2,7 @@ import os
 # import tempfile
 # import re
 import platform
-import sys
+# import sys
 import global_values
 import config
 import process
@@ -20,56 +20,16 @@ def check_prereqs():
     try:
         if shutil.which("java") is None:
             messages.message('JAVA1')
-        # 			if global_values.cli_msgs_dict['reqd'].find("detect.java.path") < 0:
-        # 				global_values.cli_msgs_dict['reqd'] += ""    --detect.java.path=<PATH_TO_JAVA>\n" + \
-        # 				"    (If Java installed, specify path to java executable if not on PATH)\n"
         else:
             try:
                 subprocess.check_output(['java', '-version'], stderr=subprocess.STDOUT)
-                # javaoutput = 'openjdk version "13.0.1" 2019-10-15'
-                # javaoutput = 'java version "1.8.0_181"'
-                # crit = True
-                # if javaoutput:
-                #     line0 = javaoutput.decode("utf-8").splitlines()[0]
-                #     prog = line0.split(" ")[0].lower()
-                #     if prog:
-                #         version_string = line0.split('"')[1]
-                #         if version_string:
-                #             major, minor, _ = version_string.split('.')
-                #             if prog == "openjdk":
-                #                 crit = False
-                #                 if major == "8" or major == "11":
-                #                     rec = "none"
-                #                 else:
-                #                     global_values.recs_msgs_dict[
-                #                         'imp'] += "- IMPORTANT: OpenJDK version {} is not documented as supported by Detect\n".format(
-                #                         version_string) + \
-                #                                   "    Impact:  Scan may fail\n" + \
-                #                                   "    Action:  Check that Detect operates correctly\n\n"
-                #             elif prog == "java":
-                #                 crit = False
-                #                 if major == "1" and (minor == "8" or minor == "11"):
-                #                     rec = "none"
-                #                 else:
-                #                     global_values.recs_msgs_dict[
-                #                         'imp'] += "- IMPORTANT: Java version {} is not documented as supported by Detect\n".format(
-                #                         version_string) + \
-                #                                   "    Impact:  Scan may fail\n" + \
-                #                                   "    Action:  Check that Detect operates correctly\n\n"
+
             except subprocess.CalledProcessError:
                 messages.message('JAVA2')
 
-    # 				if global_values.cli_msgs_dict['reqd'].find("detect.java.path") < 0:
-    # 					global_values.cli_msgs_dict['reqd'] += "--detect.java.path=<PATH_TO_JAVA>\n" + \
-    # 					"    (If Java installed, specify path to java executable if not on PATH)\n"
-
     except shutil.Error:
         messages.message('JAVA3')
-    # 		if global_values.cli_msgs_dict['reqd'].find("detect.java.path") < 0:
-    # 			global_values.cli_msgs_dict['reqd'] += "--detect.java.path=<PATH_TO_JAVA>\n" + \
-    # 			"    (If Java installed, specify path to java executable if not on PATH)\n"
 
-    # os_platform = ""
     if platform.system() == "Linux" or platform.system() == "Darwin":
         os_platform = "linux"
         # check for bash and curl
@@ -106,13 +66,14 @@ def main():
     args = config.parser.parse_args()
     config.check_config(args)
 
-    global_values.cli_msgs_dict['reqd'] += "--detect.source.path='{}'\n".format(os.path.abspath(args.scanfolder))
-
     print(
         "\nDETECT ADVISOR v{} - for use with Synopsys Detect versions up to v{}\n".format(
             global_values.advisor_version, global_values.detect_version))
 
     print("PROCESSING:")
+
+    check_prereqs()
+    global_values.cli_msgs_dict['reqd'] += "--detect.source.path='{}'\n".format(os.path.abspath(args.scanfolder))
 
     if os.path.isabs(args.scanfolder):
         print("Working on project folder '{}'\n".format(args.scanfolder))
@@ -124,34 +85,21 @@ def main():
     process.process_dir(args.scanfolder, 0, False)
     print(" Done")
 
-    if args.report:
-        try:
-            f = open(args.report, "a")
-        except Exception as e:
-            print('ERROR: Unable to create output report file \n' + str(e))
-            sys.exit(3)
-    else:
-        f = None
-
-    if not args.signature_only:
-        #	if args.full:
-        process.detector_process(f)
-    if args.signature_only:
-        global_values.cli_msgs_dict['reqd'] += "--detect.tools=SIGNATURE_SCAN\n"
-
     if not args.detector_only:
-        #	if args.full:
-        process.signature_process(f)
+        process.signature_process(args.full)
     if args.detector_only:
         global_values.cli_msgs_dict['reqd'] += "--detect.tools=DETECTOR\n"
 
-    output.print_summary(args.critical_only, f)
+    if not args.signature_only:
+        process.detector_process(args.full)
+    if args.signature_only:
+        global_values.cli_msgs_dict['reqd'] += "--detect.tools=SIGNATURE_SCAN\n"
 
-    check_prereqs()
+    output.print_summary(args.critical_only, args.report)
 
-    output.output_recs(args.critical_only, f)
+    output.output_recs(args.critical_only, args.report)
 
-    output.output_cli(args.critical_only, args.report, f)
+    output.output_cli(args.critical_only, args.report)
 
     if args.output_config:
         output.output_config(args.scanfolder)
@@ -160,8 +108,5 @@ def main():
     # 	create_bdignores()
 
     print("")
-    if f:
-        f.write("\n")
-        f.close()
 
 main()

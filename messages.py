@@ -6,6 +6,9 @@ messages_dict = {
         'desc': 'Java is not installed or on the PATH',
         'impact': 'Detect program will fail',
         'action': 'Install Java or OpenJDK 1.8+',
+        'cli': 'scan',
+        'cli_search': 'detect.java.path',
+        'cli_text': '--detect.java.path=<PATH_TO_JAVA> (Specify path to Java executable)',
     },
 
     'JAVA2': {
@@ -20,6 +23,9 @@ messages_dict = {
         'desc': 'Java is not installed or on the PATH',
         'impact': 'Detect program will fail',
         'action': 'Install OpenJDK 1.8 or 1.11',
+        'cli': 'scan',
+        'cli_search': 'detect.java.path',
+        'cli_text': '--detect.java.path=<PATH_TO_JAVA> (Specify path to Java executable)',
     },
 
     'PLATFORM1': {
@@ -139,7 +145,7 @@ messages_dict = {
     },
 
     'PACKAGES1': {
-        'level': 'imp',
+        'level': 'crit',
         'desc': 'No package manager files found in invocation folder but do exist in sub-folders (minimum {}, maximum {} folders deep)',
         'impact': 'Dependency scan will not be run',
         'action': 'Specify --detect.detector.search.depth=X optionally with --detect.detector.search.continue=true or scan sub-folders separately',
@@ -159,20 +165,14 @@ messages_dict = {
         'level': 'crit',
         'desc': 'Package manager programs ({}) missing for package files in invocation folder',
         'impact': 'Scan will fail',
-        'action': 'Either install required package manager programs or consider specifying --detect.detector.buildless=true',
-        'cli': 'reqd',
-        'cli_search': 'detect.detector.buildless',
-        'cli_text': '--detect.detector.buildless=true (OR specify --detect.XXXX.path=<LOCATION> where XXX is package manager OR install package managers)',
+        'action': 'Install required package manager programs',
     },
 
     'PACKAGES4': {
         'level': 'imp',
         'desc': 'Package manager programs ({}) missing for package files in sub-folders',
         'impact': 'The scan will fail if the scan depth is modified from the default level 0',
-        'action': 'Either install required package manager programs or consider specifying --detect.detector.buildless=true',
-        'cli': 'reqd',
-        'cli_search': 'detect.detector.buildless',
-        'cli_text': '--detect.detector.buildless=true (OR specify --detect.XXXX.path=<LOCATION> where XXX is package manager OR install package managers)',
+        'action': 'Install required package manager programs',
     },
 
     'PACKAGES5': {
@@ -180,6 +180,54 @@ messages_dict = {
         'desc': 'Package manager files found in archives',
         'impact': 'Dependency scan not performed for projects in archives',
         'action': 'Optionally extract zip archives and rescan',
+    },
+
+    'PACKAGES6': {
+        'level': 'crit',
+        'desc': 'Package manager programs ({}) missing for package files in invocation folder',
+        'impact': 'Scan will fail',
+        'action': 'Either install required package manager programs or consider specifying --detect.accuracy.required=NONE (reduced accuracy scan)',
+        'cli': 'reqd',
+        'cli_search': 'detect.accuracy.required',
+        'cli_text': '--detect.accuracy.required=NONE (OR specify --detect.XXXX.path=<LOCATION> where XXX is package manager OR install package managers)',
+    },
+
+    'PACKAGES7': {
+        'level': 'imp',
+        'desc': 'Package manager programs ({}) missing for package files in sub-folders',
+        'impact': 'The scan will fail if the scan depth is modified from the default level 0',
+        'action': 'Either install required package manager programs or consider specifying --detect.accuracy.required=NONE (reduced accuracy scan)',
+        'cli': 'reqd',
+        'cli_search': 'detect.accuracy.required',
+        'cli_text': '--detect.accuracy.required=NONE (OR specify --detect.XXXX.path=<LOCATION> where XXX is package manager OR install package managers)',
+    },
+
+    'PACKAGES8': {
+        'level': 'crit',
+        'desc': 'Python or Pip scanning must be performed within virtualenv',
+        'impact': 'The scan will pickup python dependencies from the system not the project',
+        'action': 'Invoke scan from within required virtualenv',
+    },
+
+    'PACKAGES9': {
+        'level': 'imp',
+        'desc': 'Python or Pip scanning must be performed within virtualenv - package manager config found below invocation folder',
+        'impact': 'The scan will pickup python dependencies from the system not the project',
+        'action': 'Invoke scan from within required virtualenv',
+    },
+
+    'PACKAGES10': {
+        'level': 'crit',
+        'desc': 'JS packages must be installed for accurate dependency scanning for projects in invocation folder',
+        'impact': 'JS packages will not be identified correctly',
+        'action': "Run 'npm install' prior to scanning, or consider specifying --detect.accuracy.required=NONE (reduced accuracy scan)",
+    },
+
+    'PACKAGES11': {
+        'level': 'imp',
+        'desc': 'JS packages must be installed for accurate dependency scanning',
+        'impact': 'JS packages will not be identified correctly',
+        'action': "Run 'npm install' prior to scanning, or consider specifying --detect.accuracy.required=NONE (reduced accuracy scan)",
     },
 }
 

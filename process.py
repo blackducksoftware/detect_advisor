@@ -1,12 +1,29 @@
 import global_values
 import zipfile
 import os
+import sys
 import io
 from math import trunc
 import platform
 import hashlib
 
 import messages
+
+
+def process_pmdata():
+    pm_allfiles = {}
+    pm_allexts = {}
+
+    for pm in global_values.pm_dict.keys():
+        if len(global_values.pm_dict[pm]['files']) > 0:
+            for ffile in global_values.pm_dict[pm]['files']:
+                pm_allfiles[ffile] = pm
+
+        if len(global_values.pm_dict[pm]['exts']) > 0:
+            for fext in global_values.pm_dict[pm]['exts']:
+                pm_allexts[fext] = pm
+
+    return pm_allfiles, pm_allexts
 
 
 def process_nested_zip(z, zippath, zipdepth, dirdepth):
@@ -43,11 +60,11 @@ def process_zip_entry(zinfo, zippath, dirdepth):
 
     dirdepth = dirdepth + depthinzip
     tdir = zippath + "##" + os.path.dirname(zinfo.filename)
-    hash = get_path_hash(tdir)
+    dhash = get_path_hash(tdir)
 
-    if hash not in global_values.dir_dict.keys():
+    if dhash not in global_values.dir_dict.keys():
         global_values.counts['dir'][global_values.inarc] += 1
-        global_values.dir_dict[hash] = {
+        global_values.dir_dict[dhash] = {
             'path': tdir,
             'num_entries': 1,
             'size': zinfo.file_size,
@@ -55,10 +72,10 @@ def process_zip_entry(zinfo, zippath, dirdepth):
             'filenamesstring': zinfo.filename + ";",
         }
     else:
-        global_values.dir_dict[hash]['num_entries'] += 1
-        global_values.dir_dict[hash]['size'] += zinfo.file_size
-        global_values.dir_dict[hash]['depth'] = dirdepth
-        global_values.dir_dict[hash]['filenamesstring'] += zinfo.filename + ";"
+        global_values.dir_dict[dhash]['num_entries'] += 1
+        global_values.dir_dict[dhash]['size'] += zinfo.file_size
+        global_values.dir_dict[dhash]['depth'] = dirdepth
+        global_values.dir_dict[dhash]['filenamesstring'] += zinfo.filename + ";"
 
     global_values.arc_files_dict[fullpath] = zinfo.CRC
     checkfile(zinfo.filename, fullpath, zinfo.file_size, zinfo.compress_size, dirdepth, True)
@@ -94,7 +111,7 @@ def checkfile(name, path, size, size_comp, dirdepth, in_archive):
 
     ext = os.path.splitext(name)[1]
     #	print(ext)
-    if ext != ".zip":
+    if ext not in global_values.ext_list['arc']:
         if not in_archive:
             global_values.counts['file'][global_values.notinarc] += 1
             global_values.sizes['file'][global_values.notinarc] += size
@@ -102,33 +119,30 @@ def checkfile(name, path, size, size_comp, dirdepth, in_archive):
             global_values.counts['file'][global_values.inarc] += 1
             global_values.sizes['file'][global_values.inarcunc] += size
             global_values.sizes['file'][global_values.inarccomp] += size_comp
+        key = ''
         if size > global_values.hugesize:
-            global_values.file_list['huge'].append(path)
+            key = 'huge'
             global_values.large_dict[path] = size
-            if not in_archive:
-                global_values.counts['huge'][global_values.notinarc] += 1
-                global_values.sizes['huge'][global_values.notinarc] += size
-            else:
-                global_values.counts['huge'][global_values.inarc] += 1
-                global_values.sizes['huge'][global_values.inarcunc] += size
-                global_values.sizes['huge'][global_values.inarccomp] += size_comp
         elif size > global_values.largesize:
-            global_values.file_list['large'].append(path)
+            key = 'large'
             global_values.large_dict[path] = size
+
+        if key != '':
+            global_values.file_list[key].append(path)
             if not in_archive:
-                global_values.counts['large'][global_values.notinarc] += 1
-                global_values.sizes['large'][global_values.notinarc] += size
+                global_values.counts[key][global_values.notinarc] += 1
+                global_values.sizes[key][global_values.notinarc] += size
             else:
-                global_values.counts['large'][global_values.inarc] += 1
-                global_values.sizes['large'][global_values.inarcunc] += size
-                global_values.sizes['large'][global_values.inarccomp] += size_comp
+                global_values.counts[key][global_values.inarc] += 1
+                global_values.sizes[key][global_values.inarcunc] += size
+                global_values.sizes[key][global_values.inarccomp] += size_comp
 
     ftype = ''
-    hash = get_path_hash(path)
+    fhash = get_path_hash(path)
 
     if name in pm_allfiles.keys() and path.find("node_modules") < 0:
         if not in_archive:
-            global_values.det_dict[hash] = {
+            global_values.det_dict[fhash] = {
                 'path': path,
                 'depth': dirdepth,
             }
@@ -140,7 +154,7 @@ def checkfile(name, path, size, size_comp, dirdepth, in_archive):
     elif ext != "":
         if ext in pm_allexts.keys():
             if not in_archive:
-                global_values.det_dict[hash] = {
+                global_values.det_dict[fhash] = {
                     'path': path,
                     'depth': dirdepth,
                 }
@@ -152,6 +166,7 @@ def checkfile(name, path, size, size_comp, dirdepth, in_archive):
                     global_values.file_list[ltype].append(path)
                     ftype = ltype
                     break
+
     if ftype == '':
         global_values.file_list['other'].append(path)
         ftype = 'other'
@@ -222,7 +237,7 @@ def process_dir(path, dirdepth, ignore):
     return dir_size
 
 
-def check_singlefiles(f):
+def check_singlefiles(full):
     # Check for singleton js & other single files
     sfmatch = False
     sf_list = []
@@ -273,7 +288,7 @@ def get_crc(myfile):
     return crcvalue
 
 
-def signature_process(f):
+def signature_process(full):
     # print("SIGNATURE SCAN ANALYSIS:")
 
     # Find duplicates without expanding archives - to avoid processing dups
@@ -287,6 +302,7 @@ def signature_process(f):
     #
     print("- Processing Signature Scan    .....", end="", flush=True)
 
+    full_rep = ''
     # Produce Recommendations
     if global_values.sizes['file'][global_values.notinarc] + global_values.sizes['arc'][global_values.notinarc] > 5000000000:
         messages.message('SCAN1',
@@ -311,11 +327,11 @@ def signature_process(f):
     if global_values.sizes['bin'][global_values.notinarc] + global_values.sizes['bin'][global_values.inarc] > 20000000:
         messages.message('SCAN6',
             trunc((global_values.sizes['bin'][global_values.notinarc] + global_values.sizes['bin'][global_values.inarc]) / 1000000), len(global_values.file_list['bin']))
-        if f and len(global_values.bin_large_dict) > 0:
-            f.write("\nLARGE BINARY FILES:\n")
+        if full and len(global_values.bin_large_dict) > 0:
+            full_rep += ("\nLARGE BINARY FILES:\n")
             for fbin in global_values.bin_large_dict.keys():
-                f.write("    {} (Size {:d}MB)\n".format(fbin, int(global_values.bin_large_dict[fbin] / 1000000)))
-            f.write(
+                full_rep += ("    {} (Size {:d}MB)\n".format(fbin, int(global_values.bin_large_dict[fbin] / 1000000)))
+            full_rep += (
                 "\nConsider using the following command to zip binary files and send to binary scan (subject to license):\n    zip binary_files.zip \n")
             binzip_list = []
             for fbin in global_values.bin_large_dict.keys():
@@ -323,14 +339,14 @@ def signature_process(f):
                     binzip_list.append(fbin)
                 elif fbin.split("##")[0] not in binzip_list:
                     binzip_list.append(fbin.split("##")[0])
-            num = 0
-            for fbin in binzip_list:
-                if num > 0:
-                    f.write(" \\\n")
-                f.write("    {}".format(fbin))
-                num += 1
-            f.write(
-                "\n\nThen run Detect with the following options to send the archive for binary scan:\n    --detect.tools=BINARY_SCAN --detect.binary.scan.file.path=binary_files.zip\n\n")
+            # num = 0
+            # for fbin in binzip_list:
+            #     if num > 0:
+            #         f.write("\n")
+            #     f.write("    {}".format(fbin))
+            #     num += 1
+            # f.write(
+            #     "\n\nThen run Detect with the following options to send the archive for binary scan:\n    --detect.tools=BINARY_SCAN --detect.binary.scan.file.path=binary_files.zip\n\n")
 
     if global_values.counts['lic'][global_values.notinarc] > 10:
         messages.message('FILES2')
@@ -338,32 +354,29 @@ def signature_process(f):
     if global_values.counts['src'][global_values.notinarc] + global_values.counts['src'][global_values.inarc] > 10:
         messages.message('FILES3')
 
-    check_singlefiles(f)
+    check_singlefiles(full)
     print(" Done")
-    print("")
 
 
-def detector_process(f):
+def detector_process(full):
     import shutil
 
     print("- Processing PM Configurations .....", end="", flush=True)
 
     pm_allfiles, pm_allexts = process_pmdata()
 
-    if f:
-        f.write("PACKAGE MANAGER CONFIG FILES FOUND:\n")
+    files_rep = "\nALL PACKAGE MANAGER CONFIG FILES FOUND:\n"
 
     count = 0
     det_depth1 = 0
     det_other = 0
-    cmds_missing1 = ""
-    cmds_missingother = ""
-    cmds_missing_list = []
     det_max_depth = 0
     det_min_depth = 100
     det_in_arc = 0
 
     pm_dict = {}
+    all_exes = []
+
     if len(global_values.det_dict) > 0:
         for dethash in global_values.det_dict.keys():
             command_exists = False
@@ -381,14 +394,15 @@ def detector_process(f):
                     det_max_depth = depth
                 if depth < det_min_depth:
                     det_min_depth = depth
+
                 fname = os.path.basename(detpath)
-                exes = ''
                 pm = ''
                 if fname in pm_allfiles.keys():
                     pm = pm_allfiles[fname]
                 elif os.path.splitext(fname)[1] in pm_allexts.keys():
                     pm = pm_allexts[os.path.splitext(fname)[1]]
                 if pm != '':
+                    files_rep += detpath + '\n'
                     if pm in pm_dict.keys():
                         pm_dict[pm]['count'] += 1
                         if depth < pm_dict[pm]['mindepth']:
@@ -400,65 +414,68 @@ def detector_process(f):
                             'count': 1,
                             'mindepth': depth,
                             'maxdepth': depth,
+                            'exes_missing': True
                         }
-                    exes = global_values.pm_dict[pm]['execs']
-
-                missing_cmds = ""
-                for exe in exes:
-                    if exe not in global_values.detectors_list:
-                        global_values.detectors_list.append(exe)
-                        if shutil.which(exe) is not None:
-                            command_exists = True
-                            if platform.system() != "Linux" and exe in global_values.linux_only_detectors:
-                                if depth == 1:
-                                    messages.message('PLATFORM3', pm)
-                                else:
-                                    messages.message('PLATFORM4', pm)
-                        else:
-                            if exe not in cmds_missing_list:
-                                cmds_missing_list.append(exe)
-                                if missing_cmds:
-                                    missing_cmds += " OR " + exe
-                                else:
-                                    missing_cmds = exe
-                if f:
-                    f.write("{}\n".format(detpath))
-                    count += 1
-
-                if not command_exists and missing_cmds:
-                    if missing_cmds.find(" OR ") > 0:
-                        missing_cmds = "(" + missing_cmds + ")"
-                    if depth == 1:
-                        if cmds_missing1:
-                            cmds_missing1 += " AND " + missing_cmds
-                        else:
-                            cmds_missing1 = missing_cmds
-                    else:
-                        if cmds_missingother:
-                            cmds_missingother += " AND " + missing_cmds
-                        else:
-                            cmds_missingother = missing_cmds
-
-        global_values.rep += ("\nPACKAGE MANAGER CONFIG FILES:\n" +
-              f"- In invocation folder:   {det_depth1}\n" +
-              f"- In sub-folders:         {det_other}\n" +
-              f"- In archives:            {det_in_arc}\n" +
-              f"- Minimum folder depth:   {det_min_depth}\n" +
-              f"- Maximum folder depth:   {det_max_depth}\n" +
-              "---------------------------------\n" +
-              f"- Total discovered:       {len(global_values.det_dict)}\n\n")
+                        exes = global_values.pm_dict[pm]['execs']
+                        # missing_cmds = ""
+                        for exe in exes:
+                            if exe not in all_exes:
+                                all_exes.append(exe)
+                                if shutil.which(exe) is not None:
+                                    pm_dict[pm]['exes_missing'] = False
+                                    break
+                    global_values.detectors_list.append(pm)
 
         def value_getter(item):
             return item[1]['mindepth']
 
-        global_values.rep += "  Config files for the following Package Managers found:\n                Count  MinDepth  MaxDepth\n"
+        global_values.rep += ("\nPACKAGE MANAGER CONFIG FILES:\n"
+                              "                MinDepth  MaxDepth    Count   Info\n")
         for item in sorted(pm_dict.items(), key=value_getter):
-            global_values.rep += \
-                "  - {:11} {:>5,d}  {:>8d}  {:>8d}\n".format(
-                    item[0], item[1]['count'], item[1]['mindepth'], item[1]['maxdepth'])
+            pm = item[0]
+            info = ''
+            if item[1]['exes_missing']:
+                exes = global_values.pm_dict[pm]['execs']
+                # info = "Missing package manager executables '{}'".format(','.join(exes))
+                info = 'Package Manager missing'
+                if global_values.pm_dict[pm]['accuracy'] == 'LOW':
+                    info += " - (buildless scan supported but not recommended - see recommendations)"
+                    if item[1]['mindepth'] == 1:
+                        messages.message('PACKAGES6', ','.join(exes))
+                    else:
+                        messages.message('PACKAGES7', ','.join(exes))
+                else:
+                    if item[1]['mindepth'] == 1:
+                        messages.message('PACKAGES3', ','.join(exes))
+                    else:
+                        messages.message('PACKAGES4', ','.join(exes))
 
-    if f and count == 0:
-        f.write("    None\n")
+            if platform.system() != "Linux" and 'linux_only' in global_values.pm_dict[pm] and global_values.pm_dict[pm]['linux_only']:
+                if item[1]['mindepth'] == 1:
+                    messages.message('PLATFORM3', pm)
+                else:
+                    messages.message('PLATFORM4', pm)
+
+            if pm in ['PIP', 'PYTHON']:
+                check_python_venv(item[1]['mindepth'])
+            if pm in ['NPM', 'YARN', 'LERNA', 'PNPM']:
+                if item[1]['mindepth'] == 1:
+                    messages.message('PACKAGES10')
+                else:
+                    messages.message('PACKAGES11')
+
+            global_values.rep += \
+                "  - {:11} {:>8d}  {:>8d}    {:>5,d}   {}\n".format(
+                    item[0], item[1]['mindepth'], item[1]['maxdepth'], item[1]['count'], info)
+
+        global_values.rep += "  TOTAL                                 {:>5,d}\n".format(len(global_values.det_dict))
+        global_values.rep += " (No. of PM config files in archives    {:>5,d})\n".format(det_in_arc)
+
+    if count == 0:
+        files_rep += "    None\n"
+
+    if full:
+        global_values.rep += files_rep
 
     if det_depth1 == 0 and det_other > 0:
         messages.message('PACKAGES1', det_min_depth, det_max_depth)
@@ -466,37 +483,27 @@ def detector_process(f):
     if det_depth1 == 0 and det_other == 0:
         messages.message('PACKAGES2')
 
-    if cmds_missing1:
-        messages.message('PACKAGES3', cmds_missing1)
-
-    if cmds_missingother:
-        messages.message('PACKAGES4', cmds_missingother)
-
     if global_values.counts['det'][global_values.inarc] > 0:
         messages.message('PACKAGES5')
 
     for pm in global_values.detectors_list:
-        if cmd in global_values.detector_cli_options_dict.keys() and 'dep' in global_values.cli_msgs_dict:
-            global_values.cli_msgs_dict['dep'] += "For {}:\n".format(cmd) + global_values.detector_cli_options_dict[cmd] + '\n'
-        if cmd in global_values.detector_cli_required_dict.keys() and 'crit' in global_values.cli_msgs_dict:
-            global_values.cli_msgs_dict['crit'] += "For {}:\n".format(cmd) + global_values.detector_cli_required_dict[cmd] + '\n'
+        if 'cli_options' in pm_dict[pm]:
+            global_values.cli_msgs_dict['dep'] += (
+                    f"For {pm}:\n" + global_values.pm_dict[pm]['cli_options'] + '\n')
+        if 'cli_reqd' in pm_dict[pm]:
+            global_values.cli_msgs_dict['crit'] += (
+                    f"For {pm}:\n" + global_values.pm_dict[pm]['cli_reqd'] + '\n')
 
     print(" Done")
 
     return
 
 
-def process_pmdata():
-    pm_allfiles = {}
-    pm_allexts = {}
-
-    for pm in global_values.pm_dict.keys():
-        if len(global_values.pm_dict[pm]['files']) > 0:
-            for ffile in global_values.pm_dict[pm]['files']:
-                pm_allfiles[ffile] = pm
-
-        if len(global_values.pm_dict[pm]['exts']) > 0:
-            for fext in global_values.pm_dict[pm]['exts']:
-                pm_allexts[fext] = pm
-
-    return pm_allfiles, pm_allexts
+def check_python_venv(depth):
+    if sys.prefix != sys.base_prefix:
+        # In Virtualenv
+        return
+    if depth == 1:
+        messages.message('PACKAGES8')
+    else:
+        messages.message('PACKAGES9')

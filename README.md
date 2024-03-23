@@ -169,7 +169,7 @@ This section includes a list of findings categorised into CRITICAL (will cause D
     - IMPORTANT: Package manager programs (dotnet) missing for package files in sub-folders
         Impact:  The scan will fail if the scan depth is modified from the default
         Action:  Either install package manager programs or
-                 consider specifying --detect.detector.buildless=true
+                 consider specifying --detect.accuracy.required=NONE
                  
     - IMPORTANT: Large amount of data (396 MB) in 66 binary files found
         Impact:  Binary files not analysed by standard scan, will impact Capacity license usage
@@ -212,7 +212,7 @@ This section includes recommended CLI options for Synopsys Detect. If connectivi
     DETECT CLI:
     
         DETECT COMMAND:
-        bash <(curl -s -L https://detect.synopsys.com/detect.sh)
+        bash <(curl -s -L https://detect.synopsys.com/detect9.sh)
     
         MINIMUM REQUIRED OPTIONS:
             --blackduck.url=https://YOURSERVER

@@ -147,4 +147,4 @@ parser.add_argument("-c", "--critical_only", help="Only show critical issues whi
                     action='store_true')
 parser.add_argument("-o", "--output_config", help="Create .yml config file in project folder", action='store_true')
 parser.add_argument("-i", "--interactive", help="Use interactive mode to review/set options", action='store_true')
-parser.add_argument("-f", "--full_report", help="Output all results on console", action='store_true')
+parser.add_argument("-f", "--full", help="Output all information", action='store_true')

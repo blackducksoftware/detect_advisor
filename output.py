@@ -4,7 +4,10 @@ import os
 import re
 
 
-def print_summary(critical_only, f):
+def print_summary(critical_only, reportfile):
+    if critical_only:
+        return
+
     summary = "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\n" + \
               "SUMMARY INFO:\nTotal Scan Size = {:,d} MB\n\n".format(
                   trunc((global_values.sizes['file'][global_values.notinarc] + global_values.sizes['arc'][global_values.notinarc]) / 1000000)) + \
@@ -115,65 +118,50 @@ def print_summary(critical_only, f):
 
     summary += global_values.rep + "\n"
 
-    if not critical_only:
-        print(summary)
-    if f:
-        f.write(summary)
+    print(summary)
+    if reportfile is not None:
+        with open(reportfile, "wa") as repfile:
+            repfile.write(summary)
 
 
-
-
-def output_recs(critical_only, f):
+def output_recs(critical_only, reportfile):
     # global global_values.messages
 
-    print(global_values.messages + "\n")
-    if f:
-        f.write(global_values.messages + "\n")
-
-    print(
-        "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\nRECOMMENDATIONS:\n")
-    if f:
-        f.write("\nRECOMMENDATIONS:\n")
+    text = global_values.messages
+    text += \
+        "\n+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\nRECOMMENDATIONS:\n"
 
     if global_values.recs_msgs_dict['crit']:
-        print(global_values.recs_msgs_dict['crit'])
-        if f:
-            f.write(global_values.recs_msgs_dict['crit'] + "\n")
+        text += (global_values.recs_msgs_dict['crit'])
 
     if global_values.recs_msgs_dict['imp']:
         if not critical_only:
             if global_values.recs_msgs_dict['crit']:
-                print(
-                    "-----------------------------------------------------------------------------------------------------")
-            print(global_values.recs_msgs_dict['imp'])
-        if f:
-            if global_values.recs_msgs_dict['crit']:
-                f.write(
-                    "-----------------------------------------------------------------------------------------------------\n")
-            f.write(global_values.recs_msgs_dict['imp'] + "\n")
+                text += (
+                    "-----------------------------------------------------------------------------------------------------\n\n")
+            text += (global_values.recs_msgs_dict['imp'])
 
     if global_values.recs_msgs_dict['info']:
         if not critical_only:
             if global_values.recs_msgs_dict['crit'] or global_values.recs_msgs_dict['imp']:
-                print(
-                    "-----------------------------------------------------------------------------------------------------")
-            print(global_values.recs_msgs_dict['info'])
-        if f:
-            if global_values.recs_msgs_dict['crit'] or global_values.recs_msgs_dict['imp']:
-                f.write(
-                    "-----------------------------------------------------------------------------------------------------\n")
-            f.write(global_values.recs_msgs_dict['info'] + "\n")
+                text += (
+                    "-----------------------------------------------------------------------------------------------------\n\n")
+            text += (global_values.recs_msgs_dict['info'])
 
     if not global_values.recs_msgs_dict['crit'] and not global_values.recs_msgs_dict['imp'] and not global_values.recs_msgs_dict['info']:
-        print("- None\n")
-        if f:
-            f.write("None\n")
+        text += ("- None\n")
 
     if critical_only and not global_values.recs_msgs_dict['crit']:
-        print("- No Critical Recommendations\n")
+        text += ("- No Critical Recommendations\n")
+
+    print(text)
+
+    if reportfile is not None:
+        with open(reportfile, "wa") as repfile:
+            repfile.write(text)
 
 
-def output_cli(critical_only, report, f):
+def output_cli(critical_only, reportfile):
     output = "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\nDETECT CLI:\n\n"
     if global_values.recs_msgs_dict['crit']:
         output += "Note that scan will probably fail - see CRITICAL recommendations above\n\n"
@@ -183,7 +171,6 @@ def output_cli(critical_only, report, f):
     output += "\n    MINIMUM REQUIRED OPTIONS:\n"
     output += re.sub(r"^", "    ", global_values.cli_msgs_dict['reqd'], flags=re.MULTILINE)
 
-    print(output)
     # if len(bdignore_list) > 0:
     # 	if report:
     # 		print("        (Note that '.bdignore' exclude file is recommended - see the report file '{}' or use '-b' option\n" + \
@@ -191,39 +178,33 @@ def output_cli(critical_only, report, f):
     # 	else:
     # 		print("        (Note that '.bdignore' exclude file is recommended - create a report file using '-r repfile' to\n" + \
     # 		"        see recommended folders to exclude or use '-b' option to create '.bdignore' files in sub-folders)\n")
-    if f:
-        f.write(output + "\n")
-
-    output = ""
-    if global_values.cli_msgs_dict['scan'] != '':
-        output += "\nOPTIONS TO IMPROVE SCAN COVERAGE:\n" + global_values.cli_msgs_dict['scan'] + "\n"
-
-    if global_values.cli_msgs_dict['size'] != '':
-        output += "\nOPTIONS TO REDUCE SIGNATURE SCAN SIZE:\n" + global_values.cli_msgs_dict['size'] + "\n"
-
-    if global_values.cli_msgs_dict['dep'] != '':
-        output += "\nOPTIONS TO OPTIMIZE DEPENDENCY SCAN:\n" + global_values.cli_msgs_dict['dep'] + "\n"
-
-    if global_values.cli_msgs_dict['lic'] != '':
-        output += "\nOPTIONS TO IMPROVE LICENSE COMPLIANCE ANALYSIS:\n" + global_values.cli_msgs_dict['lic'] + "\n"
-
-    if global_values.cli_msgs_dict['proj'] != '':
-        output += "\nPROJECT OPTIONS:\n" + global_values.cli_msgs_dict['proj'] + "\n"
-
-    if global_values.cli_msgs_dict['rep'] != '':
-        output += "\nREPORTING OPTIONS:\n" + global_values.cli_msgs_dict['rep'] + "\n"
-
-    output = re.sub(r"^", "    ", output, flags=re.MULTILINE)
 
     if not critical_only:
-        print(output)
-    if f:
-        f.write(output + "\n")
+        output += '\n'
+        if global_values.cli_msgs_dict['scan'] != '':
+            output += "\nOPTIONS TO IMPROVE SCAN COVERAGE:\n" + global_values.cli_msgs_dict['scan'] + "\n"
 
-    if f:
-        print("INFO: Output report file '{}' created".format(report))
-    else:
-        print("INFO: Use '-r repfile' to produce report file with more information")
+        if global_values.cli_msgs_dict['size'] != '':
+            output += "\nOPTIONS TO REDUCE SIGNATURE SCAN SIZE:\n" + global_values.cli_msgs_dict['size'] + "\n"
+
+        if global_values.cli_msgs_dict['dep'] != '':
+            output += "\nOPTIONS TO OPTIMIZE DEPENDENCY SCAN:\n" + global_values.cli_msgs_dict['dep'] + "\n"
+
+        if global_values.cli_msgs_dict['lic'] != '':
+            output += "\nOPTIONS TO IMPROVE LICENSE COMPLIANCE ANALYSIS:\n" + global_values.cli_msgs_dict['lic'] + "\n"
+
+        if global_values.cli_msgs_dict['proj'] != '':
+            output += "\nPROJECT OPTIONS:\n" + global_values.cli_msgs_dict['proj'] + "\n"
+
+        if global_values.cli_msgs_dict['rep'] != '':
+            output += "\nREPORTING OPTIONS:\n" + global_values.cli_msgs_dict['rep'] + "\n"
+
+    print(output)
+
+    if reportfile is not None:
+        output = re.sub(r"^", "    ", output, flags=re.MULTILINE)
+        with open(reportfile, "wa") as repfile:
+            repfile.write(output)
 
 
 def output_config(projdir):
