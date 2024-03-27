@@ -139,9 +139,10 @@ messages_dict = {
         'level': 'imp',
         'desc': 'Large amount of data ({:>,d} MB) in {} binary files found',
         'impact': 'Binary files not analysed by standard scan, will increase scan size and impact Capacity license usage',
-        'action': 'Remove files or ignore folders (using .bdignore files), also consider zipping files and using Binary scan',
+        'action': 'Remove files or ignore folders (using .bdignore files), also consider using Binary scan',
         'cli': 'scan',
-        'cli_text': '--detect.binary.scan.file.path=binary_files.zip\n(See report file produced with -r option for how to zip binary files; binary scan license required)'
+        'cli_search': 'detect.binary.scan.file.name.patterns',
+        'cli_text': '--detect.binary.scan.file.name.patterns=exe,bin,dll (for example) and --detect.binary.scan.search.depth=X (folder depth to search for binaries)'
     },
 
     'PACKAGES1': {
@@ -149,7 +150,7 @@ messages_dict = {
         'desc': 'No package manager files found in invocation folder but do exist in sub-folders (minimum {}, maximum {} folders deep)',
         'impact': 'Dependency scan will not be run',
         'action': 'Specify --detect.detector.search.depth=X optionally with --detect.detector.search.continue=true or scan sub-folders separately',
-        'cli': 'scan',
+        'cli': 'reqd',
         'cli_search': 'detect.detector.search.depth',
         'cli_text': '--detect.detector.search.depth=X optionally with --detect.detector.search.continue=true (To find package manager files within sub-folders)',
     },

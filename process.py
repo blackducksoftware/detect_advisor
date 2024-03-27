@@ -77,7 +77,7 @@ def process_zip_entry(zinfo, zippath, dirdepth):
         global_values.dir_dict[dhash]['depth'] = dirdepth
         global_values.dir_dict[dhash]['filenamesstring'] += zinfo.filename + ";"
 
-    global_values.arc_files_dict[fullpath] = zinfo.CRC
+    # global_values.arc_files_dict[fullpath] = zinfo.CRC
     checkfile(zinfo.filename, fullpath, zinfo.file_size, zinfo.compress_size, dirdepth, True)
     return dirdepth
 
@@ -110,7 +110,8 @@ def checkfile(name, path, size, size_comp, dirdepth, in_archive):
     pm_allfiles, pm_allexts = process_pmdata()
 
     ext = os.path.splitext(name)[1]
-    #	print(ext)
+
+    # Store file sizes
     if ext not in global_values.ext_list['arc']:
         if not in_archive:
             global_values.counts['file'][global_values.notinarc] += 1
@@ -122,16 +123,14 @@ def checkfile(name, path, size, size_comp, dirdepth, in_archive):
         key = ''
         if size > global_values.hugesize:
             key = 'huge'
-            global_values.large_dict[path] = size
         elif size > global_values.largesize:
             key = 'large'
-            global_values.large_dict[path] = size
 
         if key != '':
-            global_values.file_list[key].append(path)
             if not in_archive:
                 global_values.counts[key][global_values.notinarc] += 1
                 global_values.sizes[key][global_values.notinarc] += size
+                global_values.file_list[key].append(path)
             else:
                 global_values.counts[key][global_values.inarc] += 1
                 global_values.sizes[key][global_values.inarcunc] += size
@@ -140,21 +139,23 @@ def checkfile(name, path, size, size_comp, dirdepth, in_archive):
     ftype = ''
     fhash = get_path_hash(path)
 
-    if name in pm_allfiles.keys() and path.find("node_modules") < 0:
+    if name in pm_allfiles.keys():
         if not in_archive:
-            global_values.det_dict[fhash] = {
+            global_values.files_dict['det'][fhash] = {
                 'path': path,
                 'depth': dirdepth,
             }
+        # else:
+        #     global_values.file_list['arcs_pm'].append(path)
         ftype = 'det'
     elif os.path.basename(name) in global_values.ext_list['lic']:
-        global_values.file_list['other'].append(path)
+        # global_values.file_list['other'].append(path)
         ftype = 'other'
         global_values.counts['lic'][global_values.notinarc] += 1
     elif ext != "":
         if ext in pm_allexts.keys():
             if not in_archive:
-                global_values.det_dict[fhash] = {
+                global_values.files_dict['det'][fhash] = {
                     'path': path,
                     'depth': dirdepth,
                 }
@@ -163,16 +164,17 @@ def checkfile(name, path, size, size_comp, dirdepth, in_archive):
             ftype = ''
             for ltype in ['src', 'jar', 'bin', 'arc', 'pkg']:
                 if ext in global_values.ext_list[ltype]:
-                    global_values.file_list[ltype].append(path)
+                    # global_values.file_list[ltype].append(path)
                     ftype = ltype
                     break
 
     if ftype == '':
-        global_values.file_list['other'].append(path)
+        # global_values.file_list['other'].append(path)
         ftype = 'other'
         # print("path:{} type:{}, size_comp:{}, size:{}".format(path, ftype, size_comp, size))
 
     if not in_archive:
+        global_values.file_list[ftype].append(path)
         global_values.counts[ftype][global_values.notinarc] += 1
         global_values.sizes[ftype][global_values.notinarc] += size
     else:
@@ -191,32 +193,47 @@ def get_path_hash(path):
     return m.hexdigest()
 
 
-def process_dir(path, dirdepth, ignore):
+def is_excluded(dir):
+    excluded = False
+    for exc in global_values.def_excludes:
+        # if dir.find(os.path.pathsep + exc + os.path.pathsep) > 0 or \
+        #         dir.endswith(os.path.pathsep + exc):
+        if dir.find('/' + exc + '/') > 0 or \
+                dir.endswith('/' + exc):
+            excluded = True
+            break
+    return excluded
+
+
+def process_dir(path, dirdepth):
     dir_size = 0
     dir_entries = 0
     filenames_string = ""
     # global global_values.messages
+
+    if is_excluded(path):
+        return 0
 
     dirdepth += 1
 
     # all_bin = False
     try:
         for entry in os.scandir(path):
-            ignorethis = False
+            # ignorethis = False
             dir_entries += 1
             filenames_string += entry.name + ";"
             if entry.is_dir(follow_symlinks=False):
                 global_values.counts['dir'][global_values.notinarc] += 1
-                this_size = process_dir(entry.path, dirdepth, ignorethis)
+                this_size = process_dir(entry.path, dirdepth)
                 dir_size += this_size
             else:
                 ftype = checkfile(entry.name, entry.path, entry.stat(follow_symlinks=False).st_size, 0,
                                   dirdepth, False)
-                if ftype == 'bin':
-                    if dir_entries == 1:
-                        all_bin = True
-                else:
-                    all_bin = False
+                # if ftype == 'bin':
+                #     if dir_entries == 1:
+                #         all_bin = True
+                # else:
+                #     all_bin = False
                 ext = os.path.splitext(entry.name)[1]
                 if ext in global_values.ext_list['zip']:
                     process_zip(entry.path, 0, dirdepth)
@@ -237,11 +254,13 @@ def process_dir(path, dirdepth, ignore):
     return dir_size
 
 
-def check_singlefiles(full):
+def check_singlefiles():
     # Check for singleton js & other single files
     sfmatch = False
     sf_list = []
     for thisfile in global_values.file_list['src']:
+        if thisfile.find("##") > 0:
+            continue
         ext = os.path.splitext(thisfile)[1]
         if ext == '.js':
             # get dir
@@ -249,8 +268,7 @@ def check_singlefiles(full):
             hash = get_path_hash(os.path.dirname(thisfile))
 
             thisdir = global_values.dir_dict[hash]
-            if thisfile.find("node_modules") > 0:
-                continue
+
             if thisdir is not None:
                 all_js = True
                 for filename in thisdir['filenamesstring'].split(';'):
@@ -261,6 +279,7 @@ def check_singlefiles(full):
                     sfmatch = True
                     sf_list.append(thisfile)
     if sfmatch:
+        global_values.file_list['js_single'] = sf_list
         messages.message('FILES1', len(sf_list))
 
     # if f:
@@ -327,18 +346,17 @@ def signature_process(full):
     if global_values.sizes['bin'][global_values.notinarc] + global_values.sizes['bin'][global_values.inarc] > 20000000:
         messages.message('SCAN6',
             trunc((global_values.sizes['bin'][global_values.notinarc] + global_values.sizes['bin'][global_values.inarc]) / 1000000), len(global_values.file_list['bin']))
-        if full and len(global_values.bin_large_dict) > 0:
+        if full and len(global_values.files_dict['bin_large']) > 0:
             full_rep += ("\nLARGE BINARY FILES:\n")
-            for fbin in global_values.bin_large_dict.keys():
-                full_rep += ("    {} (Size {:d}MB)\n".format(fbin, int(global_values.bin_large_dict[fbin] / 1000000)))
+            for fbin in global_values.files_dict['bin_large'].keys():
+                full_rep += ("    {} (Size {:d}MB)\n".format(fbin, int(global_values.files_dict['bin_large'][fbin] / 1000000)))
             full_rep += (
                 "\nConsider using the following command to zip binary files and send to binary scan (subject to license):\n    zip binary_files.zip \n")
-            binzip_list = []
-            for fbin in global_values.bin_large_dict.keys():
-                if fbin.find("##") < 0:
-                    binzip_list.append(fbin)
-                elif fbin.split("##")[0] not in binzip_list:
-                    binzip_list.append(fbin.split("##")[0])
+            # for fbin in global_values.bin_large_dict.keys():
+            #     if fbin.find("##") < 0:
+            #         binzip_list.append(fbin)
+            #     elif fbin.split("##")[0] not in binzip_list:
+            #         binzip_list.append(fbin.split("##")[0])
             # num = 0
             # for fbin in binzip_list:
             #     if num > 0:
@@ -354,7 +372,7 @@ def signature_process(full):
     if global_values.counts['src'][global_values.notinarc] + global_values.counts['src'][global_values.inarc] > 10:
         messages.message('FILES3')
 
-    check_singlefiles(full)
+    check_singlefiles()
     print(" Done")
 
 
@@ -364,8 +382,6 @@ def detector_process(full):
     print("- Processing PM Configurations .....", end="", flush=True)
 
     pm_allfiles, pm_allexts = process_pmdata()
-
-    files_rep = "\nALL PACKAGE MANAGER CONFIG FILES FOUND:\n"
 
     count = 0
     det_depth1 = 0
@@ -377,11 +393,12 @@ def detector_process(full):
     pm_dict = {}
     all_exes = []
 
-    if len(global_values.det_dict) > 0:
-        for dethash in global_values.det_dict.keys():
+    det_files_by_depth = {}
+    if len(global_values.files_dict['det']) > 0:
+        for dethash in global_values.files_dict['det'].keys():
             command_exists = False
-            detpath = global_values.det_dict[dethash]['path']
-            depth = global_values.det_dict[dethash]['depth']
+            detpath = global_values.files_dict['det'][dethash]['path']
+            depth = global_values.files_dict['det'][dethash]['depth']
             if detpath.find("##") > 0:
                 # in archive
                 det_in_arc += 1
@@ -402,7 +419,12 @@ def detector_process(full):
                 elif os.path.splitext(fname)[1] in pm_allexts.keys():
                     pm = pm_allexts[os.path.splitext(fname)[1]]
                 if pm != '':
-                    files_rep += detpath + '\n'
+                    if depth not in det_files_by_depth.keys():
+                        det_files_by_depth[depth] = [detpath]
+                    else:
+                        det_files_by_depth[depth].append(detpath)
+
+                    # files_rep += detpath + '\n'
                     if pm in pm_dict.keys():
                         pm_dict[pm]['count'] += 1
                         if depth < pm_dict[pm]['mindepth']:
@@ -424,14 +446,19 @@ def detector_process(full):
                                 if shutil.which(exe) is not None:
                                     pm_dict[pm]['exes_missing'] = False
                                     break
-                    global_values.detectors_list.append(pm)
+                        global_values.detectors_list.append(pm)
 
-        def value_getter(item):
+        global_values.full_rep += "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n" + \
+                                  "\nALL PACKAGE MANAGER CONFIG FILES FOUND (sorted by depth):"
+        for depth in sorted(det_files_by_depth.keys()):
+            global_values.full_rep += f"\nDepth {depth}:\n" + '\n'.join(det_files_by_depth[depth])
+
+        def pm_getter(item):
             return item[1]['mindepth']
 
-        global_values.rep += ("\nPACKAGE MANAGER CONFIG FILES:\n"
+        global_values.rep += ("\nPACKAGE MANAGER CONFIG FILE SUMMARY:\n"
                               "                MinDepth  MaxDepth    Count   Info\n")
-        for item in sorted(pm_dict.items(), key=value_getter):
+        for item in sorted(pm_dict.items(), key=pm_getter):
             pm = item[0]
             info = ''
             if item[1]['exes_missing']:
@@ -468,14 +495,8 @@ def detector_process(full):
                 "  - {:11} {:>8d}  {:>8d}    {:>5,d}   {}\n".format(
                     item[0], item[1]['mindepth'], item[1]['maxdepth'], item[1]['count'], info)
 
-        global_values.rep += "  TOTAL                                 {:>5,d}\n".format(len(global_values.det_dict))
-        global_values.rep += " (No. of PM config files in archives    {:>5,d})\n".format(det_in_arc)
-
-    if count == 0:
-        files_rep += "    None\n"
-
-    if full:
-        global_values.rep += files_rep
+        global_values.rep += "  TOTAL                               {:>5,d}\n".format(len(global_values.files_dict['det']))
+        global_values.rep += " (No. of PM config files in archives  {:>5,d})\n".format(det_in_arc)
 
     if det_depth1 == 0 and det_other > 0:
         messages.message('PACKAGES1', det_min_depth, det_max_depth)

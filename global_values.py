@@ -27,6 +27,9 @@ ext_list = {
             'COPYRIGHTS', 'COPYRIGHTS.txt']
 }
 
+def_excludes = ['node_modules', '__MACOX', 'bin', 'build', '.git', '.gradle', '.yarn', 'node_modules', 'out',
+               'packages', 'target', '.synopsys']
+
 pm_dict = {
     'BAZEL':
         {
@@ -475,8 +478,8 @@ cli_msgs_dict = {
      'files': ''
 }
 
-largesize = 5000000
-hugesize = 20000000
+largesize = 10000000
+hugesize = 100000000
 
 notinarc = 0
 inarc = 1
@@ -526,30 +529,28 @@ file_list = {
     'arc': [],
     'jar': [],
     'other': [],
-    'pkg': []
+    'pkg': [],
+    'js_single': [],
+    'arcs_pm': [],
+    'det': [],
 }
 
-bin_large_dict = {}
+files_dict = {
+    'bin_large': {},
+    'det': {},
+    'large': {}
+}
 
-# bdignore_list = []
-
-det_dict = {}
 detectors_list = []
 
-# crc_dict = {}
-
-# dup_dir_dict = {}
-# dup_large_dict = {}
-
 dir_dict = {}
-large_dict = {}
-arc_files_dict = {}
 
-messages = ""
 recs_msgs_dict = {
     'crit': '',
     'imp': '',
     'info': ''
 }
 
-rep = ''
+rep = ""
+full_rep = ""
+messages = ""

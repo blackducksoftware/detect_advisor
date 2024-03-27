@@ -124,6 +124,27 @@ def print_summary(critical_only, reportfile):
             repfile.write(summary)
 
 
+def output_full_rep(reportfile):
+
+    rep = "\n\n" + global_values.full_rep + "\n\n"
+
+    desc = {
+        'large': "LARGE FILES (> {}MB):".format(trunc(global_values.largesize/1000000)),
+        'huge': "HUGE FILES (> {}MB):".format(trunc(global_values.hugesize/1000000)),
+        'js_single': 'SINGLETON JS FILES:',
+        'arcs_pm': 'ARCHIVES CONTAINING PACKAGE MANAGER CONFIGS:',
+        'bin': 'BINARY FILES:'
+    }
+    for ftype in desc.keys():
+        rep += desc[ftype] + '\n' + "\n".join(global_values.file_list[ftype]) + '\n\n'
+
+    print(rep)
+
+    if reportfile is not None:
+        with open(reportfile, "wa") as repfile:
+            repfile.write(rep)
+
+
 def output_recs(critical_only, reportfile):
     # global global_values.messages
 

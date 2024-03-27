@@ -82,7 +82,7 @@ def main():
                                                                              os.path.abspath(args.scanfolder)))
 
     print("- Reading Folder Hierarchy     .....", end="", flush=True)
-    process.process_dir(args.scanfolder, 0, False)
+    process.process_dir(args.scanfolder, 0)
     print(" Done")
 
     if not args.detector_only:
@@ -96,6 +96,9 @@ def main():
         global_values.cli_msgs_dict['reqd'] += "--detect.tools=SIGNATURE_SCAN\n"
 
     output.print_summary(args.critical_only, args.report)
+
+    if args.full:
+        output.output_full_rep(args.report)
 
     output.output_recs(args.critical_only, args.report)
 
