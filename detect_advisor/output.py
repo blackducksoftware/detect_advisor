@@ -1,7 +1,8 @@
-import global_values
 from math import trunc
 import os
 import re
+
+from . import global_values
 
 
 def print_summary(critical_only, reportfile):
@@ -10,7 +11,8 @@ def print_summary(critical_only, reportfile):
 
     summary = "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\n" + \
               "SUMMARY INFO:\nTotal Scan Size = {:,d} MB\n\n".format(
-                  trunc((global_values.sizes['file'][global_values.notinarc] + global_values.sizes['arc'][global_values.notinarc]) / 1000000)) + \
+                  trunc((global_values.sizes['file'][global_values.notinarc] + global_values.sizes['arc'][
+                      global_values.notinarc]) / 1000000)) + \
               "                         Num Outside     Size Outside      Num Inside     Size Inside     Size Inside\n" + \
               "                            Archives         Archives        Archives        Archives        Archives\n" + \
               "                                                                        (UNcompressed)    (compressed)\n" + \
@@ -37,10 +39,13 @@ def print_summary(critical_only, reportfile):
     summary += row.format(
         "ALL FILES (Scan size)",
         global_values.counts['file'][global_values.notinarc] + global_values.counts['arc'][global_values.notinarc],
-        trunc((global_values.sizes['file'][global_values.notinarc] + global_values.sizes['arc'][global_values.notinarc]) / 1000000),
+        trunc((global_values.sizes['file'][global_values.notinarc] + global_values.sizes['arc'][
+            global_values.notinarc]) / 1000000),
         global_values.counts['file'][global_values.inarc] + global_values.counts['arc'][global_values.inarc],
-        trunc((global_values.sizes['file'][global_values.inarcunc] + global_values.sizes['arc'][global_values.inarcunc]) / 1000000),
-        trunc((global_values.sizes['file'][global_values.inarccomp] + global_values.sizes['arc'][global_values.inarccomp]) / 1000000))
+        trunc((global_values.sizes['file'][global_values.inarcunc] + global_values.sizes['arc'][
+            global_values.inarcunc]) / 1000000),
+        trunc((global_values.sizes['file'][global_values.inarccomp] + global_values.sizes['arc'][
+            global_values.inarccomp]) / 1000000))
 
     summary += "====================  ==============   ==============   =============   =============   =============\n"
 
@@ -129,8 +134,8 @@ def output_full_rep(reportfile):
     rep = "\n\n" + global_values.full_rep + "\n\n"
 
     desc = {
-        'large': "LARGE FILES (> {}MB):".format(trunc(global_values.largesize/1000000)),
-        'huge': "HUGE FILES (> {}MB):".format(trunc(global_values.hugesize/1000000)),
+        'large': "LARGE FILES (> {}MB):".format(trunc(global_values.largesize / 1000000)),
+        'huge': "HUGE FILES (> {}MB):".format(trunc(global_values.hugesize / 1000000)),
         'js_single': 'SINGLETON JS FILES:',
         'arcs_pm': 'ARCHIVES CONTAINING PACKAGE MANAGER CONFIGS:',
         'bin': 'BINARY FILES:'
@@ -150,7 +155,7 @@ def output_recs(critical_only, reportfile):
 
     text = global_values.messages
     text += \
-        "\n+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\nRECOMMENDATIONS:\n"
+        "\n+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\nRECOMMENDATIONS:\n\n"
 
     if global_values.recs_msgs_dict['crit']:
         text += (global_values.recs_msgs_dict['crit'])

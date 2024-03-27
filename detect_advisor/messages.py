@@ -1,4 +1,4 @@
-import global_values
+from . import global_values
 
 messages_dict = {
     'JAVA1': {
@@ -226,10 +226,14 @@ messages_dict = {
 
     'PACKAGES11': {
         'level': 'imp',
-        'desc': 'JS packages must be installed for accurate dependency scanning',
+        'desc': 'JS packages must be installed for accurate dependency scanning for JS projects below invocation folder',
         'impact': 'JS packages will not be identified correctly',
         'action': "Run 'npm install' prior to scanning, or consider specifying --detect.accuracy.required=NONE (reduced accuracy scan)",
+        'cli': 'reqd',
+        'cli_search': 'detect.accuracy.required',
+        'cli_text': '--detect.accuracy.required=NONE (OR install JS packages)',
     },
+
 }
 
 

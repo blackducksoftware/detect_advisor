@@ -305,7 +305,7 @@ pm_dict = {
             '.ccproj', '.sfproj', '.njsproj', '.vcxproj', '.vcproj', '.xproj', '.pyproj',
             '.hiveproj', '.pigproj', '.jsproj', '.usqlproj', '.deployproj', '.msbuildproj',
             '.sqlproj', '.dbproj', '.rproj'],
-            'execs': ['nuget'],
+            'execs': [],
             'accuracy': 'LOW',
             'cli_options':
                 "--detect.nuget.config.path=PATH\n" + \

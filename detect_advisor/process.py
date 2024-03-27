@@ -1,4 +1,3 @@
-import global_values
 import zipfile
 import os
 import sys
@@ -7,7 +6,8 @@ from math import trunc
 import platform
 import hashlib
 
-import messages
+from . import global_values
+from . import messages
 
 
 def process_pmdata():
@@ -325,31 +325,38 @@ def signature_process(full):
     # Produce Recommendations
     if global_values.sizes['file'][global_values.notinarc] + global_values.sizes['arc'][global_values.notinarc] > 5000000000:
         messages.message('SCAN1',
-            trunc((global_values.sizes['file'][global_values.notinarc] + global_values.sizes['arc'][global_values.notinarc]) / 1000000))
+                         trunc((global_values.sizes['file'][global_values.notinarc] + global_values.sizes['arc'][
+                             global_values.notinarc]) / 1000000))
     elif global_values.sizes['file'][global_values.notinarc] + global_values.sizes['arc'][global_values.notinarc] > 2000000000:
         messages.message('SCAN2',
-            trunc((global_values.sizes['file'][global_values.notinarc] + global_values.sizes['arc'][global_values.notinarc]) / 1000000))
+                         trunc((global_values.sizes['file'][global_values.notinarc] + global_values.sizes['arc'][
+                             global_values.notinarc]) / 1000000))
 
     if global_values.counts['file'][global_values.notinarc] + global_values.counts['file'][global_values.inarc] > 1000000:
         messages.message('SCAN3',
-            trunc((global_values.counts['file'][global_values.notinarc] + global_values.counts['file'][global_values.inarc])))
+                         trunc((global_values.counts['file'][global_values.notinarc] + global_values.counts['file'][
+                             global_values.inarc])))
     elif global_values.counts['file'][global_values.notinarc] + global_values.counts['file'][global_values.inarc] > 200000:
         messages.message('SCAN4',
-            trunc((global_values.counts['file'][global_values.notinarc] + global_values.counts['file'][global_values.inarc])))
+                         trunc((global_values.counts['file'][global_values.notinarc] + global_values.counts['file'][
+                             global_values.inarc])))
 
     #
     # Need to add check for nothing to scan (no supported scan files)
-    if global_values.counts['src'][global_values.notinarc] + global_values.counts['src'][global_values.inarc] + global_values.counts['jar'][global_values.notinarc] + global_values.counts['jar'][global_values.inarc] + \
+    if global_values.counts['src'][global_values.notinarc] + global_values.counts['src'][global_values.inarc] + global_values.counts['jar'][
+        global_values.notinarc] + global_values.counts['jar'][global_values.inarc] + \
             global_values.counts['other'][global_values.notinarc] + global_values.counts['other'][global_values.inarc] == 0:
         messages.message('SCAN5')
 
     if global_values.sizes['bin'][global_values.notinarc] + global_values.sizes['bin'][global_values.inarc] > 20000000:
         messages.message('SCAN6',
-            trunc((global_values.sizes['bin'][global_values.notinarc] + global_values.sizes['bin'][global_values.inarc]) / 1000000), len(global_values.file_list['bin']))
+                         trunc((global_values.sizes['bin'][global_values.notinarc] + global_values.sizes['bin'][
+                             global_values.inarc]) / 1000000), len(global_values.file_list['bin']))
         if full and len(global_values.files_dict['bin_large']) > 0:
             full_rep += ("\nLARGE BINARY FILES:\n")
             for fbin in global_values.files_dict['bin_large'].keys():
-                full_rep += ("    {} (Size {:d}MB)\n".format(fbin, int(global_values.files_dict['bin_large'][fbin] / 1000000)))
+                full_rep += ("    {} (Size {:d}MB)\n".format(fbin, int(
+                    global_values.files_dict['bin_large'][fbin] / 1000000)))
             full_rep += (
                 "\nConsider using the following command to zip binary files and send to binary scan (subject to license):\n    zip binary_files.zip \n")
             # for fbin in global_values.bin_large_dict.keys():
@@ -456,7 +463,7 @@ def detector_process(full):
         def pm_getter(item):
             return item[1]['mindepth']
 
-        global_values.rep += ("\nPACKAGE MANAGER CONFIG FILE SUMMARY:\n"
+        global_values.rep += ("\nPACKAGE MANAGER CONFIG FILE SUMMARY:\n\n"
                               "                MinDepth  MaxDepth    Count   Info\n")
         for item in sorted(pm_dict.items(), key=pm_getter):
             pm = item[0]
@@ -485,6 +492,7 @@ def detector_process(full):
 
             if pm in ['PIP', 'PYTHON']:
                 check_python_venv(item[1]['mindepth'])
+
             if pm in ['NPM', 'YARN', 'LERNA', 'PNPM']:
                 if item[1]['mindepth'] == 1:
                     messages.message('PACKAGES10')
@@ -495,8 +503,9 @@ def detector_process(full):
                 "  - {:11} {:>8d}  {:>8d}    {:>5,d}   {}\n".format(
                     item[0], item[1]['mindepth'], item[1]['maxdepth'], item[1]['count'], info)
 
-        global_values.rep += "  TOTAL                               {:>5,d}\n".format(len(global_values.files_dict['det']))
-        global_values.rep += " (No. of PM config files in archives  {:>5,d})\n".format(det_in_arc)
+        global_values.rep += "  TOTAL                               {:>5,d}\n".format(len(
+            global_values.files_dict['det']))
+        global_values.rep += " (PM config files in archives         {:>5,d})\n".format(det_in_arc)
 
     if det_depth1 == 0 and det_other > 0:
         messages.message('PACKAGES1', det_min_depth, det_max_depth)
