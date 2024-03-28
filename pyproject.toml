@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "detect_advisor"
+version = "1.0.2"
+authors = [
+  { name="Matthew Brady", email="mbrad@synopsys.com" },
+]
+description = "Detect Advisor - prescan project folders to determine how to scan with Detect"
+readme = "README.md"
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+Homepage = "https://github.com/matthewb66/detect_advisor"
+Issues = "https://github.com/matthewb66/detect_advisor/issues"
+
+[project.scripts]
+detect-advisor = "detect_advisor:main.main"
