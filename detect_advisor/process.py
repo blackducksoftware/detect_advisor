@@ -193,9 +193,20 @@ def get_path_hash(path):
     return m.hexdigest()
 
 
-def is_excluded(dir):
+def sig_excluded(dir):
     excluded = False
-    for exc in global_values.def_excludes:
+    for exc in global_values.sig_excludes:
+        # if dir.find(os.path.pathsep + exc + os.path.pathsep) > 0 or \
+        #         dir.endswith(os.path.pathsep + exc):
+        if dir.find('/' + exc + '/') > 0 or \
+                dir.endswith('/' + exc):
+            excluded = True
+            break
+    return excluded
+
+def det_excluded(dir):
+    excluded = False
+    for exc in global_values.det_excludes:
         # if dir.find(os.path.pathsep + exc + os.path.pathsep) > 0 or \
         #         dir.endswith(os.path.pathsep + exc):
         if dir.find('/' + exc + '/') > 0 or \
@@ -211,7 +222,7 @@ def process_dir(path, dirdepth):
     filenames_string = ""
     # global global_values.messages
 
-    if is_excluded(path):
+    if sig_excluded(path):
         return 0
 
     dirdepth += 1
@@ -405,6 +416,8 @@ def detector_process(full):
         for dethash in global_values.files_dict['det'].keys():
             command_exists = False
             detpath = global_values.files_dict['det'][dethash]['path']
+            if det_excluded(detpath):
+                continue
             depth = global_values.files_dict['det'][dethash]['depth']
             if detpath.find("##") > 0:
                 # in archive

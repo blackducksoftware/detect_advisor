@@ -27,8 +27,10 @@ ext_list = {
             'COPYRIGHTS', 'COPYRIGHTS.txt']
 }
 
-def_excludes = ['node_modules', '__MACOX', 'bin', 'build', '.git', '.gradle', '.yarn', 'node_modules', 'out',
-               'packages', 'target', '.synopsys']
+sig_excludes = ['.git', '.gradle', 'gradle', 'node_modules', '.synopsys']
+
+det_excludes = ['__MACOX', 'bin', 'build', '.yarn', 'out', 'packages', 'target']
+# Added to sig_excludes
 
 pm_dict = {
     'BAZEL':

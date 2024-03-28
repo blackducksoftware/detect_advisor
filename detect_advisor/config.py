@@ -134,7 +134,7 @@ def check_config(args):
 
 parser = argparse.ArgumentParser(
     description='Check prerequisites for Detect, scan folders, provide recommendations and example CLI options',
-    prog='detect_advisor')
+    prog='detect-advisor')
 
 parser.add_argument("scanfolder", nargs="?", help="Project folder to analyse", default="")
 
