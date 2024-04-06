@@ -25,23 +25,31 @@ An interactive mode is available which will ask a series of questions about the 
 
 # PREREQUISITES
 
-Python 3.9+ must be installed prior to using this script.
+Python 3.8+ must be installed prior to using this script.
 
 # INSTALLATION
 
-The package can be installed using the command `python3 -m pip install --index-url https://test.pypi.org/simple/ --no-deps detect_advisor`.
+The package can be installed using the command:
 
-Alternatively, the repository can be cloned and the script run directly using the command `python3 detect_advisor/detect_advisor.py`.
+    python3 -m pip install detect_advisor
+
+Alternatively, the repository can be cloned and the script run directly using the command:
+
+    python3 detect_advisor/detect_advisor.py
 
 # USAGE
 
-Run the command as `detect-advisor`.
+If installed as a package, run the utility using the command `detect-advisor`.
+
+Alternatively if you have cloned the repo, use a command similar to:
+
+    python3 detect_advisor/detect_advisor.py
 
 The package can be invoked as follows:
 
-    usage: detect-advisor [-h] [-r REPORT] [-d] [-s] [-c] [-o] [-b] [-i] [scanfolder]
+    Usage: detect-advisor [-h] [-r REPORT] [-d] [-s] [-c] [-o] [-b] [-i] [--full] [scanfolder]
 
-    Examine files/folders to determine scan recommendations
+    Examine files/folders to determine Synopsys Detect scan recommendations
 
     optional arguments:
       scanfolder             Top level folder to analyse

@@ -409,7 +409,6 @@ def detector_process(full):
     det_in_arc = 0
 
     pm_dict = {}
-    all_exes = []
 
     det_files_by_depth = {}
     if len(global_values.files_dict['det']) > 0:
@@ -456,16 +455,17 @@ def detector_process(full):
                             'count': 1,
                             'mindepth': depth,
                             'maxdepth': depth,
-                            'exes_missing': True
+                            'exes_missing': False
                         }
                         exes = global_values.pm_dict[pm]['execs']
                         # missing_cmds = ""
+                        all_missing = True
                         for exe in exes:
-                            if exe not in all_exes:
-                                all_exes.append(exe)
-                                if shutil.which(exe) is not None:
-                                    pm_dict[pm]['exes_missing'] = False
-                                    break
+                            if shutil.which(exe) is not None:
+                                all_missing = False
+                                break
+                        if all_missing:
+                            pm_dict[pm]['exes_missing'] = True
                         global_values.detectors_list.append(pm)
 
         global_values.full_rep += "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n" + \
