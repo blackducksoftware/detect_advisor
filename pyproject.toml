@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "detect_advisor"
-version = "1.0.2"
+version = "1.0.3"
 authors = [
   { name="Matthew Brady", email="mbrad@synopsys.com" },
 ]
 description = "Detect Advisor - prescan project folders to determine how to scan with Detect"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",

@@ -1,7 +1,7 @@
 #
 # Constants
-advisor_version = "1.0 Beta"
-detect_version = "9.3.0"
+advisor_version = "1.0.3"
+detect_version = "9.X.0"
 
 ext_list = {
     'src': ['.4th', '.actionscript', '.ada', '.adb', '.ads', '.aidl', '.as', '.as8', '.asm', '.asp', '.aspx', '.aug',
