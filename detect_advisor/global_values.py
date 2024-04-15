@@ -1,6 +1,6 @@
 #
 # Constants
-advisor_version = "1.0.3"
+advisor_version = "1.0.4"
 detect_version = "9.X.0"
 
 ext_list = {

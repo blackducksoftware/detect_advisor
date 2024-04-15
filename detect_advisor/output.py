@@ -125,7 +125,7 @@ def print_summary(critical_only, reportfile):
 
     print(summary)
     if reportfile is not None:
-        with open(reportfile, "wa") as repfile:
+        with open(reportfile, "a") as repfile:
             repfile.write(summary)
 
 
@@ -146,7 +146,7 @@ def output_full_rep(reportfile):
     print(rep)
 
     if reportfile is not None:
-        with open(reportfile, "wa") as repfile:
+        with open(reportfile, "a") as repfile:
             repfile.write(rep)
 
 
@@ -183,7 +183,7 @@ def output_recs(critical_only, reportfile):
     print(text)
 
     if reportfile is not None:
-        with open(reportfile, "wa") as repfile:
+        with open(reportfile, "a") as repfile:
             repfile.write(text)
 
 
@@ -229,7 +229,7 @@ def output_cli(critical_only, reportfile):
 
     if reportfile is not None:
         output = re.sub(r"^", "    ", output, flags=re.MULTILINE)
-        with open(reportfile, "wa") as repfile:
+        with open(reportfile, "a") as repfile:
             repfile.write(output)
 
 
