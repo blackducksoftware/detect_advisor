@@ -1,6 +1,6 @@
 #
 # Constants
-advisor_version = "1.0.4"
+advisor_version = "1.0.5"
 detect_version = "9.X.0"
 
 ext_list = {
@@ -38,6 +38,9 @@ pm_dict = {
             'files': [],
             'exts': ['.bzl'],
             'execs': ['bazel'],
+            'exec_reqd': True,
+            'lock_files': [],
+            'lockfile_reqd': False,
             'accuracy': 'HIGH',
             'cli_options':
                 "--detect.bazel.path=PATH_TO_BAZEL\n" +
@@ -50,7 +53,6 @@ pm_dict = {
             'cli_reqd':
                 "--detect.bazel.target='TARGET'\n" + \
                 "    (REQUIRED Bazel Target: The Bazel target (for example, //foo:foolib) for which dependencies are collected.)\n",
-
         },
     
     'BITBAKE':
@@ -58,6 +60,9 @@ pm_dict = {
             'files': ['oe-init-build-env'],
             'exts': [],
             'execs': ['bitbake'],
+            'exec_reqd': True,
+            'lock_files': [],
+            'lockfile_reqd': False,
             'accuracy': 'HIGH',
             'linux_only': True,
             'cli_options':
@@ -76,17 +81,23 @@ pm_dict = {
     
     'CARGO':
         {
-            'files': ['Cargo.lock', 'Cargo.toml'],
+            'files': ['Cargo.toml'],
             'exts': [],
-            'execs': ['cargo'],
+            'execs': [],
+            'exec_reqd': False,
+            'lock_files': ['Cargo.lock'],
+            'lockfile_reqd': True,
             'accuracy': 'HIGH',
         },
     
     'CARTHAGE':
         {
-            'files': ['Cartfile', 'Cartfile.resolved'],
+            'files': ['Cartfile'],
             'exts': [],
-            'execs': ['carthage'],
+            'execs': [],
+            'exec_reqd': False,
+            'lock_files': ['Cartfile.resolved'],
+            'lockfile_reqd': True,
             'accuracy': 'HIGH',
         },
     
@@ -95,6 +106,9 @@ pm_dict = {
             'files': ['compile_commands.json'],
             'exts': [],
             'execs': ['clang'],
+            'exec_reqd': True,
+            'lock_files': [],
+            'lockfile_reqd': False,
             'accuracy': 'HIGH',
             'linux_only': True,
             'cli_options':
@@ -107,15 +121,21 @@ pm_dict = {
         {
             'files': ['Podfile.lock'],
             'exts': [],
-            'execs': ['pod'],
+            'execs': [],
+            'exec_reqd': False,
+            'lock_files': ['Podfile.lock'],
+            'lockfile_reqd': True,
             'accuracy': 'HIGH',
         },
     
     'CONAN':
         {
-            'files': ['conanfile.txt', 'conanfile.py', 'conan.lock'],
+            'files': ['conanfile.txt', 'conanfile.py'],
             'exts': [],
             'execs': ['conan'],
+            'exec_reqd': False,
+            'lock_files': ['conan.lock'],
+            'lockfile_reqd': False,
             'accuracy': 'HIGH',
             'cli_options':
                 "--detect.conan.path=PATH_TO_CONAN\n" +
@@ -135,6 +155,9 @@ pm_dict = {
             'files': ['environment.yml'],
             'exts': [],
             'execs': ['conda'],
+            'lock_files': [],
+            'lockfile_reqd': False,
+            'exec_reqd': True,
             'accuracy': 'HIGH',
             'cli_options':
                 "--detect.conda.path=PATH_TO_CONDA\n" +
@@ -148,6 +171,9 @@ pm_dict = {
             'files': ['Makefile.PL'],
             'exts': [],
             'execs': ['cpan', 'cpanm'],
+            'exec_reqd': True,
+            'lock_files': [],
+            'lockfile_reqd': False,
             'accuracy': 'HIGH',
             'cli_options':
                 "--detect.cpan.path=PATH_TO_CPAN\n" +
@@ -161,6 +187,9 @@ pm_dict = {
             'files': ['makefile', 'CMakeLists.txt'],
             'exts': ['.mk'],
             'execs': ['cpp'],
+            'exec_reqd': False,
+            'lock_files': [],
+            'lockfile_reqd': False,
             'accuracy': 'HIGH',
             'cli_options':
                 "    C/C++ projects built using a compiler should be scanned using the blackduck_c_cpp utility.\n" + \
@@ -171,15 +200,21 @@ pm_dict = {
         {
             'files': ['packrat.lock'],
             'exts': [],
-            'execs': ['cran'],
+            'execs': [],
+            'exec_reqd': False,
+            'lock_files': ['packrat.lock'],
+            'lockfile_reqd': True,
             'accuracy': 'HIGH',
         },
     
     'DART':
         {
-            'files': ['pubspec.yaml', 'pubspec.lock'],
+            'files': ['pubspec.yaml'],
             'exts': [],
             'execs': ['dart', 'flutter'],
+            'exec_reqd': False,
+            'lock_files': ['pubspec.lock'],
+            'lockfile_reqd': True,
             'accuracy': 'HIGH',
             'cli_options':
                 "--detect.dart.path=PATH_TO_DART\n" +
@@ -190,11 +225,14 @@ pm_dict = {
                 "    (OPTIONAL Exclude dev dependencies - default NONE.)\n"
         },
     
-    'GO':
+    'GO_DEP':
         {
-            'files': ['Gopkg.lock', 'gogradle.lock', 'go.mod', 'vendor.json', 'vendor.conf'],
+            'files': ['Gopkg.lock'],
             'exts': [],
-            'execs': ['go'],
+            'execs': [],
+            'exec_reqd': False,
+            'lock_files': ['Gopkg.lock'],
+            'lockfile_reqd': True,
             'accuracy': 'HIGH',
             'cli_options':
                 "--detect.go.path=PATH_TO_GO\n" +
@@ -202,12 +240,79 @@ pm_dict = {
                 "--detect.go.mod.dependency.types.excluded=<NONE, UNUSED, VENDORED>\n" +
                 "    (OPTIONAL Go Mod Dependency Types Excluded: Set this value to indicate which Go Mod dependency types Detect should exclude from the BOM.)\n"
         },
-    
+
+    'GO_GRADLE':
+        {
+            'files': ['gogradle.lock'],
+            'exts': [],
+            'execs': [],
+            'exec_reqd': False,
+            'lock_files': ['gogradle.lock'],
+            'lockfile_reqd': True,
+            'accuracy': 'HIGH',
+            'cli_options':
+                "--detect.go.path=PATH_TO_GO\n" +
+                "    (OPTIONAL Path to the Go executable.)\n" +
+                "--detect.go.mod.dependency.types.excluded=<NONE, UNUSED, VENDORED>\n" +
+                "    (OPTIONAL Go Mod Dependency Types Excluded: Set this value to indicate which Go Mod dependency types Detect should exclude from the BOM.)\n"
+        },
+
+    'GO_MOD':
+        {
+            'files': ['go.mod'],
+            'exts': [],
+            'execs': ['go'],
+            'exec_reqd': False,
+            'lock_files': [],
+            'lockfile_reqd': False,
+            'accuracy': 'HIGH',
+            'cli_options':
+                "--detect.go.path=PATH_TO_GO\n" +
+                "    (OPTIONAL Path to the Go executable.)\n" +
+                "--detect.go.mod.dependency.types.excluded=<NONE, UNUSED, VENDORED>\n" +
+                "    (OPTIONAL Go Mod Dependency Types Excluded: Set this value to indicate which Go Mod dependency types Detect should exclude from the BOM.)\n"
+        },
+
+    'GO_VENDOR':
+        {
+            'files': ['vendor.json'],
+            'exts': [],
+            'execs': [],
+            'exec_reqd': False,
+            'lock_files': [],
+            'lockfile_reqd': False,
+            'accuracy': 'HIGH',
+            'cli_options':
+                "--detect.go.path=PATH_TO_GO\n" +
+                "    (OPTIONAL Path to the Go executable.)\n" +
+                "--detect.go.mod.dependency.types.excluded=<NONE, UNUSED, VENDORED>\n" +
+                "    (OPTIONAL Go Mod Dependency Types Excluded: Set this value to indicate which Go Mod dependency types Detect should exclude from the BOM.)\n"
+        },
+
+    'GO_VNDR':
+        {
+            'files': ['vendor.conf'],
+            'exts': [],
+            'execs': [],
+            'exec_reqd': False,
+            'lock_files': [],
+            'lockfile_reqd': False,
+            'accuracy': 'HIGH',
+            'cli_options':
+                "--detect.go.path=PATH_TO_GO\n" +
+                "    (OPTIONAL Path to the Go executable.)\n" +
+                "--detect.go.mod.dependency.types.excluded=<NONE, UNUSED, VENDORED>\n" +
+                "    (OPTIONAL Go Mod Dependency Types Excluded: Set this value to indicate which Go Mod dependency types Detect should exclude from the BOM.)\n"
+        },
+
     'GRADLE':
         {
             'files': ['build.gradle', 'build.gradle.kts'],
             'exts': [],
-            'execs': ['go'],
+            'execs': [],
+            'exec_reqd': False,
+            'lock_files': [],
+            'lockfile_reqd': False,
             'accuracy': 'LOW',
             'cli_options':
                 "--detect.gradle.path=PATH_TO_GRADLE\n" +
@@ -233,6 +338,9 @@ pm_dict = {
             'files': ['rebar.config'],
             'exts': [],
             'execs': ['rebar3'],
+            'exec_reqd': True,
+            'lock_files': [],
+            'lockfile_reqd': False,
             'accuracy': 'HIGH',
             'cli_options':
                 "--detect.hex.rebar3.path=PATH_TO_REBAR3\n" +
@@ -241,9 +349,12 @@ pm_dict = {
     
     'IVY':
         {
-            'files': ['ivy.xml', 'build.xml'],
+            'files': ['ivy.xml'],
             'exts': [],
-            'execs': ['ivy'],
+            'execs': [],
+            'exec_reqd': False,
+            'lock_files': [],
+            'lockfile_reqd': False,
             'accuracy': 'LOW',
         },
     
@@ -252,6 +363,9 @@ pm_dict = {
             'files': ['lerna.json'],
             'exts': [],
             'execs': ['lerna'],
+            'exec_reqd': True,
+            'lock_files': ['package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock'],
+            'lockfile_reqd': True,
             'accuracy': 'HIGH',
             'cli_options':
                 "--detect.lerna.path=PATH_TO_LERNA\n" +
@@ -269,6 +383,9 @@ pm_dict = {
             'files': ['pom.xml', 'pom.groovy'],
             'exts': [],
             'execs': ['mvn', 'mvnw'],
+            'exec_reqd': False,
+            'lock_files': [],
+            'lockfile_reqd': False,
             'accuracy': 'LOW',
             'cli_options':
                 "--detect.maven.path=PATH_TO_MAVEN\n" +
@@ -287,9 +404,12 @@ pm_dict = {
     
     'NPM':
         {
-            'files': ['npm-shrinkwrap.json', 'package.json', 'package-lock.json'],
+            'files': ['package.json'],
             'exts': [],
             'execs': ['npm'],
+            'exec_reqd': False,
+            'lock_files': ['npm-shrinkwrap.json', 'package-lock.json'],
+            'lockfile_reqd': False,
             'accuracy': 'LOW',
             'cli_options':
                 "--detect.npm.path=PATH_TO_NPM\n" +
@@ -308,6 +428,9 @@ pm_dict = {
             '.hiveproj', '.pigproj', '.jsproj', '.usqlproj', '.deployproj', '.msbuildproj',
             '.sqlproj', '.dbproj', '.rproj'],
             'execs': [],
+            'exec_reqd': False,
+            'lock_files': [],
+            'lockfile_reqd': False,
             'accuracy': 'LOW',
             'cli_options':
                 "--detect.nuget.config.path=PATH\n" + \
@@ -325,9 +448,12 @@ pm_dict = {
     
     'PACKAGIST':
         {
-            'files': ['composer.lock', 'composer.json'],
+            'files': ['composer.json'],
             'exts': [],
-            'execs': ['composer'],
+            'execs': [],
+            'exec_reqd': False,
+            'lock_files': ['composer.lock'],
+            'lockfile_reqd': True,
             'accuracy': 'HIGH',
             'cli_options':
                 "--detect.packagist.include.dev.dependencies=false\n" + \
@@ -339,6 +465,9 @@ pm_dict = {
             'files': ['package.xml'],
             'exts': [],
             'execs': ['pear'],
+            'exec_reqd': True,
+            'lock_files': [],
+            'lockfile_reqd': False,
             'accuracy': 'HIGH',
             'cli_options':
                 "--detect.pear.only.required.deps=true\n" + \
@@ -348,9 +477,12 @@ pm_dict = {
     
     'PIP':
         {
-            'files': ['pipfile', 'pipfile.lock', 'setup.py', 'pyproject.toml'],
+            'files': ['Pipfile','Pipfile.lock'],
             'exts': [],
-            'execs': ['python', 'python3', 'pipenv', 'pip', 'pip3'],
+            'execs': ['python', 'python3'],
+            'exec_reqd': False,
+            'lock_files': ['Pipfile.lock'],
+            'lockfile_reqd': True,
             'accuracy': 'HIGH',
             'cli_options':
                 "--detect.pip.only.project.tree=true\n" + \
@@ -363,30 +495,45 @@ pm_dict = {
                 "    cannot be correctly inferred from its setup.py file.)\n"
         },
     
-    'PYTHON':
+    'PIP_REQTS':
         {
-            'files': ['requirements.txt'],
+            'files': ['requirements.txt', 'setup.py'],
             'exts': [],
-            'execs': ['python', 'python3'],
+            'execs': ['pip', 'pip3'],
+            'exec_reqd': False,
+            'lock_files': [],
+            'lockfile_reqd': False,
             'accuracy': 'LOW',
             'cli_options':
-                "--detect.pip.requirements.path='PATH1,PATH2'\n" + \
-                "    (OPTIONAL PIP Requirements Path: List of paths to requirements.txt files.)\n"
+                "--detect.pip.only.project.tree=true\n" + \
+                "    (OPTIONAL PIP Include Only Project Tree: By default, pipenv includes all dependencies found in the graph. Set to true to only\n" + \
+                "    include dependencies found underneath the dependency that matches the provided pip project and version name.)\n" + \
+                "--detect.pip.project.name=NAME\n" + \
+                "    (OPTIONAL PIP Project Name: The name of your PIP project, to be used if your project's name cannot be correctly inferred from its setup.py file.)\n" + \
+                "--detect.pip.project.version.name=VERSION\n" + \
+                "    (OPTIONAL PIP Project Version Name: The version of your PIP project, to be used if your project's version name\n" + \
+                "    cannot be correctly inferred from its setup.py file.)\n"
         },
-    
+
     'PNPM':
         {
             'files': ['pnpm-lock.yaml'],
             'exts': [],
-            'execs': ['pnpm'],
+            'execs': [],
+            'exec_reqd': False,
+            'lock_files': ['pnpm-lock.yaml'],
+            'lockfile_reqd': True,
             'accuracy': 'HIGH',
         },
     
     'POETRY':
         {
-            'files': ['Poetry.lock'],
+            'files': ['pyproject.toml', 'Poetry.lock'],
             'exts': [],
-            'execs': ['pypi'],
+            'execs': [],
+            'exec_reqd': False,
+            'lock_files': ['Poetry.lock'],
+            'lockfile_reqd': True,
             'accuracy': 'HIGH',
         },
     
@@ -394,7 +541,10 @@ pm_dict = {
         {
             'files': ['Gemfile.lock'],
             'exts': [],
-            'execs': ['gem'],
+            'execs': [],
+            'exec_reqd': False,
+            'lock_files': ['Gemfile.lock'],
+            'lockfile_reqd': False,
             'accuracy': 'HIGH',
             'cli_options':
                 "--detect.ruby.include.dev.dependencies=true\n" + \
@@ -403,19 +553,14 @@ pm_dict = {
                 "    (OPTIONAL Ruby Runtime Dependencies: If set to false, runtime dependencies will not be included when parsing *.gemspec files.)\n",
         },
     
-    'GEMSPEC':
-        {
-            'files': [],
-            'exts': ['.gemspec'],
-            'execs': ['gem'],
-            'accuracy': 'LOW',
-        },
-    
     'SBT':
         {
             'files': ['build.sbt'],
             'exts': [],
-            'execs': ['sbt'],
+            'execs': [],
+            'exec_reqd': False,
+            'lock_files': [],
+            'lockfile_reqd': False,
             'accuracy': 'HIGH',
             'cli_options':
                 "--detect.sbt.report.search.depth\n" + \
@@ -428,9 +573,12 @@ pm_dict = {
     
     'SWIFT':
         {
-            'files': ['Package.swift', 'Package.resolved'],
+            'files': ['Package.swift'],
             'exts': [],
             'execs': ['swift'],
+            'exec_reqd': False,
+            'lock_files': ['Package.resolved'],
+            'lockfile_reqd': False,
             'accuracy': 'HIGH',
         },
     
@@ -438,20 +586,25 @@ pm_dict = {
         {
             'files': [],
             'exts': ['.xcworkspace', '.xcodeproj'],
-            'execs': ['xcode'],
+            'execs': [],
+            'exec_reqd': False,
+            'lock_files': ['Package.resolved'],
+            'lockfile_reqd': False,
             'accuracy': 'HIGH',
         },
     
     'YARN':
         {
-            'files': ['yarn.lock'],
+            'files': ['package.json'],
             'exts': [],
-            'execs': ['yarn'],
+            'execs': [],
+            'exec_reqd': False,
+            'lock_files': ['yarn.lock'],
+            'lockfile_reqd': True,
             'accuracy': 'HIGH',
             'cli_options':
                 "--detect.yarn.prod.only=true\n" + \
                 "    (OPTIONAL Include Yarn Production Dependencies Only: Set this to true to only scan production dependencies.)\n"
-
         },
 }
 
@@ -469,7 +622,7 @@ cli_msgs_dict = {
                            "--blackduck.proxy.port=PROXYPORT\n" + \
                            "--blackduck.proxy.username=USERNAME\n" + \
                            "--blackduck.proxy.password=PASSWORD\n",
-     'detect_win': " powershell \"[Net.ServicePointManager]::SecurityProtocol = 'tls12'; irm https://detect.synopsys.com/detec9.ps1?$(Get-Random) | iex; detect\"\n",
+     'detect_win': " powershell \"[Net.ServicePointManager]::SecurityProtocol = 'tls12'; irm https://detect.synopsys.com/detect9.ps1?$(Get-Random) | iex; detect\"\n",
      'detect_win_proxy': " (You may need to configure a proxy to download and run the Detect script as follows)\n" + \
                          "    ${Env:blackduck.proxy.host} = PROXYHOST\n" + \
                          "    ${Env:blackduck.proxy.port} = PROXYPORT\n" + \
