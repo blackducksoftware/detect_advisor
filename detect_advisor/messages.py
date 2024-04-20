@@ -164,14 +164,14 @@ messages_dict = {
 
     'PACKAGES3': {
         'level': 'crit',
-        'desc': 'Package manager programs ({}) missing for package files in invocation folder',
+        'desc': 'Required package manager programs ({}) missing for dependency scan in invocation folder',
         'impact': 'Scan will fail',
         'action': 'Install required package manager programs',
     },
 
     'PACKAGES4': {
         'level': 'imp',
-        'desc': 'Package manager programs ({}) missing for package files in sub-folders',
+        'desc': 'Required package manager programs ({}) missing for dependency scan in sub-folders',
         'impact': 'The scan will fail if the scan depth is modified from the default level 0',
         'action': 'Install required package manager programs',
     },
@@ -185,19 +185,19 @@ messages_dict = {
 
     'PACKAGES6': {
         'level': 'crit',
-        'desc': 'Package manager programs ({}) missing for package files in invocation folder',
-        'impact': 'Scan will fail',
-        'action': 'Either install required package manager programs or consider specifying --detect.accuracy.required=NONE (reduced accuracy scan)',
+        'desc': 'Missing lockfiles/PMs for package manager files in invocation folder',
+        'impact': 'Dependency scan will fail unless lockfiles created, PMs installed or --detect.accuracy.required=NONE specified',
+        'action': 'Either install required package manager programs, create lockfiles or specify --detect.accuracy.required=NONE (reduced accuracy scan)',
         'cli': 'reqd',
         'cli_search': 'detect.accuracy.required',
-        'cli_text': '--detect.accuracy.required=NONE (OR specify --detect.XXXX.path=<LOCATION> where XXX is package manager OR install package managers)',
+        'cli_text': '--detect.accuracy.required=NONE (OR specify --detect.XXXX.path=<LOCATION> where XXX is package manager OR install package managers OR create lockfiles)',
     },
 
     'PACKAGES7': {
         'level': 'imp',
-        'desc': 'Package manager programs ({}) missing for package files in sub-folders',
-        'impact': 'The scan will fail if the scan depth is modified from the default level 0',
-        'action': 'Either install required package manager programs or consider specifying --detect.accuracy.required=NONE (reduced accuracy scan)',
+        'desc': 'Missing lockfiles/PMs will cause scan to fail for package manager files in sub-folders',
+        'impact': 'Dependency scan will fail if scan depth > 0 unless lockfiles created, PMs installed or --detect.accuracy.required=NONE specified',
+        'action': 'Either install required package manager programs, create lockfiles or specify --detect.accuracy.required=NONE (reduced accuracy scan)',
         'cli': 'reqd',
         'cli_search': 'detect.accuracy.required',
         'cli_text': '--detect.accuracy.required=NONE (OR specify --detect.XXXX.path=<LOCATION> where XXX is package manager OR install package managers)',
@@ -232,6 +232,20 @@ messages_dict = {
         'cli': 'reqd',
         'cli_search': 'detect.accuracy.required',
         'cli_text': '--detect.accuracy.required=NONE (OR install JS packages)',
+    },
+
+    'PACKAGES12': {
+        'level': 'imp',
+        'desc': 'Lockfile(s) required for dependency scan missing in invocation folder',
+        'impact': 'Dependency scans will not be run',
+        'action': "Create lockfiles and rescan",
+    },
+
+    'PACKAGES13': {
+        'level': 'imp',
+        'desc': 'Lockfile(s) required for dependency scan missing in sub-folders',
+        'impact': 'Dependency scans will not be run',
+        'action': "Create lockfiles and rescan",
     },
 
 }
