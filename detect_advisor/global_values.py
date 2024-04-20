@@ -262,7 +262,7 @@ pm_dict = {
             'files': ['go.mod'],
             'exts': [],
             'execs': ['go'],
-            'exec_reqd': False,
+            'exec_reqd': True,
             'lock_files': [],
             'lockfile_reqd': False,
             'accuracy': 'HIGH',

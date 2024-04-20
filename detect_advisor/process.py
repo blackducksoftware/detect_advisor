@@ -13,7 +13,7 @@ from . import messages
 def process_pmdata():
     pm_all_files = {}
     pm_all_exts = {}
-    pm_all_locks = {}
+    # pm_all_locks = {}
 
     for pm in global_values.pm_dict.keys():
         if len(global_values.pm_dict[pm]['files']) > 0:
@@ -24,11 +24,11 @@ def process_pmdata():
             for fext in global_values.pm_dict[pm]['exts']:
                 pm_all_exts[fext] = pm
 
-        if len(global_values.pm_dict[pm]['lock_files']) > 0:
-            for ffile in global_values.pm_dict[pm]['lock_files']:
-                pm_all_locks[ffile] = pm
+        # if len(global_values.pm_dict[pm]['lock_files']) > 0:
+        #     for ffile in global_values.pm_dict[pm]['lock_files']:
+        #         pm_all_locks[ffile] = pm
 
-    return pm_all_files, pm_all_exts, pm_all_locks
+    return pm_all_files, pm_all_exts
 
 
 def process_nested_zip(z, zippath, zipdepth, dirdepth):
@@ -112,7 +112,7 @@ def process_zip(zippath, zipdepth, dirdepth):
 
 def checkfile(name, path, size, size_comp, dirdepth, in_archive):
 
-    pm_allfiles, pm_allexts, pm_alllocks = process_pmdata()
+    pm_allfiles, pm_allexts = process_pmdata()
 
     ext = os.path.splitext(name)[1]
 
@@ -150,8 +150,8 @@ def checkfile(name, path, size, size_comp, dirdepth, in_archive):
                 'path': path,
                 'depth': dirdepth,
             }
-        # else:
-        #     global_values.file_list['arcs_pm'].append(path)
+        else:
+            global_values.file_list['arcs_pm'].append(path)
         ftype = 'det'
     elif os.path.basename(name) in global_values.ext_list['lic']:
         # global_values.file_list['other'].append(path)
@@ -404,14 +404,13 @@ def detector_process(full):
 
     print("- Processing PM Configurations .....", end="", flush=True)
 
-    pm_allfiles, pm_allexts, pm_alllocks = process_pmdata()
+    pm_allfiles, pm_allexts = process_pmdata()
 
     count = 0
     det_depth1 = 0
     det_other = 0
     det_max_depth = 0
     det_min_depth = 100
-    det_in_arc = 0
 
     pm_found_dict = {}
 
@@ -423,67 +422,71 @@ def detector_process(full):
             if det_excluded(detpath):
                 continue
             depth = global_values.files_dict['det'][dethash]['depth']
-            if detpath.find("##") > 0:
-                # in archive
-                det_in_arc += 1
-            else:
-                if depth == 1:
-                    det_depth1 += 1
-                elif depth > 1:
-                    det_other += 1
-                if depth > det_max_depth:
-                    det_max_depth = depth
-                if depth < det_min_depth:
-                    det_min_depth = depth
+            if depth == 1:
+                det_depth1 += 1
+            elif depth > 1:
+                det_other += 1
+            if depth > det_max_depth:
+                det_max_depth = depth
+            if depth < det_min_depth:
+                det_min_depth = depth
 
-                fname = os.path.basename(detpath)
-                pm = ''
-                if fname in pm_allfiles.keys():
-                    pm = pm_allfiles[fname]
-                elif os.path.splitext(fname)[1] in pm_allexts.keys():
-                    pm = pm_allexts[os.path.splitext(fname)[1]]
+            fname = os.path.basename(detpath)
+            pm = ''
+            if fname in pm_allfiles.keys():
+                pm = pm_allfiles[fname]
+            elif os.path.splitext(fname)[1] in pm_allexts.keys():
+                pm = pm_allexts[os.path.splitext(fname)[1]]
 
-                if pm != '':
-                    if depth not in det_files_by_depth.keys():
-                        det_files_by_depth[depth] = [detpath]
-                    else:
-                        det_files_by_depth[depth].append(detpath)
+            if pm != '':
+                # files_rep += detpath + '\n'
+                if pm in pm_found_dict.keys():
+                    pm_found_dict[pm]['count'] += 1
+                    if depth < pm_found_dict[pm]['mindepth']:
+                        pm_found_dict[pm]['mindepth'] = depth
+                    if depth > pm_found_dict[pm]['maxdepth']:
+                        pm_found_dict[pm]['maxdepth'] = depth
+                else:
+                    pm_found_dict[pm] = {
+                        'count': 1,
+                        'mindepth': depth,
+                        'maxdepth': depth,
+                        'exes_missing': False,
+                        'lockfound': True,
+                    }
+                    exes = global_values.pm_dict[pm]['execs']
+                    # missing_cmds = ""
+                    all_missing = True
+                    for exe in exes:
+                        if shutil.which(exe) is not None:
+                            all_missing = False
+                            break
+                    if all_missing:
+                        pm_found_dict[pm]['exes_missing'] = True
+                    global_values.detectors_list.append(pm)
 
-                    # files_rep += detpath + '\n'
-                    if pm in pm_found_dict.keys():
-                        pm_found_dict[pm]['count'] += 1
-                        if depth < pm_found_dict[pm]['mindepth']:
-                            pm_found_dict[pm]['mindepth'] = depth
-                        if depth > pm_found_dict[pm]['maxdepth']:
-                            pm_found_dict[pm]['maxdepth'] = depth
-                    else:
-                        pm_found_dict[pm] = {
-                            'count': 1,
-                            'mindepth': depth,
-                            'maxdepth': depth,
-                            'exes_missing': False,
-                            'lockfound': False,
-                        }
-                        exes = global_values.pm_dict[pm]['execs']
-                        # missing_cmds = ""
-                        all_missing = True
-                        for exe in exes:
-                            if shutil.which(exe) is not None:
-                                all_missing = False
-                                break
-                        if all_missing:
-                            pm_found_dict[pm]['exes_missing'] = True
-                        global_values.detectors_list.append(pm)
+                # Check for lockfiles
+                lockfile_message = ''
+                if len(global_values.pm_dict[pm]['lock_files']) > 0:
+                    dir = os.path.dirname(detpath)
+                    found = False
+                    for entry in os.listdir(dir):
+                        if os.path.isfile(entry) and entry in global_values.pm_dict[pm]['lock_files']:
+                            found = True
 
-                    # Check for lockfiles
-                    if global_values.pm_dict[pm]['lock_files'] != '' and fname in pm_alllocks.keys():
-                        pm_found_dict[pm]['lockfound'] = True
+                    if not found:
+                        pm_found_dict[pm]['lockfound'] = False
+                        lockfile_message = ' *'
 
+                if depth not in det_files_by_depth.keys():
+                    det_files_by_depth[depth] = [detpath + lockfile_message]
+                else:
+                    det_files_by_depth[depth].append(detpath + lockfile_message)
 
         global_values.full_rep += "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n" + \
-                                  "\nALL PACKAGE MANAGER CONFIG FILES FOUND (sorted by depth):"
+                                  "\nALL PACKAGE MANAGER CONFIG FILES FOUND (sorted by depth - * indicates missing lockfile):"
         for depth in sorted(det_files_by_depth.keys()):
-            global_values.full_rep += f"\nDepth {depth}:\n" + '\n'.join(det_files_by_depth[depth])
+            global_values.full_rep += f"\nDEPTH {depth}:\n- " + '\n- '.join(det_files_by_depth[depth])
 
         def pm_getter(item):
             return item[1]['mindepth']
@@ -499,10 +502,10 @@ def detector_process(full):
             if not item[1]['lockfound'] and global_values.pm_dict[pm]['lockfile_reqd']:
                 # Lockfile missing and required
                 info += '- Lockfile(s) required but not found '
-                # if item[1]['mindepth'] == 1:
-                #     messages.message('PACKAGESX', ','.join(exes)) #To do
-                # else:
-                #     messages.message('PACKAGESX', ','.join(exes)) #To do
+                if item[1]['mindepth'] == 1:
+                    messages.message('PACKAGES12', ','.join(exes)) #To do
+                else:
+                    messages.message('PACKAGES13', ','.join(exes)) #To do
 
             # if item[1]['exes_missing']:
             if item[1]['exes_missing'] and global_values.pm_dict[pm]['exec_reqd']:
@@ -510,22 +513,18 @@ def detector_process(full):
                 # info = "Missing package manager executables '{}'".format(','.join(exes))
                 info = '- Package Manager missing and required '
                 if item[1]['mindepth'] == 1:
-                    messages.message('PACKAGESX', ','.join(exes)) #To do
+                    messages.message('PACKAGES3', ','.join(exes))
                 else:
-                    messages.message('PACKAGESX', ','.join(exes)) #To do
+                    messages.message('PACKAGES4', ','.join(exes))
 
                 if global_values.pm_dict[pm]['accuracy'] == 'LOW':
-                    if not item[1]['lockfound']:
-                        info += " - LOW accuracy scan due to missing pm/lockfiles"
-                #     if item[1]['mindepth'] == 1:
-                #         messages.message('PACKAGES6', ','.join(exes))
-                #     else:
-                #         messages.message('PACKAGES7', ','.join(exes))
-                # else:
-                #     if item[1]['mindepth'] == 1:
-                #         messages.message('PACKAGES3', ','.join(exes))
-                #     else:
-                #         messages.message('PACKAGES4', ','.join(exes))
+                    if (global_values.pm_dict[pm]['exec_reqd'] and item[1]['exes_missing'] and
+                        not item[1]['lockfound'] and global_values.pm_dict[pm]['lockfile_reqd']):
+                        info += " - LOW accuracy scan due to missing PM/lockfiles"
+                        if item[1]['mindepth'] == 1:
+                            messages.message('PACKAGES6', ','.join(exes))
+                        else:
+                            messages.message('PACKAGES7', ','.join(exes))
 
             if platform.system() != "Linux" and 'linux_only' in global_values.pm_dict[pm] and global_values.pm_dict[pm]['linux_only']:
                 if item[1]['mindepth'] == 1:
@@ -548,7 +547,8 @@ def detector_process(full):
 
         global_values.rep += "  TOTAL                               {:>5,d}\n".format(len(
             global_values.files_dict['det']))
-        global_values.rep += " (PM config files in archives         {:>5,d})\n".format(det_in_arc)
+        global_values.rep += " (PM config files in archives         {:>5,d})\n".format(
+            global_values.counts['det'][global_values.inarc])
 
     if det_depth1 == 0 and det_other > 0:
         messages.message('PACKAGES1', det_min_depth, det_max_depth)
