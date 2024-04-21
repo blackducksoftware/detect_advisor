@@ -217,23 +217,23 @@ messages_dict = {
         'action': 'Invoke scan from within required virtualenv',
     },
 
-    'PACKAGES10': {
-        'level': 'crit',
-        'desc': 'JS packages must be installed for accurate dependency scanning for projects in invocation folder',
-        'impact': 'JS packages will not be identified correctly',
-        'action': "Run 'npm install' prior to scanning, or consider specifying --detect.accuracy.required=NONE (reduced accuracy scan)",
-    },
-
-    'PACKAGES11': {
-        'level': 'imp',
-        'desc': 'JS packages must be installed for accurate dependency scanning for JS projects below invocation folder',
-        'impact': 'JS packages will not be identified correctly',
-        'action': "Run 'npm install' prior to scanning, or consider specifying --detect.accuracy.required=NONE (reduced accuracy scan)",
-        'cli': 'reqd',
-        'cli_search': 'detect.accuracy.required',
-        'cli_text': '--detect.accuracy.required=NONE (OR install JS packages)',
-    },
-
+    # 'PACKAGES10': {
+    #     'level': 'crit',
+    #     'desc': 'JS packages must be installed for accurate dependency scanning for projects in invocation folder',
+    #     'impact': 'JS packages will not be identified correctly',
+    #     'action': "Run 'npm install' prior to scanning, or consider specifying --detect.accuracy.required=NONE (reduced accuracy scan)",
+    # },
+    #
+    # 'PACKAGES11': {
+    #     'level': 'imp',
+    #     'desc': 'JS packages must be installed for accurate dependency scanning for JS projects below invocation folder',
+    #     'impact': 'JS packages will not be identified correctly',
+    #     'action': "Run 'npm install' prior to scanning, or consider specifying --detect.accuracy.required=NONE (reduced accuracy scan)",
+    #     'cli': 'reqd',
+    #     'cli_search': 'detect.accuracy.required',
+    #     'cli_text': '--detect.accuracy.required=NONE (OR install JS packages)',
+    # },
+    #
     'PACKAGES12': {
         'level': 'imp',
         'desc': 'Lockfile(s) required for dependency scan missing in invocation folder',

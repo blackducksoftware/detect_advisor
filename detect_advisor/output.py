@@ -138,7 +138,8 @@ def output_full_rep(reportfile):
         'huge': "HUGE FILES (> {}MB):".format(trunc(global_values.hugesize / 1000000)),
         'js_single': 'SINGLETON JS FILES:',
         'arcs_pm': 'ARCHIVES CONTAINING PACKAGE MANAGER CONFIGS:',
-        'bin': 'BINARY FILES:'
+        'bin': 'BINARY FILES:',
+        'exclude_dirs': 'FOLDERS WHICH SHOULD BE EXCLUDED:'
     }
     for ftype in desc.keys():
         rep += desc[ftype] + '\n' + "\n".join(global_values.file_list[ftype]) + '\n\n'

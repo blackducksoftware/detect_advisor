@@ -5,6 +5,7 @@ import io
 from math import trunc
 import platform
 import hashlib
+from pathlib import Path
 
 from . import global_values
 from . import messages
@@ -242,6 +243,8 @@ def process_dir(path, dirdepth):
                 global_values.counts['dir'][global_values.notinarc] += 1
                 this_size = process_dir(entry.path, dirdepth)
                 dir_size += this_size
+                if entry in global_values.exclude_dirs:
+                    global_values.file_list['exclude_dirs'].append(entry.path)
             else:
                 ftype = checkfile(entry.name, entry.path, entry.stat(follow_symlinks=False).st_size, 0,
                                   dirdepth, False)
@@ -250,11 +253,25 @@ def process_dir(path, dirdepth):
                 #         all_bin = True
                 # else:
                 #     all_bin = False
+
                 ext = os.path.splitext(entry.name)[1]
                 if ext in global_values.ext_list['zip']:
                     process_zip(entry.path, 0, dirdepth)
 
                 dir_size += entry.stat(follow_symlinks=False).st_size
+
+                if entry.name in global_values.exclude_files.keys():
+                    # check depth to exclude
+                    if global_values.exclude_files[entry.name] == 1:
+                        global_values.file_list['exclude_dirs'].append(os.path.dirname(entry.path))
+                    else:
+                        p = Path(entry.path)
+                        count = global_values.exclude_files[entry.name]
+                        while count > 0:
+                            p = p.parent
+                            count -= 1
+                        global_values.file_list['exclude_dirs'].append(str(p))
+
     except OSError:
         global_values.messages += "ERROR: Unable to open folder {}\n".format(path)
         return 0
@@ -518,9 +535,26 @@ def detector_process(full):
                     messages.message('PACKAGES4', ','.join(exes))
 
                 if global_values.pm_dict[pm]['accuracy'] == 'LOW':
-                    if (global_values.pm_dict[pm]['exec_reqd'] and item[1]['exes_missing'] and
-                        not item[1]['lockfound'] and global_values.pm_dict[pm]['lockfile_reqd']):
-                        info += " - LOW accuracy scan due to missing PM/lockfiles"
+                    exec_files_bool = (len(global_values.pm_dict[pm]['exec_files'])>0 and item[1]['exes_missing'] and
+                        not global_values.pm_dict[pm]['execs_reqd'])
+                    lock_files_bool = (len(global_values.pm_dict[pm]['lock_files'])>0 and not item[1]['lockfound'] and
+                        not global_values.pm_dict[pm]['lockfile_reqd'])
+                    exec_list_zero = len(global_values.pm_dict[pm]['exec_files']) == 0
+                    lock_list_zero = len(global_values.pm_dict[pm]['lock_files']) == 0
+
+                    # Calculate drop-through scenarios (LOW accuracy):
+                    # if (exec_files_bool and lock_files_bool)
+                    # OR
+                    # (exec_list_zero and lock_list_zero)
+                    # OR
+                    # (exec_file_bool and lock_list_zero)
+                    # OR
+                    # (exes_list_zero and lock_files_bool)
+
+                    if ((exec_files_bool and lock_files_bool) or
+                        (exec_list_zero and lock_list_zero) or
+                        (lock_files_bool and lock_list_zero) or
+                        (exec_list_zero and lock_files_bool)):
                         if item[1]['mindepth'] == 1:
                             messages.message('PACKAGES6', ','.join(exes))
                         else:
@@ -532,14 +566,14 @@ def detector_process(full):
                 else:
                     messages.message('PLATFORM4', pm)
 
-            if pm in ['PIP', 'PYTHON']:
+            if pm in ['PIP']:
                 check_python_venv(item[1]['mindepth'])
 
-            if pm in ['NPM', 'YARN', 'LERNA', 'PNPM']:
-                if item[1]['mindepth'] == 1:
-                    messages.message('PACKAGES10')
-                else:
-                    messages.message('PACKAGES11')
+            # if pm in ['NPM', 'YARN', 'LERNA', 'PNPM']:
+            #     if item[1]['mindepth'] == 1:
+            #         messages.message('PACKAGES10')
+            #     else:
+            #         messages.message('PACKAGES11')
 
             global_values.rep += \
                 "  - {:11} {:>8d}  {:>8d}    {:>5,d}   {}\n".format(
