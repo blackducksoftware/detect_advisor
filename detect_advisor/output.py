@@ -138,7 +138,8 @@ def output_full_rep(reportfile):
         'huge': "HUGE FILES (> {}MB):".format(trunc(global_values.hugesize / 1000000)),
         'js_single': 'SINGLETON JS FILES:',
         'arcs_pm': 'ARCHIVES CONTAINING PACKAGE MANAGER CONFIGS:',
-        'bin': 'BINARY FILES:'
+        'bin': 'BINARY FILES:',
+        'exclude_dirs': 'FOLDERS WHICH SHOULD BE EXCLUDED:'
     }
     for ftype in desc.keys():
         rep += desc[ftype] + '\n' + "\n".join(global_values.file_list[ftype]) + '\n\n'
@@ -192,10 +193,10 @@ def output_cli(critical_only, reportfile):
     if global_values.recs_msgs_dict['crit']:
         output += "Note that scan will probably fail - see CRITICAL recommendations above\n\n"
 
-    output += "    DETECT COMMAND:\n"
-    output += re.sub(r"^", "    ", global_values.cli_msgs_dict['detect'], flags=re.MULTILINE)
-    output += "\n    MINIMUM REQUIRED OPTIONS:\n"
-    output += re.sub(r"^", "    ", global_values.cli_msgs_dict['reqd'], flags=re.MULTILINE)
+    output += "DETECT COMMAND:\n"
+    output += global_values.cli_msgs_dict['detect']
+    output += "\nMINIMUM REQUIRED OPTIONS:\n"
+    output += global_values.cli_msgs_dict['reqd']
 
     # if len(bdignore_list) > 0:
     # 	if report:
@@ -207,8 +208,11 @@ def output_cli(critical_only, reportfile):
 
     if not critical_only:
         output += '\n'
+        if global_values.cli_msgs_dict['proj'] != '':
+            output += "\nPROJECT OPTIONS:\n" + global_values.cli_msgs_dict['proj'] + "\n"
+
         if global_values.cli_msgs_dict['scan'] != '':
-            output += "\nOPTIONS TO IMPROVE SCAN COVERAGE:\n" + global_values.cli_msgs_dict['scan'] + "\n"
+            output += "\nOPTIONS TO IMPROVE SCAN COVERAGE/ACCURACY:\n" + global_values.cli_msgs_dict['scan'] + "\n"
 
         if global_values.cli_msgs_dict['size'] != '':
             output += "\nOPTIONS TO REDUCE SIGNATURE SCAN SIZE:\n" + global_values.cli_msgs_dict['size'] + "\n"
@@ -218,9 +222,6 @@ def output_cli(critical_only, reportfile):
 
         if global_values.cli_msgs_dict['lic'] != '':
             output += "\nOPTIONS TO IMPROVE LICENSE COMPLIANCE ANALYSIS:\n" + global_values.cli_msgs_dict['lic'] + "\n"
-
-        if global_values.cli_msgs_dict['proj'] != '':
-            output += "\nPROJECT OPTIONS:\n" + global_values.cli_msgs_dict['proj'] + "\n"
 
         if global_values.cli_msgs_dict['rep'] != '':
             output += "\nREPORTING OPTIONS:\n" + global_values.cli_msgs_dict['rep'] + "\n"
@@ -240,11 +241,11 @@ def output_config(projdir):
                  "# Uncomment and update required options\n#\n#\n" + \
                  "# DETECT COMMAND TO RUN:\n#\n" + global_values.cli_msgs_dict['detect'] + "\n" + \
                  "# MINIMUM REQUIRED OPTIONS:\n#\n" + global_values.cli_msgs_dict['reqd'] + "\n" + \
-                 "# OPTIONS TO IMPROVE SCAN COVERAGE:\n#\n" + global_values.cli_msgs_dict['scan'] + "\n" + \
+                 "# PROJECT OPTIONS:\n#\n" + global_values.cli_msgs_dict['proj'] + "\n" + \
+                 "# OPTIONS TO IMPROVE SCAN COVERAGE/ACCURACY:\n#\n" + global_values.cli_msgs_dict['scan'] + "\n" + \
                  "# OPTIONS TO REDUCE SIGNATURE SCAN SIZE:\n#\n" + global_values.cli_msgs_dict['size'] + "\n" + \
                  "# OPTIONS TO CONFIGURE DEPENDENCY SCAN:\n#\n" + global_values.cli_msgs_dict['dep'] + "\n" + \
                  "# OPTIONS TO IMPROVE LICENSE COMPLIANCE ANALYSIS:\n#\n" + global_values.cli_msgs_dict['lic'] + "\n" + \
-                 "# PROJECT OPTIONS:\n#\n" + global_values.cli_msgs_dict['proj'] + "\n" + \
                  "# REPORTING OPTIONS:\n#\n" + global_values.cli_msgs_dict['rep'] + "\n"
 
         config = re.sub("=", ": ", config)

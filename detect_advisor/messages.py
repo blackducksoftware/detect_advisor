@@ -86,8 +86,10 @@ messages_dict = {
         'impact': 'Local license text may need to be scanned',
         'action': 'Add options --detect.blackduck.signature.scanner.license.search=true and optionally --detect.blackduck.signature.scanner.upload.source.mode=true',
         'cli': 'lic',
-        'cli_search': 'detect.blackduck.signature.scanner.upload.source.mode',
-        'cli_text': '--detect.blackduck.signature.scanner.upload.source.mode=true (CAUTION - will upload local source files)',
+        'cli_search': 'detect.blackduck.signature.scanner.license.search',
+        'cli_text': '--detect.blackduck.signature.scanner.license.search=true\n'
+                    '--detect.blackduck.signature.scanner.upload.source.mode=true (CAUTION - will upload local source files)',
+
     },
 
     'FILES3': {
@@ -98,6 +100,16 @@ messages_dict = {
         'cli': 'lic',
         'cli_search': 'detect.blackduck.signature.scanner.snippet.matching',
         'cli_text': '--detect.blackduck.signature.scanner.snippet.matching=SNIPPET_MATCHING (To search for copied OSS source files and functions within source files)',
+    },
+
+    'FILES4': {
+        'level': 'imp',
+        'desc': 'Folders included in scan which should probably be excluded',
+        'impact': 'Scan size may be larger than required and additional components identified',
+        'action': 'Rerun with --full option to see list of folders to exclude, then use the --detect.excluded.directories option to exclude folders',
+        'cli': 'scan',
+        'cli_search': 'detect.excluded.directories',
+        'cli_text': '--detect.excluded.directories=XXX with --detect.excluded.directories.search.depth=X (search for and exclude folders from scan - see list of folders for exclusion using --full option)',
     },
 
     'SCAN1': {
@@ -139,7 +151,7 @@ messages_dict = {
         'level': 'imp',
         'desc': 'Large amount of data ({:>,d} MB) in {} binary files found',
         'impact': 'Binary files not analysed by standard scan, will increase scan size and impact Capacity license usage',
-        'action': 'Remove files or ignore folders (using .bdignore files), also consider using Binary scan',
+        'action': 'See list of binary files using --full option, then remove files or ignore folders (using .bdignore files), also consider using Binary scan',
         'cli': 'scan',
         'cli_search': 'detect.binary.scan.file.name.patterns',
         'cli_text': '--detect.binary.scan.file.name.patterns=exe,bin,dll (for example) and --detect.binary.scan.search.depth=X (folder depth to search for binaries)'
@@ -166,14 +178,14 @@ messages_dict = {
         'level': 'crit',
         'desc': 'Required package manager programs ({}) missing for dependency scan in invocation folder',
         'impact': 'Scan will fail',
-        'action': 'Install required package manager programs',
+        'action': 'See list of affected PMs using --full option, then install required package manager programs',
     },
 
     'PACKAGES4': {
         'level': 'imp',
         'desc': 'Required package manager programs ({}) missing for dependency scan in sub-folders',
         'impact': 'The scan will fail if the scan depth is modified from the default level 0',
-        'action': 'Install required package manager programs',
+        'action': 'See list of affected PMs using --full option, , then install required package manager programs',
     },
 
     'PACKAGES5': {
@@ -186,8 +198,8 @@ messages_dict = {
     'PACKAGES6': {
         'level': 'crit',
         'desc': 'Missing lockfiles/PMs for package manager files in invocation folder',
-        'impact': 'Dependency scan will fail unless lockfiles created, PMs installed or --detect.accuracy.required=NONE specified',
-        'action': 'Either install required package manager programs, create lockfiles or specify --detect.accuracy.required=NONE (reduced accuracy scan)',
+        'impact': 'Dependency scan will fail',
+        'action': 'See list of affected PMs using --full option, then either install required package manager programs, create lockfiles or specify --detect.accuracy.required=NONE (reduced accuracy scan)',
         'cli': 'reqd',
         'cli_search': 'detect.accuracy.required',
         'cli_text': '--detect.accuracy.required=NONE (OR specify --detect.XXXX.path=<LOCATION> where XXX is package manager OR install package managers OR create lockfiles)',
@@ -196,8 +208,8 @@ messages_dict = {
     'PACKAGES7': {
         'level': 'imp',
         'desc': 'Missing lockfiles/PMs will cause scan to fail for package manager files in sub-folders',
-        'impact': 'Dependency scan will fail if scan depth > 0 unless lockfiles created, PMs installed or --detect.accuracy.required=NONE specified',
-        'action': 'Either install required package manager programs, create lockfiles or specify --detect.accuracy.required=NONE (reduced accuracy scan)',
+        'impact': 'Dependency scan will fail if scan depth > 0',
+        'action': 'See list of affected PMs using --full option, then either install required package manager programs, create lockfiles or specify --detect.accuracy.required=NONE (reduced accuracy scan)',
         'cli': 'reqd',
         'cli_search': 'detect.accuracy.required',
         'cli_text': '--detect.accuracy.required=NONE (OR specify --detect.XXXX.path=<LOCATION> where XXX is package manager OR install package managers)',
@@ -217,22 +229,22 @@ messages_dict = {
         'action': 'Invoke scan from within required virtualenv',
     },
 
-    'PACKAGES10': {
-        'level': 'crit',
-        'desc': 'JS packages must be installed for accurate dependency scanning for projects in invocation folder',
-        'impact': 'JS packages will not be identified correctly',
-        'action': "Run 'npm install' prior to scanning, or consider specifying --detect.accuracy.required=NONE (reduced accuracy scan)",
-    },
-
-    'PACKAGES11': {
-        'level': 'imp',
-        'desc': 'JS packages must be installed for accurate dependency scanning for JS projects below invocation folder',
-        'impact': 'JS packages will not be identified correctly',
-        'action': "Run 'npm install' prior to scanning, or consider specifying --detect.accuracy.required=NONE (reduced accuracy scan)",
-        'cli': 'reqd',
-        'cli_search': 'detect.accuracy.required',
-        'cli_text': '--detect.accuracy.required=NONE (OR install JS packages)',
-    },
+    # 'PACKAGES10': {
+    #     'level': 'crit',
+    #     'desc': 'JS packages must be installed for accurate dependency scanning for projects in invocation folder',
+    #     'impact': 'JS packages will not be identified correctly',
+    #     'action': "Run 'npm install' prior to scanning, or consider specifying --detect.accuracy.required=NONE (reduced accuracy scan)",
+    # },
+    #
+    # 'PACKAGES11': {
+    #     'level': 'imp',
+    #     'desc': 'JS packages must be installed for accurate dependency scanning for JS projects below invocation folder',
+    #     'impact': 'JS packages will not be identified correctly',
+    #     'action': "Run 'npm install' prior to scanning, or consider specifying --detect.accuracy.required=NONE (reduced accuracy scan)",
+    #     'cli': 'reqd',
+    #     'cli_search': 'detect.accuracy.required',
+    #     'cli_text': '--detect.accuracy.required=NONE (OR install JS packages)',
+    # },
 
     'PACKAGES12': {
         'level': 'imp',
@@ -260,7 +272,10 @@ levtexts = {
 
 
 def message(id, val1='', val2=''):
+    if id in global_values.message_list:
+        return
     if id in messages_dict:
+        global_values.message_list.append(id)
         if val2 != '':
             mtext = f"- {levtexts[messages_dict[id]['level']]}: " + messages_dict[id]['desc'].format(val1, val2) + '\n'
         elif val1 != '':

@@ -1,6 +1,6 @@
 #
 # Constants
-advisor_version = "1.0.5"
+advisor_version = "1.0.6"
 detect_version = "9.X.0"
 
 ext_list = {
@@ -688,12 +688,13 @@ file_list = {
     'js_single': [],
     'arcs_pm': [],
     'det': [],
+    'exclude_dirs': [],
 }
 
 files_dict = {
     'bin_large': {},
     'det': {},
-    'large': {}
+    'large': {},
 }
 
 detectors_list = []
@@ -709,3 +710,12 @@ recs_msgs_dict = {
 rep = ""
 full_rep = ""
 messages = ""
+
+exclude_files = {
+    'pyvenv.cfg': 1,
+    'emit-db': 3,
+}
+
+exclude_dirs = []
+
+message_list = []
