@@ -221,12 +221,11 @@ def det_excluded(dir):
             break
     return excluded
 
-
 def process_dir(path, dirdepth):
+    from . import messages
     dir_size = 0
     dir_entries = 0
     filenames_string = ""
-    # global global_values.messages
 
     if sig_excluded(path):
         return 0
@@ -245,6 +244,7 @@ def process_dir(path, dirdepth):
                 dir_size += this_size
                 if entry in global_values.exclude_dirs:
                     global_values.file_list['exclude_dirs'].append(entry.path)
+                    messages.message('FILES4')
             else:
                 ftype = checkfile(entry.name, entry.path, entry.stat(follow_symlinks=False).st_size, 0,
                                   dirdepth, False)
@@ -264,6 +264,7 @@ def process_dir(path, dirdepth):
                     # check depth to exclude
                     if global_values.exclude_files[entry.name] == 1:
                         global_values.file_list['exclude_dirs'].append(os.path.dirname(entry.path))
+                        messages.message('FILES4')
                     else:
                         p = Path(entry.path)
                         count = global_values.exclude_files[entry.name]
@@ -271,6 +272,7 @@ def process_dir(path, dirdepth):
                             p = p.parent
                             count -= 1
                         global_values.file_list['exclude_dirs'].append(str(p))
+                        messages.message('FILES4')
 
     except OSError:
         global_values.messages += "ERROR: Unable to open folder {}\n".format(path)
@@ -601,7 +603,7 @@ def detector_process(full):
             global_values.cli_msgs_dict['crit'] += (
                     f"For {pm}:\n" + global_values.pm_dict[pm]['cli_reqd'] + '\n')
 
-    print(" Done")
+    print(" Done\n")
 
     return
 

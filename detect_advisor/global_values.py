@@ -716,5 +716,6 @@ exclude_files = {
     'emit-db': 3,
 }
 
-exclude_dirs = [
-]
+exclude_dirs = []
+
+message_list = []
