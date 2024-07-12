@@ -1,6 +1,6 @@
 #
 # Constants
-advisor_version = "1.0.6"
+advisor_version = "1.0.7"
 detect_version = "9.X.0"
 
 ext_list = {
@@ -513,6 +513,17 @@ pm_dict = {
                 "--detect.pip.project.version.name=VERSION\n" + \
                 "    (OPTIONAL PIP Project Version Name: The version of your PIP project, to be used if your project's version name\n" + \
                 "    cannot be correctly inferred from its setup.py file.)\n"
+        },
+
+    'SETUPTOOLS':
+        {
+            'files': ['pyproject.toml'],
+            'exts': [],
+            'execs': ['pip', 'pip3'],
+            'exec_reqd': False,
+            'lock_files': [],
+            'lockfile_reqd': False,
+            'accuracy': 'LOW',
         },
 
     'PNPM':
