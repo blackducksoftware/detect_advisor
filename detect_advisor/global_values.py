@@ -1,7 +1,7 @@
 #
 # Constants
-advisor_version = "1.0.7"
-detect_version = "9.X.0"
+advisor_version = "1.0.8"
+detect_version = "10.X.0"
 
 ext_list = {
     'src': ['.4th', '.actionscript', '.ada', '.adb', '.ads', '.aidl', '.as', '.as8', '.asm', '.asp', '.aspx', '.aug',
@@ -27,7 +27,7 @@ ext_list = {
             'COPYRIGHTS', 'COPYRIGHTS.txt']
 }
 
-sig_excludes = ['.git', '.gradle', 'gradle', 'node_modules', '.synopsys']
+sig_excludes = ['.git', '.gradle', 'gradle', 'node_modules', '.blackduck', '.synopsys']
 
 det_excludes = ['__MACOX', 'bin', 'build', '.yarn', 'out', 'packages', 'target']
 # Added to sig_excludes
@@ -539,7 +539,7 @@ pm_dict = {
     
     'POETRY':
         {
-            'files': ['pyproject.toml', 'Poetry.lock'],
+            'files': ['Poetry.lock'],
             'exts': [],
             'execs': [],
             'exec_reqd': False,
@@ -617,6 +617,31 @@ pm_dict = {
                 "--detect.yarn.prod.only=true\n" + \
                 "    (OPTIONAL Include Yarn Production Dependencies Only: Set this to true to only scan production dependencies.)\n"
         },
+
+    'OPAM':
+        {
+            'files': [],
+            'exts': ['.opam'],
+            'execs': ['opam'],
+            'exec_reqd': True,
+            'lock_files': [],
+            'lockfile_reqd': False,
+            'accuracy': 'HIGH',
+            'cli_options':
+                "--detect.opam.path=PATH\n" + \
+                "    (OPTIONAL path to the opam executable.)\n"
+        },
+
+    'OPAM_LOCK':
+        {
+            'files': [],
+            'exts': ['.opam.lock'],
+            'execs': [],
+            'exec_reqd': False,
+            'lock_files': [],
+            'lockfile_reqd': False,
+            'accuracy': 'LOW',
+        },
 }
 
 cli_msgs_dict = {
@@ -625,21 +650,21 @@ cli_msgs_dict = {
                                                           "--detect.project.version.name=VERSION_NAME\n" + \
                                                           "    (OPTIONAL Specify project and version names)\n",
      'scan': '', 'size': '', 'dep': '', 'lic': '', 'rep': "",
-     'detect_linux': " bash <(curl -s -L https://detect.synopsys.com/detect9.sh)\n",
+     'detect_linux': " bash <(curl -s -L https://detect.blackduck.com/detect10.sh)\n",
      'detect_linux_proxy': " (You may need to configure a proxy to download and run the Detect script as follows)\n" + \
                            " export DETECT_CURL_OPTS='--proxy http://USER:PASSWORD@PROXYHOST:PROXYPORT'\n" + \
-                           " bash <(curl -s -L ${DETECT_CURL_OPTS} https://detect.synopsys.com/detect9.sh)\n" + \
+                           " bash <(curl -s -L ${DETECT_CURL_OPTS} https://detect.blackduck.com/detect10.sh)\n" + \
                            "--blackduck.proxy.host=PROXYHOST\n" + \
                            "--blackduck.proxy.port=PROXYPORT\n" + \
                            "--blackduck.proxy.username=USERNAME\n" + \
                            "--blackduck.proxy.password=PASSWORD\n",
-     'detect_win': " powershell \"[Net.ServicePointManager]::SecurityProtocol = 'tls12'; irm https://detect.synopsys.com/detect9.ps1?$(Get-Random) | iex; detect\"\n",
+     'detect_win': " powershell \"[Net.ServicePointManager]::SecurityProtocol = 'tls12'; irm https://detect.blackduck.com/detect10.ps1?$(Get-Random) | iex; detect\"\n",
      'detect_win_proxy': " (You may need to configure a proxy to download and run the Detect script as follows)\n" + \
                          "    ${Env:blackduck.proxy.host} = PROXYHOST\n" + \
                          "    ${Env:blackduck.proxy.port} = PROXYPORT\n" + \
                          "    ${Env:blackduck.proxy.password} = PROXYUSER\n" + \
                          "    ${Env:blackduck.proxy.username} = PROXYPASSWORD\n" + \
-                         "    powershell \"[Net.ServicePointManager]::SecurityProtocol = 'tls12'; irm https://detect.synopsys.com/detect9.ps1?$(Get-Random) | iex; detect\"\n",
+                         "    powershell \"[Net.ServicePointManager]::SecurityProtocol = 'tls12'; irm https://detect.blackduck.com/detect10.ps1?$(Get-Random) | iex; detect\"\n",
      'detect': '',
      'files': ''
 }
