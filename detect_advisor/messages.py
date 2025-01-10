@@ -58,14 +58,14 @@ messages_dict = {
 
     'NETWORK1': {
         'level': 'crit',
-        'desc': 'No connection to https://detect.synopsys.com',
+        'desc': 'No connection to https://detect.blackduck.com',
         'impact': 'Detect wrapper script cannot be downloaded, Detect cannot be started',
         'action': 'Either configure proxy (See CLI section) or download Detect manually and run offline (see docs)'
     },
 
     'NETWORK2': {
         'level': 'crit',
-        'desc': 'No connection to https://sig-repo.synopsys.com',
+        'desc': 'No connection to https://sig-repo.blackduck.com',
         'impact': 'Detect jar cannot be downloaded; Detect cannot run',
         'action': 'Either configure proxy (See CLI section) or download Detect manually and run offline (see docs)'
     },

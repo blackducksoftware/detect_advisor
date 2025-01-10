@@ -43,12 +43,12 @@ def check_prereqs():
         if shutil.which("curl") is None:
             messages.message('PLATFORM2')
         else:
-            if not check_connection("https://detect.synopsys.com"):
+            if not check_connection("https://detect.blackduck.com"):
                 messages.message('NETWORK1')
                 global_values.cli_msgs_dict['detect'] = global_values.cli_msgs_dict["detect_" + os_platform + "_proxy"]
             else:
                 global_values.cli_msgs_dict['detect'] = global_values.cli_msgs_dict["detect_" + os_platform]
-                if not check_connection("https://sig-repo.synopsys.com"):
+                if not check_connection("https://sig-repo.blackduck.com"):
                     messages.message('NETWORK2')
     except shutil.Error:
         pass
@@ -68,7 +68,7 @@ def main():
     config.check_config(args)
 
     print(
-        "\nDETECT ADVISOR v{} - for use with Synopsys Detect versions up to v{}\n".format(
+        "\nDETECT ADVISOR v{} - for use with Black Duck Detect versions up to v{}\n".format(
             global_values.advisor_version, global_values.detect_version))
 
     print("PROCESSING:")

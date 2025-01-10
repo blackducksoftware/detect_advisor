@@ -1,23 +1,23 @@
-# Synopsys Detect Advisor Script - detect_advisor.py
+# Detect Advisor Script - detect_advisor.py
 # OVERVIEW
 
-This script is provided under an OSS license (specified in the LICENSE file) to assist users when scanning projects using the Synopsys Detect program to scan projects.
+This script is provided under an OSS license (specified in the LICENSE file) to assist users when scanning projects using the Black Duck Detect program to scan projects.
 
-It does not represent any extension of licensed functionality of Synopsys software itself and is provided as-is, without warranty or liability.
+It does not represent any extension of licensed functionality of Black Duck software itself and is provided as-is, without warranty or liability.
 
 # DESCRIPTION
 
-This `detect_advisor` script is designed to pre-scan a project folder to determine whether the Synopsys Detect program (see https://detect.synopsys.com/doc) used for Synopsys Black Duck SCA (and Synopsys Polaris) scans can be executed (the prerequisites are met) and also to provide recommendations and advice on how to perform and optimize scanning.
+This `detect_advisor` script is designed to pre-scan a project folder to determine whether the Black Duck Detect program (see https://detect.blackduck.com/doc) used for Black Duck Black Duck SCA (and Black Duck Polaris) scans can be executed (the prerequisites are met) and also to provide recommendations and advice on how to perform and optimize scanning.
 
 It is available as a python package which can be installed using Pip, or alteratively downloaded as a repository and run locally using Python3.
 
 The script will check the prerequisites to run Detect (including the correct version of Java) and scan the project location for files and archives, calculate the total scan size, check for project (package manager) files and package managers themselves and will also detect large files, binaries and singleton JS files.
 
-It will expand .zip and .jar files automatically, processing recursive files (zips within zips etc.). Other archive types (.gz, .tar, .Z etc.) are not currently expanded by detect_advisor (although they will be expanded by Synopsys Detect).
+It will expand .zip and .jar files automatically, processing recursive files (zips within zips etc.). Other archive types (.gz, .tar, .Z etc.) are not currently expanded by detect_advisor (although they will be expanded by Black Duck Detect).
 
 It will produce a set of categorized recommendations and Detect command line options to support different types of scans and other operations.
 
-It can optionally write a report file including the console output and other information. It can also create a .yml project config file containing relevant, commented-out Detect options which can be uncommented, and the .yml can be referenced using the Synopsys Detect option `--spring.profiles.active=project`.
+It can optionally write a report file including the console output and other information. It can also create a .yml project config file containing relevant, commented-out Detect options which can be uncommented, and the .yml can be referenced using the Black Duck Detect option `--spring.profiles.active=project`.
 
 Optionally, only critical issues (which will stop Detect from scanning at all) can be reported to the console.
 
@@ -49,7 +49,7 @@ The package can be invoked as follows:
 
     Usage: detect-advisor [-h] [-r REPORT] [-d] [-s] [-c] [-o] [-b] [-i] [--full] [scanfolder]
 
-    Examine files/folders to determine Synopsys Detect scan recommendations
+    Examine files/folders to determine Black Duck Detect scan recommendations
 
     optional arguments:
       scanfolder             Top level folder to analyse
@@ -122,7 +122,7 @@ This section includes counts and size analysis for the files and folders beneath
 
 The `Size Outside Archives` value in the `ALL FILES (Scan Size)` row represents the total scan size as calculated by Detect (used for capacity license).
 
-Note that the `Archives(exc. Jars)` row covers all archive file types but that only .zip files are extracted by `detect_advisor` (whereas Synopsys Detect extracts other types of archives automatically). The final 3 `Inside Archives` columns indicate items found within .zip archives for the different types (except for the Jar row which references .jar/.ear/.war files). The `Inside Archives` columns for the Archives row itself reports archive files within .zips (or nested deeper - zips within zips within zips etc.).
+Note that the `Archives(exc. Jars)` row covers all archive file types but that only .zip files are extracted by `detect_advisor` (whereas Black Duck Detect extracts other types of archives automatically). The final 3 `Inside Archives` columns indicate items found within .zip archives for the different types (except for the Jar row which references .jar/.ear/.war files). The `Inside Archives` columns for the Archives row itself reports archive files within .zips (or nested deeper - zips within zips within zips etc.).
 
     SUMMARY INFO:
     Total Scan Size = 5,856 MB
@@ -214,12 +214,12 @@ This section includes a list of findings categorised into CRITICAL (will cause D
 
 # DETECT CLI
 
-This section includes recommended CLI options for Synopsys Detect. If connectivity to the download locations is not verified by detect_advisor, then proxy options will also be added in case a proxy connection is required.
+This section includes recommended CLI options for Black Duck Detect. If connectivity to the download locations is not verified by detect_advisor, then proxy options will also be added in case a proxy connection is required.
 
     DETECT CLI:
     
         DETECT COMMAND:
-        bash <(curl -s -L https://detect.synopsys.com/detect9.sh)
+        bash <(curl -s -L https://detect.blackduck.com/detect10.sh)
     
         MINIMUM REQUIRED OPTIONS:
             --blackduck.url=https://YOURSERVER
