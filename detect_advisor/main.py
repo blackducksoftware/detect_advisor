@@ -48,7 +48,7 @@ def check_prereqs():
                 global_values.cli_msgs_dict['detect'] = global_values.cli_msgs_dict["detect_" + os_platform + "_proxy"]
             else:
                 global_values.cli_msgs_dict['detect'] = global_values.cli_msgs_dict["detect_" + os_platform]
-                if not check_connection("https://sig-repo.blackduck.com"):
+                if not check_connection("https://repo.blackduck.com"):
                     messages.message('NETWORK2')
     except shutil.Error:
         pass
